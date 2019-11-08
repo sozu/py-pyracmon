@@ -1,11 +1,12 @@
 import pytest
-from pyracmon.graph.template import graph_template
+from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.graph import *
 
+spec = GraphSpec()
 
 class TestView:
     def _template(self):
-        t = graph_template(
+        t = spec.new_template(
             a = (),
             b = (),
             c = (),
@@ -55,7 +56,7 @@ class TestView:
 
 class TestGraph:
     def test_append(self):
-        graph = Graph(graph_template(
+        graph = Graph(spec.new_template(
             a = (),
             b = (),
         ))
@@ -67,7 +68,7 @@ class TestGraph:
         assert [n() for n in graph.view.b] == ["a", "b", "c"]
 
     def test_relation(self):
-        t = graph_template(
+        t = spec.new_template(
             a = (),
             b = (),
         )
@@ -83,7 +84,7 @@ class TestGraph:
         assert [n() for n in graph.view.a[2].b] == ["c"]
 
     def test_identify(self):
-        t = graph_template(
+        t = spec.new_template(
             a = (None, lambda x:x%3),
             b = (),
         )
@@ -104,7 +105,7 @@ class TestGraph:
         assert [n() for n in graph.view.a[2].b] == ["f"]
 
     def test_multi_parents(self):
-        t = graph_template(
+        t = spec.new_template(
             a = (None, lambda x:x),
             b = (None, lambda x:x),
             c = (None, lambda x:x),

@@ -1,26 +1,17 @@
 import pytest
+from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import *
 
+spec = GraphSpec()
 
 class TestGraphTemplate:
     def _template(self):
-        return graph_template(
+        return spec.new_template(
             a = (),
             b = (int,),
             c = int,
             d = (str, len)
         )
-
-    def test_define(self):
-        t = self._template()
-
-        assert len(t._properties) == 4
-        assert len(t._relations) == 0
-
-        assert (t.a.name, t.a.kind, t.a.identifier) == ("a", None, None)
-        assert (t.b.name, t.b.kind, t.b.identifier) == ("b", int, None)
-        assert (t.c.name, t.c.kind, t.c.identifier) == ("c", int, None)
-        assert (t.d.name, t.d.kind, t.d.identifier) == ("d", str, len)
 
     def test_rshift(self):
         t = self._template()

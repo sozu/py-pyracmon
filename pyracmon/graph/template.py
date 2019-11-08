@@ -1,25 +1,3 @@
-def graph_template(**template):
-    """
-    Creates template of a graph.
-
-    Parameters
-    ----------
-    template: {str: type | (type, T -> object)}
-    """
-    def definition(d):
-        if d is None:
-            return None, None
-        elif isinstance(d, tuple):
-            kind = d[0] if len(d) >= 1 else None
-            ident = d[1] if len(d) >= 2 else None
-            return kind, ident
-        elif isinstance(d, type):
-            return d, None
-        else:
-            raise ValueError(f"Invalid value was found in keyword arguments of graph_template().")
-    return GraphTemplate([(n, *definition(d)) for n, d in template.items()])
-
-
 class GraphTemplate:
     class Property:
         def __init__(self, template, name, kind, identifier):

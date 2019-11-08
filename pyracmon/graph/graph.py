@@ -92,10 +92,11 @@ class NodeContainer:
         """
         if self.property.identifier:
             key = self.property.identifier(entity)
-            if key in self.keys:
-                return self.nodes[self.keys[key]]
-            else:
-                self.keys[key] = len(self.nodes)
+            if key is not None:
+                if key in self.keys:
+                    return self.nodes[self.keys[key]]
+                else:
+                    self.keys[key] = len(self.nodes)
         node = Node(self.property, entity)
         self.nodes.append(node)
         return node

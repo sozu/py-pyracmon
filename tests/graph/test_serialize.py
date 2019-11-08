@@ -1,12 +1,13 @@
 import pytest
-from pyracmon.graph.template import graph_template
 from pyracmon.graph.graph import Graph
+from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.serialize import *
 
+spec = GraphSpec()
 
 class TestSerialize:
     def _graph(self):
-        t = graph_template(
+        t = spec.new_template(
             a = (int, lambda x:x),
             b = (int, lambda x:x),
             c = (int, lambda x:x),
@@ -30,48 +31,48 @@ class TestSerialize:
         return graph.view
 
     def test_no_serializer(self):
-        assert graph_dict(self._graph()) == {}
+        assert spec.to_dict(self._graph()) == {}
 
     def test_default_serialize(self):
-        assert graph_dict(
+        assert spec.to_dict(
             self._graph(),
             a = (),
         ) == {"a": [1, 2, 3]}
 
     def test_change_name(self):
-        assert graph_dict(
+        assert spec.to_dict(
             self._graph(),
             a = (lambda n: f"__{n}__", ),
         ) == {"__a__": [1, 2, 3]}
 
     def test_aggregate(self):
-        assert graph_dict(
+        assert spec.to_dict(
             self._graph(),
             a = (None, head),
         ) == {"a": 1}
 
     def test_serialize(self):
-        assert graph_dict(
+        assert spec.to_dict(
             self._graph(),
             a = (None, None, lambda x:x*2),
         ) == {"a": [2, 4, 6]}
 
     def test_ignore_child(self):
-        assert graph_dict(
+        assert spec.to_dict(
             self._graph(),
             a = (),
             b = (),
         ) == {"a": [1, 2, 3]}
 
     def test_include_child(self):
-        assert graph_dict(
+        assert spec.to_dict(
             self._graph(),
             a = (None, None, lambda x: {"value": x}),
             b = (),
         ) == {"a": [{"value": 1, "b": [10, 11]}, {"value": 2, "b": [20, 21, 22]}, {"value": 3, "b": [30]}]}
 
     def test_multi_parents(self):
-        assert graph_dict(
+        assert spec.to_dict(
             self._graph(),
             a = (None, None, lambda x: {"va": x}),
             b = (None, None, lambda x: {"vb": x}),
