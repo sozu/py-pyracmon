@@ -79,6 +79,15 @@ class TestMarker:
         m = h.marker()
         assert [m(0), m(1), m(3)] == [":0", ":1", ":3"]
 
+    def test_numeric_counter(self):
+        self.api.paramstyle = 'numeric'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        assert [m(), m(), m()] == [":1", ":2", ":3"]
+        m(1)
+        assert m.index == 1
+        assert [m(), m(1), m()] == [":2", ":1", ":2"]
+
     def test_named(self):
         self.api.paramstyle = 'named'
         h = QueryHelper(self.api)

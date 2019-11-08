@@ -1,5 +1,6 @@
 from pyracmon.query import QueryHelper
 
+
 def connect(api, *args, **kwargs):
     return Connection(api, api.connect(*args, **kwargs))
 

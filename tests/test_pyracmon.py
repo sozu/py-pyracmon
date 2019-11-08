@@ -7,7 +7,7 @@ from pyracmon.connection import connect
 from pyracmon.dialect import postgresql
 
 
-def test_declare_models_postgresql():
+def test_module_name_postgresql():
     db = connect(
         psycopg2,
         dbname = "pyracmon_test",
@@ -28,3 +28,27 @@ def test_declare_models_postgresql():
         del sys.modules['tests.models'].__dict__["t2"]
         del sys.modules['tests.models'].__dict__["t3"]
         del sys.modules['tests.models'].__dict__["t4"]
+
+
+def test_module_obj_postgresql():
+    db = connect(
+        psycopg2,
+        dbname = "pyracmon_test",
+        user = "postgres",
+        password = "postgres",
+        host = "postgres",
+        port = 5432,
+    )
+
+    declare_models(postgresql, db, m)
+    try:
+        assert hasattr(m, "t1")
+        assert hasattr(m, "t2")
+        assert hasattr(m, "t3")
+        assert hasattr(m, "t4")
+    finally:
+        del sys.modules['tests.models'].__dict__["t1"]
+        del sys.modules['tests.models'].__dict__["t2"]
+        del sys.modules['tests.models'].__dict__["t3"]
+        del sys.modules['tests.models'].__dict__["t4"]
+

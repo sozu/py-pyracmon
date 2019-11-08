@@ -53,3 +53,9 @@ class MySQLMixin(MultiInsertMixin):
 
 
 mixins = [MySQLMixin]
+
+
+def found_rows(db):
+    with db.cursor() as c:
+        c.execute("SELECT FOUND_ROWS()")
+        return c.fetchone()[0]

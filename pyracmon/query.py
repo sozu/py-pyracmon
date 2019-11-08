@@ -144,8 +144,14 @@ class QMarker:
         return '?'
 
 class NumericMarker:
-    def __call__(self, index):
-        return f":{index}"
+    def __init__(self):
+        self.index = 0
+    def __call__(self, index = None):
+        if index is None:
+            self.index += 1
+        else:
+            self.index = index
+        return f":{self.index}"
 
 class NamedMarker:
     def __call__(self, name):

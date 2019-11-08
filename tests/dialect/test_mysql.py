@@ -74,3 +74,16 @@ class TestLastSequences:
             )
             assert [(m.columns[0], 3)] == m.last_sequences(db, 3)
 
+
+@pytest.mark.filterwarnings("ignore")
+class TestFunctions:
+    def test_found_rows(self):
+        with _connect() as db:
+            c = db.cursor()
+            c.execute("DELETE FROM t1")
+            c.execute(
+                "INSERT INTO t1 (c12, c13) VALUES (%s, %s), (%s, %s), (%s, %s)",
+                [1, "abc", 2, "def", 3, "ghi"]
+            )
+            c.execute("SELECT SQL_CALC_FOUND_ROWS * FROM t1")
+            assert found_rows(db) == 3
