@@ -2,7 +2,7 @@ import sys
 import psycopg2
 import pytest
 from tests import models as m
-from pyracmon import declare_models, graph_template, graph_dict, CRUDMixin, GraphEntityMixin
+from pyracmon import declare_models, graph_template, graph_dict, CRUDMixin, GraphEntityMixin, add_identifier, add_serializer
 from pyracmon.connection import connect
 from pyracmon.dialect import postgresql
 from pyracmon.model import define_model, Table, Column
@@ -101,3 +101,44 @@ def test_model_graph():
             dict(c1 = 3, c2 = "c", m2 = [dict(c1 = 1, c2 = 1)]),
         ]
     )
+
+
+def test_add_identifier():
+    t1 = Table("t1", [
+        Column("c1", True, None),
+        Column("c2", False, None),
+    ])
+
+    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
+
+    add_identifier(m1, lambda x: x.c2)
+
+    t = graph_template(m1 = m1)
+    graph = Graph(t)
+
+    graph.append(m1 = m1(c1 = 1, c2 = "a"))
+    graph.append(m1 = m1(c1 = 2, c2 = "a"))
+
+    assert len(graph.view.m1) == 1
+    v = graph.view.m1[0]()
+    assert v.c1 == 1
+    assert v.c2 == "a"
+
+
+def test_add_serializer():
+    t1 = Table("t1", [
+        Column("c1", True, None),
+        Column("c2", False, None),
+    ])
+
+    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
+
+    t = graph_template(m1 = m1)
+    graph = Graph(t)
+
+    graph.append(m1 = m1(c1 = 1, c2 = "a"))
+
+    add_serializer(m1, lambda x: dict(c1 = x.c1 * 2, c2 = f"__{x.c2}__"))
+
+    assert graph_dict(graph.view, m1 = ()) == dict(m1 = [dict(c1 = 2, c2 = "__a__")])
+

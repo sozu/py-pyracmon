@@ -66,3 +66,16 @@ def graph_template(**definitions):
 
 def graph_dict(__graph__, **serializers):
     return globalSpec.to_dict(__graph__, **serializers)
+
+
+def add_identifier(t, identifier):
+    """
+    Add an identifier for a type. The later added identifier has the higher priority.
+
+    Be sure to call this function before every definition of GraphTemplate.
+    """
+    globalSpec.add_identifier(t, identifier)
+
+
+def add_serializer(t, serializer):
+    globalSpec.add_serializer(t, serializer)

@@ -45,6 +45,12 @@ class TestSerialize:
             a = (lambda n: f"__{n}__", ),
         ) == {"__a__": [1, 2, 3]}
 
+    def test_change_name_fixed(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = ("__a__", ),
+        ) == {"__a__": [1, 2, 3]}
+
     def test_aggregate(self):
         assert spec.to_dict(
             self._graph(),

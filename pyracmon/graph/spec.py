@@ -15,10 +15,10 @@ class GraphSpec:
         return next(filter(lambda x: isinstance(v, x[0]), self.serializers), (None, None))[1]
 
     def add_identifier(self, c, f):
-        self.identifiers.append((c, f))
+        self.identifiers[0:0] = [(c, f)]
 
     def add_serializer(self, c, f):
-        self.serializers.append((c, f))
+        self.serializers[0:0] = [(c, f)]
 
     def new_template(self, **template):
         """
@@ -66,6 +66,9 @@ class GraphSpec:
 
         def to_serializer(s):
             settings = [(p[0] or p[1]) for p in zip_longest(s, (noop, noop, serialize), fillvalue=None)]
+            if isinstance(settings[0], str):
+                name = settings[0]
+                settings[0] = lambda x: name
             return NodesSerializer(settings[0], settings[1], settings[2])
         context = SerializationContext(dict([(n, to_serializer(s)) for n, s in serializers.items()]))
 
