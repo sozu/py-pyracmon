@@ -94,6 +94,12 @@ class TestMarker:
         m = h.marker()
         assert [m("a"), m("b"), m("c")] == [":a", ":b", ":c"]
 
+    def test_gen_name(self):
+        self.api.paramstyle = 'named'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        assert [m("a"), m(), m("")] == [":a", ":key1", ":key2"]
+
     def test_format(self):
         self.api.paramstyle = 'format'
         h = QueryHelper(self.api)
@@ -104,7 +110,118 @@ class TestMarker:
         self.api.paramstyle = 'pyformat'
         h = QueryHelper(self.api)
         m = h.marker()
-        assert [m(), m("b"), m()] == ["%s", "%(b)s", "%s"]
+        assert [m("a"), m("b"), m("c")] == ["%(a)s", "%(b)s", "%(c)s"]
+
+    def test_pyformat_mixed_ok(self):
+        self.api.paramstyle = 'pyformat'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        assert [m("a"), m(), m("c")] == ["%(a)s", "%(key1)s", "%(c)s"]
+
+    def test_pyformat_mixed_ng(self):
+        self.api.paramstyle = 'pyformat'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        with pytest.raises(ValueError):
+            ms = [m(), m("b"), m("c")]
+
+    def test_qmark_params(self):
+        self.api.paramstyle = 'qmark'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        assert m.params((1,2,3)) == [1,2,3]
+
+    def test_qmark_params_ng(self):
+        self.api.paramstyle = 'qmark'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        with pytest.raises(ValueError):
+            m.params({0:1, 1:2, 2:3})
+
+    def test_numeric_params(self):
+        self.api.paramstyle = 'numeric'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        assert m.params((1,2,3)) == [1,2,3]
+
+    def test_numeric_params_ng(self):
+        self.api.paramstyle = 'numeric'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        with pytest.raises(ValueError):
+            m.params({0:1, 1:2, 2:3})
+
+    def test_named_params(self):
+        self.api.paramstyle = 'named'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m("a"); m("b"); m("c")
+        assert m.params(dict(a=1, b=2, c=3)) == dict(a=1, b=2, c=3)
+        assert m.params((1, 2, 3)) == dict(a=1, b=2, c=3)
+
+    def test_named_gen_params(self):
+        self.api.paramstyle = 'named'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m("a"); m(); m()
+        assert m.params(dict(a=1, b=2, c=3)) == dict(a=1, b=2, c=3)
+        assert m.params((1, 2, 3)) == dict(a=1, key1=2, key2=3)
+
+    def test_named_params_ng(self):
+        self.api.paramstyle = 'named'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m("a"); m("b"); m("c")
+        with pytest.raises(ValueError):
+            m.params("abc")
+
+    def test_format_params(self):
+        self.api.paramstyle = 'format'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        assert m.params((1, 2, 3)) == [1, 2, 3]
+
+    def test_format_params_ng(self):
+        self.api.paramstyle = 'format'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        with pytest.raises(ValueError):
+            m.params({0:1, 1:2, 2:3})
+
+    def test_pyformat_params(self):
+        self.api.paramstyle = 'pyformat'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        assert m.params((1, 2, 3)) == [1, 2, 3]
+
+    def test_pyformat_params_ng(self):
+        self.api.paramstyle = 'pyformat'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m(); m(); m()
+        with pytest.raises(ValueError):
+            m.params({0:1, 1:2, 2:3})
+
+    def test_pyformat_named_params(self):
+        self.api.paramstyle = 'pyformat'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m("a"); m("b"); m("c")
+        assert m.params(dict(a=1, b=2, c=3)) == dict(a=1, b=2, c=3)
+
+    def test_pyformat_named_params_ng(self):
+        self.api.paramstyle = 'pyformat'
+        h = QueryHelper(self.api)
+        m = h.marker()
+        m("a"); m("b"); m("c")
+        assert m.params((1, 2, 3)) == dict(a=1, b=2, c=3)
 
 
 class TestHolders:
@@ -133,7 +250,7 @@ class TestHolders:
     def test_pyformat(self):
         self.api.paramstyle = 'pyformat'
         h = QueryHelper(self.api)
-        assert h.holders(["a", None, "c"]) == "%(a)s, %s, %(c)s"
+        assert h.holders(["a", "b", "c"]) == "%(a)s, %(b)s, %(c)s"
 
     def test_pyformat_intkey(self):
         self.api.paramstyle = 'pyformat'

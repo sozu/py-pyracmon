@@ -63,6 +63,10 @@ class Q:
             return Q.C(c, f(self.params[key])) if key in self.params else Q.C('', ())
         return attr
 
+    @classmethod
+    def condition(cls, clause, params):
+        return Q.C(clause, params)
+
 
 def where(condition):
     """
@@ -78,7 +82,32 @@ def where(condition):
     str
         A condition clause starting from `WHERE` or empty string if the condition is empty.
     """
-    return ('', ()) if condition.clause == '' else (f'WHERE {condition.clause}', condition.params)
+    return ('', []) if condition.clause == '' else (f'WHERE {condition.clause}', list(condition.params))
+
+
+def order_by(columns):
+    """
+    Generates ORDER BY clause from columns and directions.
+
+    Parameters
+    ----------
+    columns: { str: bool }
+        An ordered dictionary mapping column name to its direction.
+    """
+    def col(cd):
+        return f"{cd[0]} ASC" if cd[1] else f"{cd[0]} DESC"
+    return '' if len(columns) == 0 else f"ORDER BY {', '.join(map(col, columns.items()))}"
+
+
+def ranged_by(marker, limit = None, offset = None):
+    clause, params = [], []
+    if limit is not None:
+        clause.append(f"LIMIT {marker()}")
+        params.append(limit)
+    if offset is not None:
+        clause.append(f"OFFSET {marker()}")
+        params.append(offset)
+    return ' '.join(clause), params
 
 
 class QueryHelper:
@@ -91,7 +120,7 @@ class QueryHelper:
     def marker(self):
         return _marker_of(self.api.paramstyle)
 
-    def holders(self, keys, qualifier = None, start = 0):
+    def holders(self, keys, qualifier = None, start = 0, marker = None):
         """
         Generates partial query string containing place holder markers.
 
@@ -112,10 +141,10 @@ class QueryHelper:
         key_map = dict([(i, start + i + 1) for i in range(0, keys)]) if isinstance(keys, int) \
             else dict([(i, k) for i, k in enumerate(keys)])
         qualifier = qualifier or {}
-        m = self.marker()
+        m = marker or self.marker()
         return ', '.join([qualifier.get(i, _noop)(m(key_map[i])) for i in range(0, len(key_map))])
 
-    def values(self, keys, rows, qualifier = None, start = 0):
+    def values(self, keys, rows, qualifier = None, start = 0, marker = None):
         """
         Generates partial query string corresponding `VALUES` clause in insertion query.
 
@@ -136,14 +165,24 @@ class QueryHelper:
             Generated string.
         """
         num = keys if isinstance(keys, int) else len(keys)
-        return ', '.join([f"({self.holders(keys, qualifier, start + num * i)})" for i in range(0, rows)])
+        m = marker or self.marker()
+        return ', '.join([f"({self.holders(keys, qualifier, start + num * i, m)})" for i in range(0, rows)])
 
 
-class QMarker:
+class Marker:
+    def reset(self):
+        pass
+    def params(self, ps):
+        if isinstance(ps, (list, tuple)):
+            return list(ps)
+        else:
+            raise ValueError(f"Parameters argument must be a list or tuple.")
+
+class QMarker(Marker):
     def __call__(self, x = None):
         return '?'
 
-class NumericMarker:
+class NumericMarker(Marker):
     def __init__(self):
         self.index = 0
     def __call__(self, index = None):
@@ -152,21 +191,66 @@ class NumericMarker:
         else:
             self.index = index
         return f":{self.index}"
+    def reset(self):
+        self.index = 0
 
-class NamedMarker:
-    def __call__(self, name):
-        return f":{name}"
+class NamedMarker(Marker):
+    def __init__(self):
+        self.keys = []
+    def __call__(self, name = None):
+        if name is not None and name != "":
+            self.keys.append(str(name))
+            return f":{name}"
+        else:
+            key = f"key{len(self.keys)}"
+            if key in self.keys:
+                raise ValueError(f"Explicit key '{key}' prevented key generation for named marker.")
+            self.keys.append(key)
+            return f":{key}"
+    def reset(self):
+        self.keys = []
+    def params(self, ps):
+        if isinstance(ps, dict):
+            return ps
+        elif isinstance(ps, (list, tuple)):
+            return dict(zip(self.keys, ps))
+        else:
+            raise ValueError(f"Parameter argument must be a dict, list or tuple.")
 
-class FormatMarker:
+class FormatMarker(Marker):
     def __call__(self, x = None):
         return '%s'
 
-class PyformatMarker:
+class PyformatMarker(Marker):
+    def __init__(self):
+        self.keys = []
+        self.is_named = None
     def __call__(self, name = None):
-        if name and not isinstance(name, int):
+        named = name is not None and isinstance(name, str)
+        if self.is_named is None:
+            self.is_named = named
+        elif self.is_named and not named:
+            name = f"key{len(self.keys)}"
+        elif not self.is_named and named:
+            raise ValueError(f"Mixed usage of %s and %(name)s is not allowed.")
+        if named:
+            self.keys.append(name)
             return f"%({name})s"
         else:
-            return '%s'
+            return f"%({name})s" if self.is_named else '%s'
+    def reset(self):
+        self.is_named = None
+    def params(self, ps):
+        if self.is_named is True:
+            if isinstance(ps, dict):
+                pass
+            elif isinstance(ps, (list, tuple)):
+                ps = dict(zip(self.keys, ps))
+            else:
+                raise ValueError(f"Pyformat with named parameters requires dict parameters.")
+        elif self.is_named is False and not isinstance(ps, (list, tuple)):
+            raise ValueError(f"Pyformat without parameter names requires list or tuple parameters.")
+        return list(ps) if self.is_named is False else ps
 
 def _noop(x):
     return x

@@ -21,7 +21,7 @@ class PseudoConnection:
     def reserve(self, rows):
         if not isinstance(rows, list):
             raise ValueError("Reserving row set must be a list of rows.")
-        elif not isinstance(rows[0], list):
+        elif len(rows) > 0 and not isinstance(rows[0], list):
             raise ValueError("Each row must be a list.")
         self._rows_list.append(rows)
 
@@ -48,7 +48,7 @@ class PseudoCursor:
 
     def fetchone(self):
         rows = self.conn._rows_list.pop(0)
-        return rows[0]
+        return rows[0] if len(rows) > 0 else None
 
     def fetchall(self):
         return self.conn._rows_list.pop(0)

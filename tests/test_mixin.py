@@ -2,6 +2,7 @@ import pytest
 from pyracmon.connection import Connection
 from pyracmon.model import *
 from pyracmon.mixin import CRUDMixin, read_row
+from pyracmon.query import Q
 from tests.db_api import PseudoAPI, PseudoConnection
 
 
@@ -66,6 +67,144 @@ class TestReadRow:
         assert v2 == 7
 
 
+class TestCount:
+    def test_count_all(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[3]])
+        r = m.count(db)
+
+        assert db.query_list[0] == "SELECT COUNT(*) FROM t1 "
+        assert list(db.params_list[0]) == []
+        assert r == 3
+
+    def test_count_where(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[3]])
+        r = m.count(db, lambda m: Q.condition(f"c3 > {m()}", 5))
+
+        assert db.query_list[0] == "SELECT COUNT(*) FROM t1 WHERE c3 > ?"
+        assert list(db.params_list[0]) == [5]
+        assert r == 3
+
+
+class TestFetch:
+    def test_fetch(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 3]])
+        r = m.fetch(db, 1)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c1 = ?"
+        assert list(db.params_list[0]) == [1]
+        assert (r.c1, r.c2, r.c3) == (1, "abc", 3)
+
+    def test_multiple_pks(self):
+        db = PseudoAPI().connect()
+        m = define_model(table2, [CRUDMixin])
+
+        db.reserve([[1, "abc", 3]])
+        r = m.fetch(db, dict(c1 = 1, c2 = "abc"))
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t2 WHERE c1 = ? AND c2 = ?"
+        assert list(db.params_list[0]) == [1, "abc"]
+        assert (r.c1, r.c2, r.c3) == (1, "abc", 3)
+
+    def test_empty(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([])
+        r = m.fetch(db, 1)
+
+        assert r is None
+
+
+class TestFetchWhere:
+    def test_no_condition(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1"
+        assert list(db.params_list[0]) == []
+        assert (rs[0].c1, rs[0].c2, rs[0].c3) == (1, "abc", 10)
+        assert (rs[1].c1, rs[1].c2, rs[1].c3) == (2, "def", 20)
+
+    def test_with_condition(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, lambda m: Q.condition(f"c3 > {m()}", 5))
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ?"
+        assert list(db.params_list[0]) == [5]
+
+    def test_asc_order(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, orders = dict(c1 = True))
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 ORDER BY c1 ASC"
+
+    def test_desc_order(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, orders = dict(c1 = False))
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 ORDER BY c1 DESC"
+
+    def test_multiple_orders(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, orders = dict(c1 = True, c3 = False))
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 ORDER BY c1 ASC, c3 DESC"
+
+    def test_limit(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, limit = 10)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 LIMIT ?"
+        assert list(db.params_list[0]) == [10]
+
+    def test_offset(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, offset = 20)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 OFFSET ?"
+        assert list(db.params_list[0]) == [20]
+
+    def test_all_args(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, lambda m: Q.condition(f"c3 > {m()}", 5), dict(c1 = True, c3 = False), limit = 10, offset = 20)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ? ORDER BY c1 ASC, c3 DESC LIMIT ? OFFSET ?"
+        assert list(db.params_list[0]) == [5, 10, 20]
+
+
 class TestQueryString:
     def _db(self):
         return PseudoAPI().connect()
@@ -109,7 +248,7 @@ class TestQueryString:
 
         m.update(db, dict(c1 = 1, c2 = 2), dict(c3 = 3))
 
-        assert db.query_list[0] == "UPDATE t2 SET c3 = ? WHERE c1 = ? AND c2 = ?"
+        assert db.query_list[0] == "UPDATE t2 SET c3 = ? WHERE (c1 = ?) AND (c2 = ?)"
         assert list(db.params_list[0]) == [3, 1, 2]
 
     def test_update_with_model(self):
@@ -120,6 +259,34 @@ class TestQueryString:
 
         assert db.query_list[0] == "UPDATE t1 SET c2 = ? * 2, c3 = ? WHERE c1 = ?"
         assert list(db.params_list[0]) == [2, 3, 1]
+
+    def test_update_where(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        def condition(mk):
+            q = Q(c2 = "abc", c3 = 10)
+            return q.c2(f"c2 = {mk()}") | q.c3(f"c3 > {mk()}")
+        m.update_where(db, m(c2 = 2, c3 = 3), condition)
+
+        assert db.query_list[0] == "UPDATE t1 SET c2 = ?, c3 = ? WHERE (c2 = ?) OR (c3 > ?)"
+        assert list(db.params_list[0]) == [2, 3, "abc", 10]
+
+    def test_update_all_ng(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        with pytest.raises(ValueError):
+            m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.condition("", []))
+
+    def test_update_all_ok(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.condition("", []), allow_all = True)
+
+        assert db.query_list[0] == "UPDATE t1 SET c2 = ?, c3 = ? "
+        assert list(db.params_list[0]) == [2, 3]
 
     def test_delete_by_pk(self):
         db = self._db()
@@ -136,5 +303,32 @@ class TestQueryString:
 
         m.delete(db, dict(c1 = 1, c2 = 2))
 
-        assert db.query_list[0] == "DELETE FROM t2 WHERE c1 = ? AND c2 = ?"
+        assert db.query_list[0] == "DELETE FROM t2 WHERE (c1 = ?) AND (c2 = ?)"
         assert list(db.params_list[0]) == [1, 2]
+
+    def test_delete_where(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        mk = db.helper.marker()
+        q = Q(c2 = "abc", c3 = 10)
+        m.delete_where(db, lambda mk: q.c2(f"c2 = {mk()}") | q.c3(f"c3 > {mk()}"))
+
+        assert db.query_list[0] == "DELETE FROM t1 WHERE (c2 = ?) OR (c3 > ?)"
+        assert list(db.params_list[0]) == ["abc", 10]
+
+    def test_delete_all_ng(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        with pytest.raises(ValueError):
+            m.delete_where(db, lambda mk: Q.condition("", []))
+
+    def test_delete_all_ok(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        m.delete_where(db, lambda mk: Q.condition("", []), allow_all = True)
+
+        assert db.query_list[0] == "DELETE FROM t1 "
+        assert list(db.params_list[0]) == []

@@ -1,6 +1,7 @@
 from functools import reduce
 from itertools import zip_longest
 from collections import OrderedDict
+from pyracmon.query import Q, where, order_by, ranged_by
 from pyracmon.util import split_dict, index_qualifier, model_values
 
 
@@ -69,14 +70,46 @@ class CRUDMixin:
         return Selection(cls, alias, columns)
 
     @classmethod
+    def count(cls, db, gen_condition = lambda m: Q.condition('', [])):
+        c = db.cursor()
+        m = db.helper.marker()
+        wc, wp = where(gen_condition(m))
+        c.execute(f"SELECT COUNT(*) FROM {cls.name} {wc}", m.params(wp))
+        return c.fetchone()[0]
+
+    @classmethod
+    def fetch(cls, db, pks, lock = None):
+        where_values = cls._parse_pks(pks)
+        c = db.cursor()
+        m = db.helper.marker()
+        s = cls.select()
+        where = ' AND '.join([f"{n} = {m()}" for n in where_values[0]])
+        c.execute(f"SELECT {s} FROM {cls.name} WHERE {where}", m.params(where_values[1]))
+        row = c.fetchone()
+        return read_row(row, s)[0] if row else None
+
+    @classmethod
+    def fetch_where(cls, db, condition = lambda m: Q.condition('', []), orders = [], limit = None, offset = None, lock = None):
+        def spacer(s):
+            return (" " + s) if s else ""
+        c = db.cursor()
+        m = db.helper.marker()
+        s = cls.select()
+        wc, wp = where(condition(m))
+        rc, rp = ranged_by(m, limit, offset)
+        c.execute(f"SELECT {s} FROM {cls.name}{spacer(wc)}{spacer(order_by(orders))}{spacer(rc)}", m.params(wp + rp))
+        return [read_row(row, s)[0] for row in c.fetchall()]
+
+    @classmethod
     def insert(cls, db, values, qualifier = {}):
         value_dict = model_values(cls, values)
         cls._check_columns(value_dict)
         column_values = split_dict(value_dict)
         qualifier = index_qualifier(qualifier, column_values[0])
 
-        sql = f"INSERT INTO {cls.name} ({', '.join(column_values[0])}) VALUES {db.helper.values(len(column_values[1]), 1, qualifier)}"
-        result = db.cursor().execute(sql, column_values[1])
+        m = db.helper.marker()
+        sql = f"INSERT INTO {cls.name} ({', '.join(column_values[0])}) VALUES {db.helper.values(len(column_values[1]), 1, qualifier, marker = m)}"
+        result = db.cursor().execute(sql, m.params(column_values[1]))
 
         if isinstance(values, cls):
             for c, v in cls.last_sequences(db, 1):
@@ -86,25 +119,49 @@ class CRUDMixin:
 
     @classmethod
     def update(cls, db, pks, values, qualifier = {}):
-        value_dict = model_values(cls, values)
-        cls._check_columns(value_dict)
-        where_values = cls._parse_pks(pks)
-        column_values = split_dict(value_dict)
-        qualifier = index_qualifier(qualifier, column_values[0])
+        def gen_condition(m):
+            cols, vals = cls._parse_pks(pks)
+            return reduce(lambda acc, x: acc & x, [Q.condition(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
+        return cls.update_where(db, values, gen_condition, qualifier, False)
 
-        m = db.helper.marker()
-        setters = [f"{n} = {qualifier.get(i, lambda x: x)(m())}" for i, n in enumerate(column_values[0])]
-        where = ' AND '.join([f"{n} = {m()}" for n in where_values[0]])
-        return db.cursor().execute(f"UPDATE {cls.name} SET {', '.join(setters)} WHERE {where}", column_values[1] + where_values[1])
+    @classmethod
+    def update_where(cls, db, values, gen_condition, qualifier = {}, allow_all = False):
+        setters, params, m = _update(cls, db, values, qualifier)
+
+        wc, wp = where(gen_condition(m))
+        if wc == "" and not allow_all:
+            raise ValueError("By default, update_where does not allow empty condition.")
+
+        return db.cursor().execute(f"UPDATE {cls.name} SET {', '.join(setters)} {wc}", m.params(params + wp))
 
     @classmethod
     def delete(cls, db, pks):
-        where_values = cls._parse_pks(pks)
+        cols, vals = cls._parse_pks(pks)
+        gen_condition = lambda m: reduce(lambda acc, x: acc & x, [Q.condition(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
 
+        return cls.delete_where(db, gen_condition)
+
+    @classmethod
+    def delete_where(cls, db, gen_condition, allow_all = False):
         m = db.helper.marker()
-        where = ' AND '.join([f"{n} = {m()}" for n in where_values[0]])
-        return db.cursor().execute(f"DELETE FROM {cls.name} WHERE {where}", where_values[1])
+        wc, wp = where(gen_condition(m))
+        if wc == "" and not allow_all:
+            raise ValueError("By default, delete_where does not allow empty condition.")
+
+        return db.cursor().execute(f"DELETE FROM {cls.name} {wc}", m.params(wp))
 
     @classmethod
     def last_sequences(cls, db, num):
         return []
+
+
+def _update(cls, db, values, qualifier):
+    value_dict = model_values(cls, values)
+    cls._check_columns(value_dict)
+    column_values = split_dict(value_dict)
+    qualifier = index_qualifier(qualifier, column_values[0])
+
+    m = db.helper.marker()
+    setters = [f"{n} = {qualifier.get(i, lambda x: x)(m())}" for i, n in enumerate(column_values[0])]
+
+    return setters, column_values[1], m
