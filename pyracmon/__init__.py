@@ -2,10 +2,18 @@ import sys
 import types
 from pyracmon.mixin import CRUDMixin, read_row
 from pyracmon.model import define_model
-from pyracmon.graph import GraphSpec
+from pyracmon.graph import new_graph, GraphSpec
 
 
-__all__ = ["declare_models", "read_row", "graph_template", "graph_dict"]
+__all__ = [
+    "declare_models",
+    "read_row",
+    "graph_template",
+    "graph_dict",
+    "add_identifier",
+    "add_serializer",
+    "new_graph",
+]
 
 
 def declare_models(dialect, db, module = __name__, mixins = [], excludes = [], includes = []):

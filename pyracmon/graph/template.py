@@ -8,7 +8,7 @@ class GraphTemplate:
 
         def _assert_canbe_parent(self, another):
             if another.parent is not None:
-                raise ValueError(f"Graph template property can have only a parent.")
+                raise ValueError(f"Graph template property can not have multiple parents.")
             if self.template != another.template:
                 raise ValueError(f"Properties can make parent-child relationship only when they are declared in the same template.")
             if self == another:
@@ -26,6 +26,14 @@ class GraphTemplate:
         @property
         def children(self):
             return [r[0] for r in self.template._relations if r[1] == self]
+
+        def __lt__(self, other):
+            p = self.parent
+            while p is not None:
+                if p == other:
+                    return True
+                p = p.parent
+            return False
             
         def __lshift__(self, children):
             """

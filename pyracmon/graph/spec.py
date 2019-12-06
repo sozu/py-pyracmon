@@ -1,4 +1,5 @@
 from itertools import zip_longest
+from pyracmon.graph.graph import IdentifyPolicy
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.serialize import SerializationContext, NodesSerializer
 
@@ -28,15 +29,22 @@ class GraphSpec:
         ----------
         template: {str: type | (type, T -> object)}
         """
+        def make_identifier(f):
+            if isinstance(f, IdentifyPolicy):
+                return f
+            elif callable(f):
+                return IdentifyPolicy.hierarchical(f)
+            else:
+                return IdentifyPolicy.never()
         def definition(d):
             if d is None or d == ():
-                return None, None
+                return None, make_identifier(None)
             elif isinstance(d, tuple):
                 kind = d[0] if len(d) >= 1 else None
-                ident = d[1] if len(d) >= 2 else self.get_identifier(kind)
+                ident = make_identifier(d[1] if len(d) >= 2 else self.get_identifier(kind))
                 return kind, ident
             elif isinstance(d, type):
-                return d, self.get_identifier(d)
+                return d, make_identifier(self.get_identifier(d))
             else:
                 raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
         return GraphTemplate([(n, *definition(d)) for n, d in template.items()])

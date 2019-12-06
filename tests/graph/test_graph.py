@@ -19,10 +19,10 @@ class TestView:
 
     def test_node_view(self):
         t = self._template()
-        n = Node(t.a, 1)
-        n.add_child(Node(t.b, 2))
-        n.add_child(Node(t.c, 3))
-        n.add_child(Node(t.c, 4))
+        n = Node(t.a, 1, None)
+        n.add_child(Node(t.b, 2, None))
+        n.add_child(Node(t.c, 3, None))
+        n.add_child(Node(t.c, 4, None))
         view = n.view
 
         assert view() == 1
@@ -104,11 +104,41 @@ class TestGraph:
         assert [n() for n in graph.view.a[1].b] == ["d", "e"]
         assert [n() for n in graph.view.a[2].b] == ["f"]
 
-    def test_multi_parents(self):
+    def test_multi_hierarchical(self):
         t = spec.new_template(
             a = (None, lambda x:x),
             b = (None, lambda x:x),
             c = (None, lambda x:x),
+        )
+        t.a << t.b << t.c
+        graph = Graph(t)
+
+        graph.append(a = 1, b = 10, c = 100)
+        graph.append(a = 1, b = 11, c = 101)
+        graph.append(a = 2, b = 20, c = 200)
+        graph.append(a = 2, b = 21, c = 101)
+        graph.append(a = 2, b = 21, c = 201)
+        graph.append(a = 3, b = 30, c = 101)
+        view = graph.view
+
+        assert len(graph.view.a) == 3
+        assert [n() for n in graph.view.a] == [1, 2, 3]
+        assert [n() for n in graph.view.b] == [10, 11, 20, 21, 30]
+        assert [n() for n in graph.view.c] == [100, 101, 200, 101, 201, 101]
+        assert [n() for n in graph.view.a[0].b] == [10, 11]
+        assert [n() for n in graph.view.a[0].b[0].c] == [100]
+        assert [n() for n in graph.view.a[0].b[1].c] == [101]
+        assert [n() for n in graph.view.a[1].b] == [20, 21]
+        assert [n() for n in graph.view.a[1].b[0].c] == [200]
+        assert [n() for n in graph.view.a[1].b[1].c] == [101, 201]
+        assert [n() for n in graph.view.a[2].b] == [30]
+        assert [n() for n in graph.view.a[2].b[0].c] == [101]
+
+    def test_multi_always(self):
+        t = spec.new_template(
+            a = (None, lambda x:x),
+            b = (None, lambda x:x),
+            c = (None, IdentifyPolicy.always(lambda x:x)),
         )
         t.a << t.b << t.c
         graph = Graph(t)

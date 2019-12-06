@@ -40,10 +40,10 @@ class TestNewTemplate:
         assert len(t._properties) == 4
         assert len(t._relations) == 0
 
-        assert (t.a.name, t.a.kind, t.a.identifier) == ("a", None, None)
-        assert (t.b.name, t.b.kind, t.b.identifier) == ("b", int, None)
-        assert (t.c.name, t.c.kind, t.c.identifier) == ("c", int, None)
-        assert (t.d.name, t.d.kind, t.d.identifier) == ("d", str, len)
+        assert (t.a.name, t.a.kind, t.a.identifier.identifier("abc")) == ("a", None, None)
+        assert (t.b.name, t.b.kind, t.b.identifier.identifier("abc")) == ("b", int, None)
+        assert (t.c.name, t.c.kind, t.c.identifier.identifier("abc")) == ("c", int, None)
+        assert (t.d.name, t.d.kind, t.d.identifier.identifier("abc")) == ("d", str, 3)
 
     def test_identifier(self):
         ident1 = lambda x: x * 1
@@ -59,7 +59,7 @@ class TestNewTemplate:
             d = (int, ident2),
         )
 
-        assert (t.a.name, t.a.kind, t.a.identifier) == ("a", int, ident1)
-        assert (t.b.name, t.b.kind, t.b.identifier) == ("b", int, ident1)
-        assert (t.c.name, t.c.kind, t.c.identifier) == ("c", int, None)
-        assert (t.d.name, t.d.kind, t.d.identifier) == ("d", int, ident2)
+        assert (t.a.name, t.a.kind, t.a.identifier.identifier(4)) == ("a", int, 4)
+        assert (t.b.name, t.b.kind, t.b.identifier.identifier(4)) == ("b", int, 4)
+        assert (t.c.name, t.c.kind, t.c.identifier.identifier(4)) == ("c", int, None)
+        assert (t.d.name, t.d.kind, t.d.identifier.identifier(4)) == ("d", int, 8)

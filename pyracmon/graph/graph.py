@@ -1,6 +1,11 @@
 from collections import OrderedDict
 from itertools import chain
 
+
+def new_graph(template):
+    return Graph(template)
+
+
 class Graph:
     def __init__(self, template):
         """
@@ -37,12 +42,67 @@ class Graph:
         entities: *{str: object}
             Dictionary where the key indicates the property name and the value is the entity value.
         """
-        nodes = dict([(k, self.containers[k].append(v)) for k, v in entities.items()])
+        keys = [p.name for p in sorted([self.containers[k].property for k in entities.keys()], reverse=True)]
+
+        nodes = {}
+        for k in keys:
+            n, newly = self.containers[k].append(entities[k], nodes)
+            nodes[k] = n
 
         for n in nodes.values():
             parent = n.property.parent
             if parent and parent.name in nodes:
                 nodes[parent.name].add_child(n)
+
+
+class IdentifyPolicy:
+    def __init__(self, identifier, policy):
+        self.identifier = identifier or (lambda x: None)
+        self.policy = policy
+
+    def identify(self, prop, entity, candidates, new_nodes):
+        """
+        Parameters
+        ----------
+        prop: Property
+            Property for the container.
+        entity: object
+            A value to append into the container.
+        candidates: object -> [Node]
+            Function returning nodes from a identifying key.
+        new_nodes: {str: Node}
+            Ancestor nodes in this appending session.
+
+        Returns
+        -------
+        object
+            Key of the entity.
+        Node
+            Identical node if exists, otherwise None.
+        """
+        key = self.identifier(entity)
+        if key is not None:
+            return key, next(filter(lambda c: c.key == key, filter(lambda c: self.policy(c, new_nodes), candidates(key))), None)
+        else:
+            return None, None
+
+    @classmethod
+    def never(cls):
+        return IdentifyPolicy(lambda x: None, lambda c, ns: False)
+
+    @classmethod
+    def always(cls, identifier):
+        return IdentifyPolicy(identifier, lambda c, ns: True)
+
+    @classmethod
+    def hierarchical(cls, identifier):
+        def policy(candidate, new_nodes):
+            if candidate.property.parent:
+                parent = new_nodes.get(candidate.property.parent.name, None)
+                return any(map(lambda p: p == parent, candidate.parents))
+            else:
+                return True
+        return IdentifyPolicy(identifier, policy)
 
 
 class NodeContainer:
@@ -76,7 +136,7 @@ class NodeContainer:
             self._view = ContainerView()
         return self._view
 
-    def append(self, entity):
+    def append(self, entity, new_nodes = {}):
         """
         Add an entity to nodes if the identifying key does not exists yet.
 
@@ -84,22 +144,43 @@ class NodeContainer:
         ----------
         entity: object
             An entity to be stored in the node.
+        new_nodes: {str: Node}
+            Dictionary which maps property names to nodes appended to ancestor containers.
 
         Returns
         -------
         Node
             A node having the entity or matched entity added previously.
+        bool
+            True when the node is newly created. False when the existing node is returned.
         """
-        if self.property.identifier:
-            key = self.property.identifier(entity)
+        def cand(k):
+            return [self.nodes[i] for i in self.keys.get(k, [])]
+        key, existing = self.property.identifier.identify(
+            self.property,
+            entity,
+            cand,
+            new_nodes,
+        )
+
+        if existing:
+            return existing, False
+        else:
             if key is not None:
-                if key in self.keys:
-                    return self.nodes[self.keys[key]]
-                else:
-                    self.keys[key] = len(self.nodes)
-        node = Node(self.property, entity)
-        self.nodes.append(node)
-        return node
+                self.keys.setdefault(key, []).append(len(self.nodes))
+            node = Node(self.property, entity, key)
+            self.nodes.append(node)
+            return node, True
+
+        #key = self.property.identifier(entity) if self.property.identifier else None
+        #if key is not None:
+        #    if key in self.keys:
+        #        return self.nodes[self.keys[key]], False
+        #    else:
+        #        self.keys.setdefault(key, []).append(len(self.nodes))
+        #node = Node(self.property, entity, key)
+        #self.nodes.append(node)
+        #return node, True
 
 class Node:
     class Children:
@@ -133,9 +214,10 @@ class Node:
                 self.keys.add(node)
                 self.nodes.append(node)
 
-    def __init__(self, prop, entity):
+    def __init__(self, prop, entity, key):
         self.property = prop
         self.entity = entity
+        self.key = key
         self.parents = set()
         self.children = {}
         self._view = None

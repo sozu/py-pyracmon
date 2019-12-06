@@ -87,7 +87,7 @@ def test_model_graph():
     )
     graph.append(
         m1 = m1(c1 = 3, c2 = "c"),
-        m2 = m2(c1 = 1, c2 = "dummy"),
+        m2 = m2(c1 = 1, c2 = 3),
     )
 
     assert graph_dict(
@@ -98,7 +98,7 @@ def test_model_graph():
         m1 = [
             dict(c1 = 1, c2 = "a", m2 = [dict(c1 = 1, c2 = 1)]),
             dict(c1 = 2, c2 = "b", m2 = [dict(c1 = 2, c2 = 2), dict(c1 = 3, c2 = 2)]),
-            dict(c1 = 3, c2 = "c", m2 = [dict(c1 = 1, c2 = 1)]),
+            dict(c1 = 3, c2 = "c", m2 = [dict(c1 = 1, c2 = 3)]),
         ]
     )
 

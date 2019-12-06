@@ -38,3 +38,32 @@ class TestGraphTemplate:
         assert t.b.parent == t.c
         assert t.c.children == [t.a, t.b]
 
+
+class TestPropertyLessThan:
+    def _template(self):
+        t = spec.new_template(
+            a = (), b = (), c = (), d = ()
+        )
+        return t
+
+    def test_lt(self):
+        t = self._template()
+        t.a << t.b << t.c << t.d
+
+        assert t.d < t.a
+        assert t.d < t.b
+        assert t.d < t.c
+        assert t.c < t.b
+        assert t.c < t.b
+        assert t.b < t.a
+
+    def test_unstable_lt(self):
+        t = self._template()
+        t.a << [t.b, t.d >> t.c]
+
+        assert t.d < t.a
+        assert not (t.d < t.b)
+        assert t.d < t.c
+        assert t.c < t.a
+        assert not (t.c < t.b)
+        assert t.b < t.a
