@@ -164,3 +164,30 @@ class TestGraph:
         assert [n() for n in graph.view.a[2].b] == [30]
         assert [n() for n in graph.view.a[2].b[0].c] == [101]
 
+    def test_intermediate_append(self):
+        t = spec.new_template(
+            a = (None, lambda x:x),
+            b = (None, lambda x:x),
+            c = (None, lambda x:x),
+        )
+        t.a << t.b << t.c
+        graph = Graph(t)
+
+        graph.append(a = 1, b = 10, c = 100)
+        graph.append(a = 1, b = 11, c = 101)
+        graph.append(a = 2, b = 10, c = 200)
+        graph.append(a = 2, b = 11, c = 101)
+        graph.append(b = 10, c = 100)
+        graph.append(b = 10, c = 101)
+        graph.append(c = 200)
+        graph.append(c = 201)
+        view = graph.view
+
+        assert [n() for n in graph.view.a] == [1, 2]
+        assert [n() for n in graph.view.b] == [10, 11, 10, 11]
+        assert [n() for n in graph.view.c] == [100, 101, 200, 101, 100, 101, 201]
+        assert [n() for n in graph.view.a[0].b] == [10, 11]
+        assert [n() for n in graph.view.a[0].b[0].c] == [100, 101]
+        assert [n() for n in graph.view.a[0].b[1].c] == [101]
+        assert [n() for n in graph.view.a[1].b[0].c] == [200, 100, 101]
+        assert [n() for n in graph.view.a[1].b[1].c] == [101]

@@ -1,11 +1,14 @@
 import sys
 import types
+from pyracmon.connection import connect, Connection
 from pyracmon.mixin import CRUDMixin, read_row
 from pyracmon.model import define_model
 from pyracmon.graph import new_graph, GraphSpec
 
 
 __all__ = [
+    "connect",
+    "Connection",
     "declare_models",
     "read_row",
     "graph_template",

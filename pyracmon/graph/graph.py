@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from itertools import chain
+from functools import reduce
 
 
 def new_graph(template):
@@ -46,13 +47,10 @@ class Graph:
 
         nodes = {}
         for k in keys:
-            n, newly = self.containers[k].append(entities[k], nodes)
-            nodes[k] = n
-
-        for n in nodes.values():
-            parent = n.property.parent
-            if parent and parent.name in nodes:
-                nodes[parent.name].add_child(n)
+            ns, edges = self.containers[k].append(entities[k], nodes)
+            for c, p in edges:
+                p.add_child(c)
+            nodes[k] = ns
 
 
 class IdentifyPolicy:
@@ -77,31 +75,69 @@ class IdentifyPolicy:
         -------
         object
             Key of the entity.
-        Node
-            Identical node if exists, otherwise None.
+        [Node]
+            Identical nodes.
+        [Node]
+            Parent nodes in session where new node should be appended.
         """
         key = self.identifier(entity)
         if key is not None:
-            return key, next(filter(lambda c: c.key == key, filter(lambda c: self.policy(c, new_nodes), candidates(key))), None)
+            # acc: ([Node], set(Node), [(Node, Node)])
+            def merge(acc, c):
+                is_identical, parents, edges = self.policy(c, new_nodes)
+                if is_identical:
+                    acc[0].append(c)
+                    for p in parents:
+                        acc[1].add(p)
+                    for e in edges:
+                        acc[2].append(e)
+                return acc
+            identicals, parents, new_edges = reduce(merge, candidates(key), ([], set(), []))
+            return key, identicals, parents, new_edges
         else:
-            return None, None
+            return None, [], [], []
 
     @classmethod
     def never(cls):
-        return IdentifyPolicy(lambda x: None, lambda c, ns: False)
+        return IdentifyPolicy(lambda x: None, lambda c, ns: (False, [], []))
 
     @classmethod
     def always(cls, identifier):
-        return IdentifyPolicy(identifier, lambda c, ns: True)
+        def policy(candidate, new_nodes):
+            session_parents = new_nodes.get(candidate.property.parent.name, [])
+            return True, [], [(candidate, sp) for sp in session_parents if not sp.has_child(candidate)] 
+        return IdentifyPolicy(identifier, policy)
 
     @classmethod
     def hierarchical(cls, identifier):
         def policy(candidate, new_nodes):
-            if candidate.property.parent:
-                parent = new_nodes.get(candidate.property.parent.name, None)
-                return any(map(lambda p: p == parent, candidate.parents))
+            """
+            Check a node having the same key as appending node.
+
+            Returns
+            -------
+            bool
+                True if this node should be identical as the appending node in this policy.
+            [Node]
+                Nodes which should be parent of appending node but currently doesn't have.
+            [(Node, Node)]
+                Edges contains existing nodes.
+            """
+            p = candidate.property.parent
+
+            if p is None or p.name not in new_nodes:
+                # Graph root or session root node is identified just by its key.
+                return True, [], []
             else:
-                return True
+                session_parents = new_nodes.get(p.name, [])
+                # This node is identical if one of its parents exists in session parents.
+                is_identical = any(map(lambda p: p in session_parents, candidate.parents))
+                if is_identical:
+                    # Select session parents which doesn't contain this candidate.
+                    return True, [sp for sp in session_parents if not sp.has_child(candidate)], []
+                else:
+                    # No existing nodes are identical.
+                    return False, [], []
         return IdentifyPolicy(identifier, policy)
 
 
@@ -149,38 +185,39 @@ class NodeContainer:
 
         Returns
         -------
-        Node
-            A node having the entity or matched entity added previously.
-        bool
-            True when the node is newly created. False when the existing node is returned.
+        [Node]
+            Appended nodes.
+        [(Node, Node)]
+            Edges.
         """
         def cand(k):
             return [self.nodes[i] for i in self.keys.get(k, [])]
-        key, existing = self.property.identifier.identify(
+
+        key, existings, parents, new_edges = self.property.identifier.identify(
             self.property,
             entity,
             cand,
             new_nodes,
         )
 
-        if existing:
-            return existing, False
+        edges = [(c, p) for c, p in new_edges]
+
+        if len(existings) > 0:
+            edges += sum([[(n, p) for n in existings] for p in new_nodes.get(self.property.name, [])], [])
+            for p in parents:
+                node = Node(self.property, entity, key)
+                self.nodes.append(node)
+                existings.append(node)
+                edges.append((node, p))
+            return existings, edges
         else:
             if key is not None:
                 self.keys.setdefault(key, []).append(len(self.nodes))
             node = Node(self.property, entity, key)
             self.nodes.append(node)
-            return node, True
+            edges += [(node, p) for p in new_nodes.get(self.property.parent.name, [])] if self.property.parent else []
+            return [node], edges
 
-        #key = self.property.identifier(entity) if self.property.identifier else None
-        #if key is not None:
-        #    if key in self.keys:
-        #        return self.nodes[self.keys[key]], False
-        #    else:
-        #        self.keys.setdefault(key, []).append(len(self.nodes))
-        #node = Node(self.property, entity, key)
-        #self.nodes.append(node)
-        #return node, True
 
 class Node:
     class Children:
@@ -246,3 +283,9 @@ class Node:
     def add_child(self, child):
         self.children.setdefault(child.property.name, Node.Children()).append(child)
         child.parents.add(self)
+
+    def has_child(self, child):
+        if child.property.name in self.children:
+            return child in self.children[child.property.name].keys
+        else:
+            return False
