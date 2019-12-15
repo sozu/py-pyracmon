@@ -1,1 +1,2 @@
 CREATE DATABASE pyracmon_test ENCODING = 'UTF-8';
+CREATE DATABASE pyracmon_example ENCODING = 'UTF-8';

@@ -57,6 +57,7 @@ CREATE TABLE blog_category (
 CREATE TABLE post_comment (
     id serial PRIMARY KEY,
     post_id integer NOT NULL REFERENCES post (id) ON DELETE CASCADE,
+    likes integer NOT NULL,
     content text NOT NULL
 );
 ```
@@ -210,13 +211,13 @@ Suppose you need complicated structured list of blogs like below.
 }
 ```
 
-You might think this is not so complicated because you have solved much more chaotic problems, however, this kind of complexity often falls into undesirable code such as fat model or a lot of lazy loadings. Although you can't avoid executing multiple queries and constructing complex SQL to obtain records correctly and efficiently, `Graph` helps your code being straight-forward and free from boilerplates. Next code shows the usage of `Graph` for this data structure.
+This kind of complexity often falls into undesirable code such as fat model or a lot of lazy loadings. Although you can't avoid executing multiple queries and constructing complex SQL to obtain records correctly and efficiently, `Graph` helps your code being straight-forward and free from boilerplates. Next code shows the usage of `Graph` for this data structure.
 
 ```
 from pyracmon import graph_template, new_graph
 
 # Declare template representing graph structure.
-t = graph_template(dict(
+t = graph_template(
     blogs = blog,
     recent_posts = post,
     total_posts = int,
@@ -226,7 +227,7 @@ t = graph_template(dict(
     most_liked_comment = post_comment,
     total_comments = int,
     total = int,
-))
+)
 t.blogs << [t.categories, t.total_posts, t.recent_posts]
 t.recent_posts << [t.images, t.recent_comments, t.most_liked_comment, t.total_comments]
 
@@ -239,33 +240,38 @@ def fetch_blogs():
     rs = ...
     for row in rs:
         b, c, ps = read_row(...)
-        graph.append(dict(
+        graph.append(
             blogs = b,
             categories = c,
             total_posts = ps,
-        ))
+        )
 
     # Execute query to fetch recent posts and their images from selected blogs above.
     # In this query, blog, post and image are joined and total number of comments are counted for each post.
     rs = ...
     for row in rs:
         b, p, i, cs = read_row(...)
-        graph.append(dict(
+        graph.append(
             blogs = b,
             recent_posts = p,
             images = i,
             total_comments = cs,
-        ))
+        )
 
     # Execute query to fetch most liked comment for recent posts respectively.
     # In this query, post and post_comments are joined.
     rs = ...
     for row in rs:
         p, pc = read_row(...)
-        graph.append(dict(
+        graph.append(
             recent_posts = p,
             most_liked_comment = pc,
-        ))
+        )
+
+    # Count total number of blogs.
+    graph.append(
+        total = blog.count(db),
+    )
 
     # Return view of the graph.
     return graph.view
