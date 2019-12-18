@@ -20,9 +20,10 @@ CREATE TABLE t2 (
 
 /* Foreign PK */
 CREATE TABLE t3 (
-    c31 integer PRIMARY KEY REFERENCES t1 (c11) ON DELETE CASCADE,
+    c31 integer PRIMARY KEY,
     c32 integer NOT NULL,
-    c33 text
+    c33 text,
+    FOREIGN KEY (c31) REFERENCES t1 (c11) ON DELETE CASCADE
 );
 
 /* Multiple foreign PK */
@@ -32,4 +33,4 @@ CREATE TABLE t4 (
     c43 integer NOT NULL,
     FOREIGN KEY (c42, c43) REFERENCES t2 (c21, c22) ON DELETE CASCADE,
     PRIMARY KEY (c41, c42, c43)
-)
+);

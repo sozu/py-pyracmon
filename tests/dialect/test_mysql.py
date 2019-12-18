@@ -25,24 +25,24 @@ class TestReadSchame:
             assert len(tables) == 4
 
             _assert_scheme(tables[0], "t1", [
-                dict(name = "c11", pk = True, incremental = True),
-                dict(name = "c12", pk = False, incremental = None),
-                dict(name = "c13", pk = False, incremental = None),
+                dict(name = "c11", type = int, pk = True, fk = False, incremental = True),
+                dict(name = "c12", type = int, pk = False, fk = False, incremental = None),
+                dict(name = "c13", type = str, pk = False, fk = False, incremental = None),
             ])
             _assert_scheme(tables[1], "t2", [
-                dict(name = "c21", pk = True, incremental = None),
-                dict(name = "c22", pk = True, incremental = None),
-                dict(name = "c23", pk = False, incremental = None),
+                dict(name = "c21", type = int, pk = True, fk = False, incremental = None),
+                dict(name = "c22", type = int, pk = True, fk = False, incremental = None),
+                dict(name = "c23", type = str, pk = False, fk = False, incremental = None),
             ])
             _assert_scheme(tables[2], "t3", [
-                dict(name = "c31", pk = True, incremental = None),
-                dict(name = "c32", pk = False, incremental = None),
-                dict(name = "c33", pk = False, incremental = None),
+                dict(name = "c31", type = int, pk = True, fk = True, incremental = None),
+                dict(name = "c32", type = int, pk = False, fk = False, incremental = None),
+                dict(name = "c33", type = str, pk = False, fk = False, incremental = None),
             ])
             _assert_scheme(tables[3], "t4", [
-                dict(name = "c41", pk = True, incremental = None),
-                dict(name = "c42", pk = True, incremental = None),
-                dict(name = "c43", pk = True, incremental = None),
+                dict(name = "c41", type = int, pk = True, fk = False, incremental = None),
+                dict(name = "c42", type = int, pk = True, fk = True, incremental = None),
+                dict(name = "c43", type = int, pk = True, fk = True, incremental = None),
             ])
 
 
@@ -55,7 +55,11 @@ def _assert_scheme(actual, t, cs):
 
     for c, a in zip(cs, acs):
         assert c['name'] == a.name
+        assert c['type'] == a.ptype
+        if 'info' in c:
+            assert c['info'] == a.type_info
         assert c['pk'] == a.pk
+        assert c['fk'] == a.fk
         assert c['incremental'] == a.incremental
 
 

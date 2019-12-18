@@ -19,9 +19,9 @@ class B:
         return "B3"
 
 table1 = Table("t1", [
-    Column("c1", True, "seq"),
-    Column("c2", False, None),
-    Column("c3", False, None),
+    Column("c1", int, None, True, False, "seq"),
+    Column("c2", int, None, False, False, None),
+    Column("c3", int, None, False, False, None),
 ])
 
 class TestDefineModel:
@@ -52,9 +52,9 @@ class TestModelInstance:
         assert vs == [(table1.columns[0], 1), (table1.columns[2], "abc")]
 
 table2 = Table("t2", [
-    Column("c1", True, "seq"),
-    Column("c2", True, None),
-    Column("c3", False, None),
+    Column("c1", int, None, True, False, "seq"),
+    Column("c2", int, None, True, False, None),
+    Column("c3", int, None, False, False, None),
 ])
 
 class TestParsePKs:

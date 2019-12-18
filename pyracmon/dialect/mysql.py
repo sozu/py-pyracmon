@@ -1,4 +1,7 @@
 from itertools import groupby
+from decimal import Decimal
+from enum import Enum
+from datetime import date, datetime, time, timedelta
 from pyracmon.model import Table, Column
 from pyracmon.dialect.shared import MultiInsertMixin
 
@@ -11,9 +14,15 @@ def read_schema(db, excludes = [], includes = []):
 
     c.execute(f"""\
         SELECT
-            c.table_name, c.column_name, c.column_key, c.extra
+            c.table_name, c.column_name, c.data_type, c.column_type, c.column_key, k.referenced_table_name, k.referenced_column_name, c.extra
         FROM
             information_schema.columns AS c
+            LEFT JOIN information_schema.key_column_usage AS k
+                ON c.table_catalog = k.table_catalog
+                    AND c.table_schema = k.table_schema
+                    AND c.table_name = k.table_name
+                    AND c.column_name = k.column_name
+                    AND k.referenced_table_name IS NOT NULL
         WHERE
             c.table_schema = DATABASE()
             {ex_cond}
@@ -22,8 +31,8 @@ def read_schema(db, excludes = [], includes = []):
             c.table_name, c.ordinal_position ASC
         """, excludes + includes)
 
-    def column_of(n, key, extra):
-        return Column(n, key == "PRI", True if extra == "auto_increment" else None)
+    def column_of(n, t, ct, key, rt, rc, extra):
+        return Column(n, _map_types(t), ct, key == "PRI", bool(rt), True if extra == "auto_increment" else None)
 
     tables = []
 
@@ -33,6 +42,30 @@ def read_schema(db, excludes = [], includes = []):
     c.close()
 
     return tables
+
+
+def _map_types(t):
+    # TODO Actually, this mapping depends on connection module.
+    if t == "tinyint" or t == "smallint" or t == "mediumint" or t == "int" or t == "bigint":
+        return int
+    elif t == "decimal":
+        return Decimal
+    elif t == "float" or t == "double":
+        return float
+    elif t == "bit":
+        return int
+    elif t == "char" or t == "varchar" or t == "binary" or t == "varbinary" or t == "text":
+        return str
+    elif t == "blob":
+        return bytes
+    elif t == "enum":
+        return Enum
+    elif t == "date":
+        return date
+    elif t == "datetime" or t == "timestamp":
+        return datetime
+    else:
+        return object
 
 
 class MySQLMixin(MultiInsertMixin):

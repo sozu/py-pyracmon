@@ -1,7 +1,7 @@
 from itertools import zip_longest
 from pyracmon.graph.graph import IdentifyPolicy
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.serialize import SerializationContext, NodesSerializer
+from pyracmon.graph.serialize import SerializationContext, NodeSerializer
 
 
 class GraphSpec:
@@ -77,7 +77,7 @@ class GraphSpec:
             if isinstance(settings[0], str):
                 name = settings[0]
                 settings[0] = lambda x: name
-            return NodesSerializer(settings[0], settings[1], settings[2])
+            return NodeSerializer(settings[0], settings[1], settings[2])
         context = SerializationContext(dict([(n, to_serializer(s)) for n, s in serializers.items()]))
 
         result = {}

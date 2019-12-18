@@ -2,7 +2,7 @@ def head(vs):
     return vs[0] if len(vs) > 0 else None
 
 
-class NodesSerializer:
+class NodeSerializer:
     def __init__(self, namer, aggregator, serializer):
         self.namer = namer
         self.aggregator = aggregator
@@ -27,3 +27,19 @@ class SerializationContext:
                     entity[kv[0]] = kv[1]
 
         return entity
+
+
+class FixedNamer:
+    @property
+    def name(self):
+        raise NotImplementedError()
+
+
+class FixedAggregator:
+    def aggregate(self, original_type):
+        raise NotImplementedError()
+
+
+class FixedSerializer:
+    def serialize(self, original_type):
+        raise NotImplementedError()

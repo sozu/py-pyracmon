@@ -1,4 +1,7 @@
 import re
+from decimal import Decimal
+from datetime import date, datetime, time, timedelta
+from uuid import UUID
 from itertools import groupby
 from pyracmon.model import Table, Column
 from pyracmon.dialect.shared import MultiInsertMixin
@@ -13,19 +16,24 @@ def read_schema(db, excludes = [], includes = []):
 
     c.execute(f"""\
         SELECT
-            c.table_name, c.column_name, k.constraint_type IS NOT NULL, c.column_default
+            c.table_name, c.column_name, c.data_type, c.udt_name, e.data_type, e.udt_name, k.constraint_type, c.column_default
         FROM
             information_schema.columns AS c
             INNER JOIN information_schema.tables AS t ON c.table_name = t.table_name
             LEFT JOIN (
                 SELECT
-                    tc.table_name, k.column_name, tc.constraint_type
+                    tc.table_name, k.column_name, string_agg(tc.constraint_type, ',') AS constraint_type
                 FROM
                     information_schema.key_column_usage AS k
                     INNER JOIN information_schema.table_constraints AS tc ON k.constraint_name = tc.constraint_name
                 WHERE
-                    tc.constraint_type = 'PRIMARY KEY'
+                    tc.constraint_type = 'PRIMARY KEY' OR tc.constraint_type = 'FOREIGN KEY'
+                GROUP BY
+                    tc.table_name, k.column_name
             ) AS k ON t.table_name = k.table_name AND c.column_name = k.column_name
+            LEFT JOIN information_schema.element_types AS e
+                ON ((c.table_catalog, c.table_schema, c.table_name, 'TABLE', c.dtd_identifier) =
+                    (e.object_catalog, e.object_schema, e.object_name, e.object_type, e.collection_type_identifier))
         WHERE
             c.table_schema = 'public'
             AND t.table_type = 'BASE TABLE'
@@ -34,10 +42,13 @@ def read_schema(db, excludes = [], includes = []):
         ORDER BY c.table_name ASC, c.ordinal_position ASC
         """, excludes + includes)
 
-    def column_of(n, pk, default):
+    def column_of(n, t, udt, et, eudt, constraint, default):
         m = SequencePattern.match(default or "")
+        cs = (constraint or "").split(',')
         seq = m.group(1) if m else None
-        return Column(n, pk, seq)
+        ptype = _map_types(t) if t != 'ARRAY' else [_map_types(et)]
+        info = (t, udt) if t != 'ARRAY' else (et, eudt)
+        return Column(n, ptype, info, 'PRIMARY KEY' in cs, 'FOREIGN KEY' in cs, seq)
 
     tables = []
 
@@ -48,6 +59,34 @@ def read_schema(db, excludes = [], includes = []):
     c.close()
 
     return tables
+
+
+def _map_types(t):
+    # TODO Actually, this mapping depends on connection module.
+    if t == "boolean":
+        return bool
+    elif t == "real" or t == "double precision":
+        return float
+    elif t == "smallint" or t == "integer" or t == "bigint":
+        return int
+    elif t == "numeric" or t == "decimal":
+        return Decimal
+    elif t == "character varying" or t == "text" or t == "character":
+        return str
+    elif t == "bytea":
+        return bytes
+    elif t == "date":
+        return date
+    elif t.startswith("timestamp "):
+        return datetime
+    elif t.startswith("time "):
+        return time
+    elif t == "interval":
+        return timedelta
+    elif t == "uuid":
+        return UUID
+    else:
+        return object
 
 
 class PostgreSQLMixin(MultiInsertMixin):

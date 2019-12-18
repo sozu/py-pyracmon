@@ -2,7 +2,7 @@ from collections import OrderedDict
 from pyracmon.util import split_dict
 
 class Column:
-    def __init__(self, name, pk, incremental):
+    def __init__(self, name, ptype, type_info, pk, fk, incremental):
         """
         Create a column schema.
 
@@ -10,13 +10,22 @@ class Column:
         ---------
         name: str
             Column name.
+        ptype: type
+            Data type in python.
+        type_info: str
+            Type informations obtained from DB.
         pk: bool
             Is this column a PK?
+        fk: object
+            An informative object if this column is a foreign key, otherwise None.
         incremental: object
             If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
         """
         self.name = name
+        self.ptype = ptype
+        self.type_info = type_info
         self.pk = pk
+        self.fk = fk
         self.incremental = incremental
 
 

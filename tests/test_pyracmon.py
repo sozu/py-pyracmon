@@ -54,12 +54,12 @@ def test_module_obj_postgresql():
 
 def test_model_graph():
     t1 = Table("t1", [
-        Column("c1", True, None),
-        Column("c2", False, None),
+        Column("c1", int, None, True, False, None),
+        Column("c2", int, None, False, False, None),
     ])
     t2 = Table("t2", [
-        Column("c1", True, None),
-        Column("c2", False, None),
+        Column("c1", int, None, True, False, None),
+        Column("c2", int, None, False, False, None),
     ])
 
     m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
@@ -105,8 +105,8 @@ def test_model_graph():
 
 def test_add_identifier():
     t1 = Table("t1", [
-        Column("c1", True, None),
-        Column("c2", False, None),
+        Column("c1", int, None, True, False, None),
+        Column("c2", int, None, False, False, None),
     ])
 
     m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
@@ -127,8 +127,8 @@ def test_add_identifier():
 
 def test_add_serializer():
     t1 = Table("t1", [
-        Column("c1", True, None),
-        Column("c2", False, None),
+        Column("c1", int, None, True, False, None),
+        Column("c2", int, None, False, False, None),
     ])
 
     m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])

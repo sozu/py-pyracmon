@@ -6,15 +6,15 @@ from tests.db_api import *
 
 
 table1 = Table("t1", [
-    Column("c1", True, "seq"),
-    Column("c2", False, None),
-    Column("c3", False, None),
+    Column("c1", int, None, True, False, "seq"),
+    Column("c2", int, None, False, False, None),
+    Column("c3", int, None, False, False, None),
 ])
 
 table2 = Table("t2", [
-    Column("c1", True, "seq"),
-    Column("c2", True, None),
-    Column("c3", False, None),
+    Column("c1", int, None, True, False, "seq"),
+    Column("c2", int, None, True, False, None),
+    Column("c3", int, None, False, False, None),
 ])
 
 class TestMultiInasert:
