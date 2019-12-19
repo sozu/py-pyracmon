@@ -160,6 +160,40 @@ Those methods accept other optional arguments to modify executing queries (ex. a
 
 ### SQL operations
 
+The `Connection` object of this library is just a proxy to the `Connection` which conforms to DB-API 2.0, therefore, it also conforms to DB-API 2.0. You can post any SQL via `Cursor` obtained by `cursor()`. `helper` attribute of the connection has some helper functions to construct SQL as follows.
+
+```
+# Fetch blogs and their posts by blog IDs.
+blog_ids = ...
+limit, offset = ...
+
+# Marker of place holder.
+m = db.helper.marker()
+
+# Columns with aliases to select from each table.
+# -> b.id, b.title, p.title, p.content
+b_, p_ = blog.select("b"), post.select("p", ["title", "content"])
+
+c = db.cursor()
+c.execute(f"""
+    SELECT
+        {b_}, {p_}
+    FROM
+        blog AS b
+        INNER JOIN post AS p ON b.id = p.blog_id
+    WHERE
+        b.id IN ({db.helper.holders(len(blog_ids))})
+    LIMIT {m()} OFFSET {m()}
+    """, blogs_ids + [limit, offset])
+
+# The pairs of blog and post models: [[blog, post]]
+blog_post_pairs = [read_row(row, b_, p_) for row in c.fetchall()]
+```
+
+Each invocation of marker object `m` returns a string correponding to parameter, for psycopg2, `%s`. `select()` method of the model determines columns to select and their order. Using objects returned by `select()`s in SQL and arguments of `read_row()` in the same order enables correct constructions of model instances. `holders()` is one of helper method defined in `QueryHelper` which generates given numbers of markers concatenated with comma. This kind of methods are available via `QueryHelper`.
+
+`read_row()` returns a list of models in the same order as the optional arguments, in this case, `b_` and `p_`.
+
 ### Crete relational graph
 
 In many cases, actual application requires not only records but also additional informations such as grouping count, and we often have to merge results of multiple queries according to their relationships. `Graph` is a data structure which stores them by predefined hierarchical (tree-like) structure as `GraphTemplate` and exports a view to scan its nodes in natural syntax in python.

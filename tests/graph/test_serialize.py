@@ -42,12 +42,6 @@ class TestSerialize:
     def test_change_name(self):
         assert spec.to_dict(
             self._graph(),
-            a = (lambda n: f"__{n}__", ),
-        ) == {"__a__": [1, 2, 3]}
-
-    def test_change_name_fixed(self):
-        assert spec.to_dict(
-            self._graph(),
             a = ("__a__", ),
         ) == {"__a__": [1, 2, 3]}
 
@@ -77,6 +71,13 @@ class TestSerialize:
             b = (),
         ) == {"a": [{"value": 1, "b": [10, 11]}, {"value": 2, "b": [20, 21, 22]}, {"value": 3, "b": [30]}]}
 
+    def test_merge_child(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = (None, None, lambda x: {"value": x}),
+            b = (lambda x: f"b_{x}", head, lambda x: {"value": x, "value2": x*2}),
+        ) == {"a": [{"value": 1, "b_value": 10, "b_value2": 20}, {"value": 2, "b_value": 20, "b_value2": 40}, {"value": 3, "b_value": 30, "b_value2": 60}]}
+
     def test_multi_parents(self):
         assert spec.to_dict(
             self._graph(),
@@ -84,7 +85,7 @@ class TestSerialize:
             b = (None, None, lambda x: {"vb": x}),
             c = (),
             d = (None, lambda x: ''.join(x)),
-            e = (lambda n: f"__{n}__",),
+            e = ("__e__",),
         ) == {
             "a": [
                 {"va": 1, "d": "ab", "b": [

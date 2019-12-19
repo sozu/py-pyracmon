@@ -1,7 +1,7 @@
 from itertools import zip_longest
 from pyracmon.graph.graph import IdentifyPolicy
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.serialize import SerializationContext, NodeSerializer
+from pyracmon.graph.serialize import SerializationContext, NodeSerializer, _expand
 
 
 class GraphSpec:
@@ -73,18 +73,24 @@ class GraphSpec:
             return f(x) if f else x
 
         def to_serializer(s):
-            settings = [(p[0] or p[1]) for p in zip_longest(s, (noop, noop, serialize), fillvalue=None)]
-            if isinstance(settings[0], str):
-                name = settings[0]
-                settings[0] = lambda x: name
+            settings = [(p[0] or p[1]) for p in zip_longest(s, (None, noop, serialize), fillvalue=None)]
             return NodeSerializer(settings[0], settings[1], settings[2])
         context = SerializationContext(dict([(n, to_serializer(s)) for n, s in serializers.items()]))
 
         result = {}
 
         for c in filter(lambda c: c().property.parent is None, __graph__):
-            kv = context.serialize(c().name, c)
-            if kv:
-                result[kv[0]] = kv[1]
+            #kv = context.serialize(c().name, c)
+            nv = context.serialize(c().name, c)
+            if nv:
+                namer, value = nv
+                if namer is None:
+                    result[c().name] = value
+                elif isinstance(namer, str):
+                    result[namer] = value
+                elif callable(namer) and isinstance(value, dict):
+                    value = _expand(value)
+                    if value:
+                        result.update(dict([(namer(k), v) for k, v in value.items()]))
 
         return result
