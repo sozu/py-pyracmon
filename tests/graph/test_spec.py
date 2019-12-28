@@ -34,7 +34,7 @@ class TestNewTemplate:
             a = (),
             b = (int,),
             c = int,
-            d = (str, len)
+            d = (str, len, lambda s: len(s) > 3)
         )
 
         assert len(t._properties) == 4
@@ -44,6 +44,9 @@ class TestNewTemplate:
         assert (t.b.name, t.b.kind, t.b.identifier.identifier("abc")) == ("b", int, None)
         assert (t.c.name, t.c.kind, t.c.identifier.identifier("abc")) == ("c", int, None)
         assert (t.d.name, t.d.kind, t.d.identifier.identifier("abc")) == ("d", str, 3)
+        assert (t.a.entity_filter, t.b.entity_filter, t.c.entity_filter) == (None, None, None)
+        assert t.d.entity_filter("abc") == False
+        assert t.d.entity_filter("abcd") == True
 
     def test_identifier(self):
         ident1 = lambda x: x * 1

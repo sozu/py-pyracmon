@@ -51,6 +51,18 @@ class TestSerialize:
             a = (None, head),
         ) == {"a": 1}
 
+    def test_aggregate_index(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = (None, 1),
+        ) == {"a": 2}
+
+    def test_aggregate_none(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = (None, 10),
+        ) == {"a": None}
+
     def test_serialize(self):
         assert spec.to_dict(
             self._graph(),
@@ -102,3 +114,67 @@ class TestSerialize:
                 ]},
             ],
         }
+
+
+class TestNodeSerializer:
+    def _graph(self):
+        t = spec.new_template(
+            a = int,
+        )
+
+        graph = Graph(t)
+        graph.append(a = 1)
+        graph.append(a = 2)
+        graph.append(a = 3)
+
+        return graph.view
+
+    def test_default(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of(),
+        ) == {"a": [1,2,3]}
+
+    def test_spec_serializer(self):
+        spec = GraphSpec()
+        spec.add_serializer(int, lambda x: x*2)
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of(),
+        ) == {"a": [2,4,6]}
+
+    def test_namer(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of().name("A"),
+        ) == {"A": [1,2,3]}
+
+    def test_namer(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of().name(lambda n: f"__{n}__"),
+        ) == {}
+
+    def test_head(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of().head(),
+        ) == {"a": 1}
+
+    def test_tail(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of().tail(),
+        ) == {"a": 3}
+
+    def test_fold(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of().fold(sum),
+        ) == {"a": 6}
+
+    def test_each(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of().each(lambda s,x: x*3),
+        ) == {"a": [3,6,9]}

@@ -43,7 +43,15 @@ class Graph:
         entities: *{str: object}
             Dictionary where the key indicates the property name and the value is the entity value.
         """
-        keys = [p.name for p in sorted([self.containers[k].property for k in entities.keys()], reverse=True)]
+        props = sorted([self.containers[k].property for k in entities.keys()], reverse=True)
+
+        filtered = set()
+        for p in props:
+            if p.parent is None or (p.parent.name not in entities or p.parent.name in filtered):
+                if p.entity_filter is None or p.entity_filter(entities[p.name]):
+                    filtered.add(p.name)
+
+        keys = [p.name for p in props if p.name in filtered]
 
         nodes = {}
         for k in keys:

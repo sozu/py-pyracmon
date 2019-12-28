@@ -191,3 +191,27 @@ class TestGraph:
         assert [n() for n in graph.view.a[0].b[1].c] == [101]
         assert [n() for n in graph.view.a[1].b[0].c] == [200, 100, 101]
         assert [n() for n in graph.view.a[1].b[1].c] == [101]
+
+    def test_entity_filter(self):
+        t = spec.new_template(
+            a = (None, lambda x:x, lambda x: x >= 0),
+            b = (None, None, lambda x: x >= 0),
+        )
+        t.a << t.b
+        graph = Graph(t)
+
+        graph.append(a = -1, b = 0)
+        graph.append(a = 1, b = -1)
+        graph.append(a = 1, b = 0)
+        graph.append(a = 1, b = 1)
+        graph.append(a = 0, b = 1)
+        graph.append(a = -2, b = -2)
+        graph.append(a = -2, b = 2)
+        graph.append(a = -2, b = 1)
+        graph.append(a = 2, b = 2)
+
+        assert [n() for n in graph.view.a] == [1, 0, 2]
+        assert [n() for n in graph.view.b] == [0, 1, 1, 2]
+        assert [n() for n in graph.view.a[0].b] == [0, 1]
+        assert [n() for n in graph.view.a[1].b] == [1]
+        assert [n() for n in graph.view.a[2].b] == [2]

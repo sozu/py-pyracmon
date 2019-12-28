@@ -1,10 +1,11 @@
 class GraphTemplate:
     class Property:
-        def __init__(self, template, name, kind, identifier):
+        def __init__(self, template, name, kind, identifier, entity_filter):
             self.template = template
             self.name = name
             self.kind = kind
             self.identifier = identifier
+            self.entity_filter = entity_filter
 
         def _assert_canbe_parent(self, another):
             if another.parent is not None:
@@ -79,10 +80,32 @@ class GraphTemplate:
 
         Parameters
         ----------
-        definitions: [(str, type, (T) -> object)]
+        definitions: [(str, type, (T) -> object, (T) -> bool)]
             Property definitions.
         """
-        self._properties = [GraphTemplate.Property(self, n, kind, ident) for n, kind, ident in definitions]
+        self._properties = [GraphTemplate.Property(self, n, kind, ident, ef) for n, kind, ident, ef in definitions]
         self._relations = []
         for p in self._properties:
             setattr(self, p.name, p)
+
+
+class P:
+    @classmethod
+    def of(cls, kind=None, identifier=None, entity_filter=None):
+        return P(kind, identifier, entity_filter)
+
+    def __init__(self, kind, identifier, entity_filter):
+        self.kind = kind
+        self.identifier = identifier
+        self.entity_filter = entity_filter
+
+    def build(self, name, template):
+        return GraphTemplate.Property(template, name, self.kind, self.identifier, self.entity_filter)
+
+    def identify(self, identifier):
+        self.identifier = identifier
+        return self
+
+    def accept(self, entity_filter):
+        self.entity_filter = entity_filter
+        return self
