@@ -10,6 +10,11 @@ CREATE TABLE t1 (
     c13 text NOT NULL
 );
 
+COMMENT ON TABLE t1 IS 'comment of t1';
+COMMENT ON COLUMN t1.c11 IS 'comment of c11';
+COMMENT ON COLUMN t1.c12 IS 'comment of c12';
+COMMENT ON COLUMN t1.c13 IS 'comment of c13';
+
 /* Multiple PK */
 CREATE TABLE t2 (
     c21 integer NOT NULL,

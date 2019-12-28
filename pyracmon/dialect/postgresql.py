@@ -56,6 +56,28 @@ def read_schema(db, excludes = [], includes = []):
         columns = [column_of(*c[1:]) for c in cols]
         tables.append(Table(t, columns))
 
+    c.execute(f"""\
+        SELECT
+            relname, oid
+        FROM
+            pg_class
+        WHERE
+            relname IN ({db.helper.holders(len(tables))})
+        """, [t.name for t in tables])
+
+    table_oids = {}
+    for n, oid in c.fetchall():
+        table_oids[n] = oid
+
+    for t in tables:
+        c.execute(f"SELECT col_description({db.helper.marker()()}, 0)", [table_oids[t.name]])
+        t.comment = c.fetchone()[0] or ""
+
+        for i, col in enumerate(t.columns):
+            m = db.helper.marker()
+            c.execute(f"SELECT col_description({m()}, {m()})", [table_oids[t.name], i+1])
+            col.comment = c.fetchone()[0] or ""
+
     c.close()
 
     return tables

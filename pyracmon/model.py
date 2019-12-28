@@ -2,7 +2,7 @@ from collections import OrderedDict
 from pyracmon.util import split_dict
 
 class Column:
-    def __init__(self, name, ptype, type_info, pk, fk, incremental):
+    def __init__(self, name, ptype, type_info, pk, fk, incremental, comment = ""):
         """
         Create a column schema.
 
@@ -27,12 +27,14 @@ class Column:
         self.pk = pk
         self.fk = fk
         self.incremental = incremental
+        self.comment = comment
 
 
 class Table:
     def __init__(self, name, columns):
         self.name = name
         self.columns = columns
+        self.comment = ""
 
 
 def define_model(table, mixins = []):

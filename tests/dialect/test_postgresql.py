@@ -23,30 +23,31 @@ class TestReadSchame:
 
             assert len(tables) == 4
 
-            _assert_scheme(tables[0], "t1", [
-                dict(name = "c11", type = int, pk = True, fk = False, incremental = "t1_c11_seq"),
-                dict(name = "c12", type = int, pk = False, fk = False, incremental = None),
-                dict(name = "c13", type = str, pk = False, fk = False, incremental = None),
+            _assert_scheme(tables[0], "t1", "comment of t1", [
+                dict(name = "c11", type = int, pk = True, fk = False, incremental = "t1_c11_seq", comment = "comment of c11"),
+                dict(name = "c12", type = int, pk = False, fk = False, incremental = None, comment = "comment of c12"),
+                dict(name = "c13", type = str, pk = False, fk = False, incremental = None, comment = "comment of c13"),
             ])
-            _assert_scheme(tables[1], "t2", [
-                dict(name = "c21", type = int, pk = True, fk = False, incremental = None),
-                dict(name = "c22", type = int, pk = True, fk = False, incremental = None),
-                dict(name = "c23", type = str, pk = False, fk = False, incremental = None),
+            _assert_scheme(tables[1], "t2", "", [
+                dict(name = "c21", type = int, pk = True, fk = False, incremental = None, comment = ""),
+                dict(name = "c22", type = int, pk = True, fk = False, incremental = None, comment = ""),
+                dict(name = "c23", type = str, pk = False, fk = False, incremental = None, comment = ""),
             ])
-            _assert_scheme(tables[2], "t3", [
-                dict(name = "c31", type = int, pk = True, fk = True, incremental = None),
-                dict(name = "c32", type = int, pk = False, fk = False, incremental = "t3_c32_seq"),
-                dict(name = "c33", type = str, pk = False, fk = False, incremental = None),
+            _assert_scheme(tables[2], "t3", "", [
+                dict(name = "c31", type = int, pk = True, fk = True, incremental = None, comment = ""),
+                dict(name = "c32", type = int, pk = False, fk = False, incremental = "t3_c32_seq", comment = ""),
+                dict(name = "c33", type = str, pk = False, fk = False, incremental = None, comment = ""),
             ])
-            _assert_scheme(tables[3], "t4", [
-                dict(name = "c41", type = int, pk = True, fk = True, incremental = None),
-                dict(name = "c42", type = int, pk = True, fk = True, incremental = None),
-                dict(name = "c43", type = int, pk = True, fk = True, incremental = None),
+            _assert_scheme(tables[3], "t4", "", [
+                dict(name = "c41", type = int, pk = True, fk = True, incremental = None, comment = ""),
+                dict(name = "c42", type = int, pk = True, fk = True, incremental = None, comment = ""),
+                dict(name = "c43", type = int, pk = True, fk = True, incremental = None, comment = ""),
             ])
 
 
-def _assert_scheme(actual, t, cs):
+def _assert_scheme(actual, t, tcm, cs):
     assert t == actual.name
+    assert tcm == actual.comment
     assert len(cs) == len(actual.columns)
 
     cs = sorted(cs, key = lambda c: c['name'])
@@ -60,6 +61,7 @@ def _assert_scheme(actual, t, cs):
         assert c['pk'] == a.pk
         assert c['fk'] == a.fk
         assert c['incremental'] == a.incremental
+        assert c['comment'] == a.comment
 
 
 class TestLastSequences:

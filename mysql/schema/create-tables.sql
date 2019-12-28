@@ -5,10 +5,10 @@ DROP TABLE IF EXISTS t1;
 
 /* Single auto-increment PK */
 CREATE TABLE t1 (
-    c11 integer NOT NULL AUTO_INCREMENT PRIMARY KEY,
-    c12 integer NOT NULL,
-    c13 text NOT NULL
-);
+    c11 integer NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT 'comment of c11',
+    c12 integer NOT NULL COMMENT 'comment of c12',
+    c13 text NOT NULL COMMENT 'comment of c13'
+) COMMENT = 'comment of t1';
 
 /* Multiple PK */
 CREATE TABLE t2 (
