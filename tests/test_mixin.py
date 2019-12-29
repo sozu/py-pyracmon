@@ -84,7 +84,7 @@ class TestCount:
         m = define_model(table1, [CRUDMixin])
 
         db.reserve([[3]])
-        r = m.count(db, lambda m: Q.condition(f"c3 > {m()}", 5))
+        r = m.count(db, lambda m: Q.of(f"c3 > {m()}", 5))
 
         assert db.query_list[0] == "SELECT COUNT(*) FROM t1 WHERE c3 > ?"
         assert list(db.params_list[0]) == [5]
@@ -142,7 +142,17 @@ class TestFetchWhere:
         m = define_model(table1, [CRUDMixin])
 
         db.reserve([[1, "abc", 10], [2, "def", 20]])
-        rs = m.fetch_where(db, lambda m: Q.condition(f"c3 > {m()}", 5))
+        rs = m.fetch_where(db, lambda m: Q.of(f"c3 > {m()}", 5))
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ?"
+        assert list(db.params_list[0]) == [5]
+
+    def test_with_condition_simple(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, Q.of(f"c3 > ?", 5))
 
         assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ?"
         assert list(db.params_list[0]) == [5]
@@ -199,7 +209,7 @@ class TestFetchWhere:
         m = define_model(table1, [CRUDMixin])
 
         db.reserve([[1, "abc", 10], [2, "def", 20]])
-        rs = m.fetch_where(db, lambda m: Q.condition(f"c3 > {m()}", 5), dict(c1 = True, c3 = False), limit = 10, offset = 20)
+        rs = m.fetch_where(db, lambda m: Q.of(f"c3 > {m()}", 5), dict(c1 = True, c3 = False), limit = 10, offset = 20)
 
         assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ? ORDER BY c1 ASC, c3 DESC LIMIT ? OFFSET ?"
         assert list(db.params_list[0]) == [5, 10, 20]
@@ -272,18 +282,27 @@ class TestQueryString:
         assert db.query_list[0] == "UPDATE t1 SET c2 = ?, c3 = ? WHERE (c2 = ?) OR (c3 > ?)"
         assert list(db.params_list[0]) == [2, 3, "abc", 10]
 
+    def test_update_where_simple(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        m.update_where(db, m(c2 = 2, c3 = 3), Q.of("c2 = ?", "abc") | Q.of("c3 > ?", 10))
+
+        assert db.query_list[0] == "UPDATE t1 SET c2 = ?, c3 = ? WHERE (c2 = ?) OR (c3 > ?)"
+        assert list(db.params_list[0]) == [2, 3, "abc", 10]
+
     def test_update_all_ng(self):
         db = self._db()
         m = define_model(table1, [CRUDMixin])
 
         with pytest.raises(ValueError):
-            m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.condition("", []))
+            m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.of("", []))
 
     def test_update_all_ok(self):
         db = self._db()
         m = define_model(table1, [CRUDMixin])
 
-        m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.condition("", []), allow_all = True)
+        m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.of("", []), allow_all = True)
 
         assert db.query_list[0] == "UPDATE t1 SET c2 = ?, c3 = ? "
         assert list(db.params_list[0]) == [2, 3]
@@ -317,18 +336,29 @@ class TestQueryString:
         assert db.query_list[0] == "DELETE FROM t1 WHERE (c2 = ?) OR (c3 > ?)"
         assert list(db.params_list[0]) == ["abc", 10]
 
+    def test_delete_where_simple(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        mk = db.helper.marker()
+        q = Q(c2 = "abc", c3 = 10)
+        m.delete_where(db, Q.of(f"c2 = ?", "abc") | Q.of(f"c3 > ?", 10))
+
+        assert db.query_list[0] == "DELETE FROM t1 WHERE (c2 = ?) OR (c3 > ?)"
+        assert list(db.params_list[0]) == ["abc", 10]
+
     def test_delete_all_ng(self):
         db = self._db()
         m = define_model(table1, [CRUDMixin])
 
         with pytest.raises(ValueError):
-            m.delete_where(db, lambda mk: Q.condition("", []))
+            m.delete_where(db, lambda mk: Q.of("", []))
 
     def test_delete_all_ok(self):
         db = self._db()
         m = define_model(table1, [CRUDMixin])
 
-        m.delete_where(db, lambda mk: Q.condition("", []), allow_all = True)
+        m.delete_where(db, lambda mk: Q.of("", []), allow_all = True)
 
         assert db.query_list[0] == "DELETE FROM t1 "
         assert list(db.params_list[0]) == []

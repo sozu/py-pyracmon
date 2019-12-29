@@ -23,7 +23,7 @@ class GraphSpec:
         self.identifiers[0:0] = [(c, f)]
 
     def add_entity_filter(self, c, f):
-        self.entity_filter[0:0] = [(c, f)]
+        self.entity_filters[0:0] = [(c, f)]
 
     def add_serializer(self, c, f):
         self.serializers[0:0] = [(c, f)]
@@ -47,14 +47,14 @@ class GraphSpec:
             if d is None or d == ():
                 return None, make_identifier(None), None
             elif isinstance(d, P):
-                return d.kind, make_identifier(d.identifier)
+                return d.kind, make_identifier(d.identifier), d.entity_filter
             elif isinstance(d, tuple):
                 kind = d[0] if len(d) >= 1 else None
                 ident = make_identifier(d[1] if len(d) >= 2 else self.get_identifier(kind))
                 ef = d[2] if len(d) >= 3 else self.get_entity_filter(kind)
                 return kind, ident, ef
             elif isinstance(d, type):
-                return d, make_identifier(self.get_identifier(d)), None
+                return d, make_identifier(self.get_identifier(d)), self.get_entity_filter(d)
             else:
                 raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
         return GraphTemplate([(n, *definition(d)) for n, d in template.items()])

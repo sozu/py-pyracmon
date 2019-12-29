@@ -70,10 +70,10 @@ class CRUDMixin:
         return Selection(cls, alias, columns)
 
     @classmethod
-    def count(cls, db, gen_condition = lambda m: Q.condition('', [])):
+    def count(cls, db, gen_condition = lambda m: Q.of('', [])):
         c = db.cursor()
         m = db.helper.marker()
-        wc, wp = where(gen_condition(m))
+        wc, wp = _where(gen_condition, m)
         c.execute(f"SELECT COUNT(*) FROM {cls.name} {wc}", m.params(wp))
         return c.fetchone()[0]
 
@@ -89,13 +89,13 @@ class CRUDMixin:
         return read_row(row, s)[0] if row else None
 
     @classmethod
-    def fetch_where(cls, db, condition = lambda m: Q.condition('', []), orders = [], limit = None, offset = None, lock = None):
+    def fetch_where(cls, db, gen_condition = lambda m: Q.of('', []), orders = [], limit = None, offset = None, lock = None):
         def spacer(s):
             return (" " + s) if s else ""
         c = db.cursor()
         m = db.helper.marker()
         s = cls.select()
-        wc, wp = where(condition(m))
+        wc, wp = _where(gen_condition, m)
         rc, rp = ranged_by(m, limit, offset)
         c.execute(f"SELECT {s} FROM {cls.name}{spacer(wc)}{spacer(order_by(orders))}{spacer(rc)}", m.params(wp + rp))
         return [read_row(row, s)[0] for row in c.fetchall()]
@@ -121,14 +121,14 @@ class CRUDMixin:
     def update(cls, db, pks, values, qualifier = {}):
         def gen_condition(m):
             cols, vals = cls._parse_pks(pks)
-            return reduce(lambda acc, x: acc & x, [Q.condition(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
+            return reduce(lambda acc, x: acc & x, [Q.of(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
         return cls.update_where(db, values, gen_condition, qualifier, False)
 
     @classmethod
     def update_where(cls, db, values, gen_condition, qualifier = {}, allow_all = False):
         setters, params, m = _update(cls, db, values, qualifier)
 
-        wc, wp = where(gen_condition(m))
+        wc, wp = _where(gen_condition, m)
         if wc == "" and not allow_all:
             raise ValueError("By default, update_where does not allow empty condition.")
 
@@ -137,14 +137,14 @@ class CRUDMixin:
     @classmethod
     def delete(cls, db, pks):
         cols, vals = cls._parse_pks(pks)
-        gen_condition = lambda m: reduce(lambda acc, x: acc & x, [Q.condition(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
+        gen_condition = lambda m: reduce(lambda acc, x: acc & x, [Q.of(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
 
         return cls.delete_where(db, gen_condition)
 
     @classmethod
     def delete_where(cls, db, gen_condition, allow_all = False):
         m = db.helper.marker()
-        wc, wp = where(gen_condition(m))
+        wc, wp = _where(gen_condition, m)
         if wc == "" and not allow_all:
             raise ValueError("By default, delete_where does not allow empty condition.")
 
@@ -165,3 +165,7 @@ def _update(cls, db, values, qualifier):
     setters = [f"{n} = {qualifier.get(i, lambda x: x)(m())}" for i, n in enumerate(column_values[0])]
 
     return setters, column_values[1], m
+
+
+def _where(gen_condition, marker):
+    return where(gen_condition if isinstance(gen_condition, Q.C) else gen_condition(marker))

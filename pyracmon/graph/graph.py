@@ -264,7 +264,7 @@ class Node:
         self.entity = entity
         self.key = key
         self.parents = set()
-        self.children = {}
+        self.children = {c.name: Node.Children() for c in prop.children}
         self._view = None
 
     @property

@@ -4,6 +4,7 @@ from pyracmon.connection import connect, Connection
 from pyracmon.mixin import CRUDMixin, read_row
 from pyracmon.model import define_model
 from pyracmon.graph import new_graph, GraphSpec
+from pyracmon.query import Q
 
 
 __all__ = [
@@ -16,6 +17,7 @@ __all__ = [
     "add_identifier",
     "add_serializer",
     "new_graph",
+    "Q",
 ]
 
 
@@ -55,8 +57,15 @@ class GraphEntityMixin:
         else:
             return None
 
+    @classmethod
+    def is_null(cls, model):
+        return all([getattr(model, c.name, None) is None for c in cls.columns])
+
 def _identify(model):
     return type(model).identify(model)
+
+def _filter(model):
+    return not type(model).is_null(model)
 
 def _serialize(model):
     return dict([(c.name, v) for c, v in model])
@@ -65,6 +74,9 @@ def _serialize(model):
 globalSpec = GraphSpec(
     identifiers=[
         (GraphEntityMixin, _identify),
+    ],
+    entity_filters=[
+        (GraphEntityMixin, _filter),
     ],
     serializers=[
         (GraphEntityMixin, _serialize),
@@ -86,6 +98,10 @@ def add_identifier(t, identifier):
     Be sure to call this function before every definition of GraphTemplate.
     """
     globalSpec.add_identifier(t, identifier)
+
+
+def add_entity_filter(t, entity_filter):
+    globalSpec.add_entity_filter(t, entity_filter)
 
 
 def add_serializer(t, serializer):

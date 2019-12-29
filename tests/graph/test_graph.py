@@ -1,6 +1,7 @@
 import pytest
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.graph import *
+from pyracmon.graph.template import P
 
 spec = GraphSpec()
 
@@ -215,3 +216,23 @@ class TestGraph:
         assert [n() for n in graph.view.a[0].b] == [0, 1]
         assert [n() for n in graph.view.a[1].b] == [1]
         assert [n() for n in graph.view.a[2].b] == [2]
+
+
+class TestP:
+    def test_p(self):
+        t = spec.new_template(
+            a = P.of(),
+            b = P.of().identify(lambda x: x),
+            c = P.of().accept(lambda x: x % 2 == 0),
+        )
+        graph = Graph(t)
+
+        graph.append(a = 0, b = 1, c = 2)
+        graph.append(a = 0, b = 2, c = 3)
+        graph.append(a = 0, b = 2, c = 4)
+        graph.append(a = 0, b = 3, c = 5)
+        graph.append(a = 0, b = 1, c = 6)
+
+        assert [n() for n in graph.view.a] == [0, 0, 0, 0, 0]
+        assert [n() for n in graph.view.b] == [1, 2, 3]
+        assert [n() for n in graph.view.c] == [2, 4, 6]

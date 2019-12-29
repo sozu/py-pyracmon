@@ -2,7 +2,7 @@ import sys
 import psycopg2
 import pytest
 from tests import models as m
-from pyracmon import declare_models, graph_template, graph_dict, CRUDMixin, GraphEntityMixin, add_identifier, add_serializer
+from pyracmon import declare_models, graph_template, graph_dict, CRUDMixin, GraphEntityMixin, add_identifier, add_serializer, add_entity_filter
 from pyracmon.connection import connect
 from pyracmon.dialect import postgresql
 from pyracmon.model import define_model, Table, Column
@@ -86,8 +86,16 @@ def test_model_graph():
         m2 = m2(c1 = 3, c2 = 2),
     )
     graph.append(
+        m1 = m1(c1 = None, c2 = None),
+        m2 = m2(c1 = 3, c2 = 2),
+    )
+    graph.append(
         m1 = m1(c1 = 3, c2 = "c"),
         m2 = m2(c1 = 1, c2 = 3),
+    )
+    graph.append(
+        m1 = m1(c1 = 4, c2 = "d"),
+        m2 = m2(c1 = None, c2 = None),
     )
 
     assert graph_dict(
@@ -99,6 +107,7 @@ def test_model_graph():
             dict(c1 = 1, c2 = "a", m2 = [dict(c1 = 1, c2 = 1)]),
             dict(c1 = 2, c2 = "b", m2 = [dict(c1 = 2, c2 = 2), dict(c1 = 3, c2 = 2)]),
             dict(c1 = 3, c2 = "c", m2 = [dict(c1 = 1, c2 = 3)]),
+            dict(c1 = 4, c2 = "d", m2 = []),
         ]
     )
 
@@ -123,6 +132,30 @@ def test_add_identifier():
     v = graph.view.m1[0]()
     assert v.c1 == 1
     assert v.c2 == "a"
+
+
+def test_add_entity_filter():
+    t1 = Table("t1", [
+        Column("c1", int, None, True, False, None),
+        Column("c2", int, None, False, False, None),
+    ])
+
+    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
+
+    add_entity_filter(m1, lambda x: x.c1 >= 0)
+
+    t = graph_template(m1 = m1, v = int)
+    t.m1 << t.v
+    graph = Graph(t)
+
+    graph.append(m1 = m1(c1 = -1, c2 = "a"), v = 1)
+    graph.append(m1 = m1(c1 = 0, c2 = "b"), v = 2)
+    graph.append(m1 = m1(c1 = 1, c2 = "c"), v = 3)
+
+    assert [(n().c1, n().c2) for n in graph.view.m1] == [(0, "b"), (1, "c")]
+    assert [n() for n in graph.view.v] == [2, 3]
+    assert [n() for n in graph.view.m1[0].v] == [2]
+    assert [n() for n in graph.view.m1[1].v] == [3]
 
 
 def test_add_serializer():

@@ -64,7 +64,7 @@ class Q:
         return attr
 
     @classmethod
-    def condition(cls, clause, params):
+    def of(cls, clause, params):
         return Q.C(clause, params)
 
 
