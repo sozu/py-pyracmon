@@ -37,8 +37,10 @@ class NodeSerializer:
         else:
             return self.aggregator(values)
 
-    def serialization_of(self, value):
-        return (self.serializer or as_is)(value)
+    def serialization_of(self, finder, value):
+        base = finder(value)
+        return self.serializer(base or as_is, value) if self.serializer \
+            else base(value) if base else value
 
     @property
     def be_merged(self):
@@ -66,8 +68,7 @@ class NodeSerializer:
         return self
 
     def each(self, func):
-        base = self.serializer or (lambda x: x)
-        self.serializer = lambda v: func(base, v)
+        self.serializer = func
         return self
 
 
@@ -81,8 +82,9 @@ def _expand(v):
 
 
 class SerializationContext:
-    def __init__(self, serializers):
+    def __init__(self, serializers, serializer_finder):
         self.serializers = serializers
+        self.serializer_finder = serializer_finder
 
     def serialize_to(self, name, nodes, parent):
         """
@@ -99,7 +101,7 @@ class SerializationContext:
                 parent[s.name_of(name)] = value
 
     def _serialize_node(self, serializer, node):
-        value = serializer.serialization_of(node())
+        value = serializer.serialization_of(self.serializer_finder, node())
 
         if isinstance(value, dict):
             for n, c in node:

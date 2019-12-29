@@ -66,7 +66,7 @@ class TestSerialize:
     def test_serialize(self):
         assert spec.to_dict(
             self._graph(),
-            a = (None, None, lambda x:x*2),
+            a = (None, None, lambda s, x:x*2),
         ) == {"a": [2, 4, 6]}
 
     def test_ignore_child(self):
@@ -79,22 +79,22 @@ class TestSerialize:
     def test_include_child(self):
         assert spec.to_dict(
             self._graph(),
-            a = (None, None, lambda x: {"value": x}),
+            a = (None, None, lambda s, x: {"value": x}),
             b = (),
         ) == {"a": [{"value": 1, "b": [10, 11]}, {"value": 2, "b": [20, 21, 22]}, {"value": 3, "b": [30]}]}
 
     def test_merge_child(self):
         assert spec.to_dict(
             self._graph(),
-            a = (None, None, lambda x: {"value": x}),
-            b = (lambda x: f"b_{x}", head, lambda x: {"value": x, "value2": x*2}),
+            a = (None, None, lambda s, x: {"value": x}),
+            b = (lambda x: f"b_{x}", head, lambda s, x: {"value": x, "value2": x*2}),
         ) == {"a": [{"value": 1, "b_value": 10, "b_value2": 20}, {"value": 2, "b_value": 20, "b_value2": 40}, {"value": 3, "b_value": 30, "b_value2": 60}]}
 
     def test_multi_parents(self):
         assert spec.to_dict(
             self._graph(),
-            a = (None, None, lambda x: {"va": x}),
-            b = (None, None, lambda x: {"vb": x}),
+            a = (None, None, lambda s, x: {"va": x}),
+            b = (None, None, lambda s, x: {"vb": x}),
             c = (),
             d = (None, lambda x: ''.join(x)),
             e = ("__e__",),
