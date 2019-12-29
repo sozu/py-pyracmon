@@ -77,7 +77,6 @@ class GraphSpec:
         {str: object}
             A dictionary representing the graph.
         """
-        noop = lambda x: x
         def serialize(x):
             f = self.get_serializer(x)
             return f(x) if f else x
@@ -88,7 +87,7 @@ class GraphSpec:
                     s.serializer = serialize
                 return s
             else:
-                settings = [(p[0] or p[1]) for p in zip_longest(s, (None, noop, serialize), fillvalue=None)]
+                settings = [(p[0] or p[1]) for p in zip_longest(s, (None, None, serialize), fillvalue=None)]
                 return S.of(*settings)
 
         context = SerializationContext(dict([(n, to_serializer(s)) for n, s in serializers.items()]))

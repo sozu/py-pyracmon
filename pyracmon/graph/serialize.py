@@ -7,7 +7,7 @@ def head(vs):
 
 class S:
     @classmethod
-    def of(cls, namer=None, aggregator=as_is, serializer=None):
+    def of(cls, namer=None, aggregator=None, serializer=None):
         if namer and not isinstance(namer, str) and not callable(namer):
             raise ValueError(f"Naming element must be a string or callable object but {type(namer)} is given.")
         if aggregator and not isinstance(aggregator, int) and not callable(aggregator):
@@ -30,7 +30,9 @@ class NodeSerializer:
                 self.namer(name)
 
     def aggregation_of(self, values):
-        if isinstance(self.aggregator, int):
+        if self.aggregator is None:
+            return values
+        elif isinstance(self.aggregator, int):
             return values[self.aggregator] if len(values) > self.aggregator else None
         else:
             return self.aggregator(values)
