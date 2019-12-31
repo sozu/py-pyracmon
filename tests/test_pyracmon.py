@@ -134,6 +134,23 @@ def test_add_identifier():
     assert v.c2 == "a"
 
 
+def test_no_pk():
+    t1 = Table("t1", [
+        Column("c1", int, None, False, False, None),
+        Column("c2", int, None, False, False, None),
+    ])
+
+    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
+
+    t = graph_template(m1 = m1)
+    graph = Graph(t)
+
+    graph.append(m1 = m1(c1 = 1, c2 = "a"))
+    graph.append(m1 = m1(c1 = 1, c2 = "a"))
+
+    assert len(graph.view.m1) == 2
+
+
 def test_add_entity_filter():
     t1 = Table("t1", [
         Column("c1", int, None, True, False, None),

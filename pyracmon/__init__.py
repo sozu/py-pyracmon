@@ -52,7 +52,7 @@ class GraphEntityMixin:
     @classmethod
     def identify(cls, model):
         pks = [c.name for c in cls.columns if c.pk]
-        if all([hasattr(model, n) for n in pks]):
+        if len(pks) > 0 and all([hasattr(model, n) for n in pks]):
             return tuple(map(lambda n: getattr(model, n), pks))
         else:
             return None
