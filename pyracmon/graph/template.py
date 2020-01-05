@@ -1,4 +1,18 @@
 class GraphTemplate:
+    """
+    This class specifies the structure of a graph.
+
+    Use `GraphSpec.new_template()` to construct the instance of this class.
+
+    Each instance is composed of template properties each of which corresponds to a node container of a graph.
+    Applying shift operator to properties creates the parent-child relationship between them and it corresponds to an edge of a graph.
+
+    For example, next code creates a template composed of 4 properties in which `d` is a child of `c`, and `b` and `c` are children of `a`.
+
+    >>> template = spec.new_template(a = int, b = str, c = int, d = float)
+    >>> template.a << [template.b, template.c]
+    >>> template.c << template.d
+    """
     class Property:
         def __init__(self, template, name, kind, identifier, entity_filter):
             self.template = template
@@ -47,7 +61,7 @@ class GraphTemplate:
 
             Returns
             -------
-            [Graph.Property] / Graph.Property
+            [Graph.Property] | Graph.Property
                 Child properties given in the argument.
             """
             children = [children] if isinstance(children, GraphTemplate.Property) else children
@@ -80,8 +94,8 @@ class GraphTemplate:
 
         Parameters
         ----------
-        definitions: [(str, type, (T) -> object, (T) -> bool)]
-            Property definitions.
+        definitions: [(str, type, T -> ID, T -> bool)]
+            Definitions of template properties.
         """
         self._properties = [GraphTemplate.Property(self, n, kind, ident, ef) for n, kind, ident, ef in definitions]
         self._relations = []

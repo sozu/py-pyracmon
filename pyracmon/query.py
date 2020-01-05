@@ -2,8 +2,8 @@ class Q:
     """
     The instance of this class holds parameters to build query conditions.
 
-    Each parameter passed by the constructor with its name behaves as a method
-    which takes a condition clause including parameter holders which will accept the parameter in query execution.
+    Each parameter passed by the constructor becomes an instance method of created instance,
+    which takes a condition clause including placeholders which will accept the parameter in query execution.
 
     > >>> q = Q(a = 1)
     > >>> q.a("a = %s")
@@ -14,7 +14,7 @@ class Q:
     > >>> q.b("b = %s")
     > Condition: '' -- ()
 
-    Those features simplifies a query construction in case each parameter may be absent.
+    Those features simplifies a query construction in case some parameters can be absent.
     A function taking Q instance and constructing a query by using it enables caller to control conditions at runtime.
 
     > def search(db, q):
@@ -26,6 +26,15 @@ class Q:
     > search(Q())             # SELECT * FROM table
     """
     class C:
+        """
+        This class represents a condition, which can be composed of many conditions.
+
+        Some bitwise operators are applicable to create another condition by logical operator.
+
+        - & concatenates two conditions by AND.
+        - | concatenates two conditions by OR.
+        - ~ creates inverted condition by NOT.
+        """
         def __init__(self, clause, params):
             self.clause = clause
             self.params = params if isinstance(params, tuple) \
@@ -65,12 +74,27 @@ class Q:
 
     @classmethod
     def of(cls, clause, params):
+        """
+        Utility method to create condition object directly from where clause and the parameters.
+
+        Parameters
+        ----------
+        clause: str
+            Where clause.
+        params: [object]
+            Parameters used in the condition.
+
+        Returns
+        -------
+        Q.C
+            Created condition.
+        """
         return Q.C(clause, params)
 
 
 def where(condition):
     """
-    Generates a condition clause representing given condition.
+    Generates a where clause representing given condition.
 
     Parameters
     ----------
@@ -80,7 +104,7 @@ def where(condition):
     Returns
     -------
     str
-        A condition clause starting from `WHERE` or empty string if the condition is empty.
+        A where clause starting from `WHERE` or empty string if the condition is empty.
     """
     return ('', []) if condition.clause == '' else (f'WHERE {condition.clause}', list(condition.params))
 
@@ -92,7 +116,7 @@ def order_by(columns):
     Parameters
     ----------
     columns: { str: bool }
-        An ordered dictionary mapping column name to its direction.
+        An ordered dictionary mapping column name to its direction, where `True` denotes `ASC` and `False` denotes `DESC`.
     """
     def col(cd):
         return f"{cd[0]} ASC" if cd[1] else f"{cd[0]} DESC"
@@ -112,17 +136,39 @@ def ranged_by(marker, limit = None, offset = None):
 
 class QueryHelper:
     """
-    This class provides methods helping query construction available for any kind of DB-API 2.0 module.
+    This class provides methods helping query construction.
+
+    The instance can be obtained via `helper` attribute in `pyracmon.connection.Connection`.
     """
     def __init__(self, api):
         self.api = api
 
     def marker(self):
+        """
+        Create new marker.
+
+        Returns
+        -------
+        Marker
+            Created marker.
+        """
         return _marker_of(self.api.paramstyle)
 
     def holders(self, keys, qualifier = None, start = 0, marker = None):
         """
-        Generates partial query string containing place holder markers.
+        Generates partial query string containing place holder markers with comma.
+
+        >>> # when db.api.paramstyle == "format"
+        >>> db.helper.holders(5)
+        '%s, %s, %s, %s, %s'
+
+        >>> # when db.api.paramstyle == "numeric"
+        >>> db.helper.holders(5, start=3)
+        ':3, :4, :5, :6, :7'
+
+        >>> # when db.api.paramstyle == "named"
+        >>> db.helper.holders(['a', 'b', 'c', 'd', 'e'])
+        ':a, :b, :c, :d, :e'
 
         Parameters
         ----------
@@ -132,6 +178,8 @@ class QueryHelper:
             Functions for each index converting the marker into another expression.
         start: int
             First index to calculate integral marker parameter.
+        marker: Marker
+            A marker object used in this method. If `None`, new marker instance is created and used.
 
         Returns
         -------
@@ -148,6 +196,10 @@ class QueryHelper:
         """
         Generates partial query string corresponding `VALUES` clause in insertion query.
 
+        >>> # when db.api.paramstyle == "format"
+        >>> db.helper.values(5, 3)
+        '(%s, %s, %s, %s, %s), (%s, %s, %s, %s, %s), (%s, %s, %s, %s, %s)'
+
         Parameters
         ----------
         keys: int / [str]
@@ -158,6 +210,8 @@ class QueryHelper:
             Functions for each index converting the marker into another expression.
         start: int
             First index to calculate integral marker parameter.
+        marker: Marker
+            A marker object used in this method. If `None`, new marker instance is created and used.
 
         Returns
         -------
@@ -170,8 +224,23 @@ class QueryHelper:
 
 
 class Marker:
+    """
+    This class provides the abstration mechanism for marker creation used to embed parameters in a query.
+
+    The instance is obtained by invoking `db.helper.marker()`.
+    In many cases, it's enough to get string representation of the instance, because the marker manges it state by its own.
+
+    >>> m = db.helper.marker()
+    >>> # when db.api.paramstyle == "format"
+    >>> f"SELECT * FROM table1 WHERE col11 = {m()} AND col2 = {m()}"
+    'SELECT * FROM table1 WHERE col11 = %s AND col2 = %s'
+    """
     def reset(self):
+        """
+        Reset the internal state.
+        """
         pass
+
     def params(self, ps):
         if isinstance(ps, (list, tuple)):
             return list(ps)

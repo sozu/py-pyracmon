@@ -2,10 +2,30 @@ from pyracmon.query import QueryHelper
 
 
 def connect(api, *args, **kwargs):
+    """
+    Connect to DB by passing arguments to DB-API 2.0 module.
+
+    Every optional argument is passed to `api.connect()` and returns the `Connection` object which wraps obtained DB connection.
+
+    Parameters
+    ----------
+    api: module
+        DB-API 2.0 module which should export `connect()` function.
+
+    Returns
+    -------
+    Connection
+        Wrapper of DB-API 2.0 connection.
+    """
     return Connection(api, api.connect(*args, **kwargs))
 
 
 class Connection:
+    """
+    Wrapper class of DB-API 2.0 Connection.
+
+    Every instance works as the proxy object to original connection, therefore any attribute in it is still available.
+    """
     def __init__(self, api, conn):
         self.api = api
         self.conn = conn

@@ -84,25 +84,82 @@ globalSpec = GraphSpec(
 )
 
 def graph_template(**definitions):
+    """
+    Create a graph template on the default specification predefined to handle model object in appropriate ways.
+
+    Parameters
+    ----------
+    definitions: {str: (type, T -> ID, T -> bool) | type | None}
+        Definitions of template properties. See `GraphSpec.new_template` for the detail.
+
+    Returns
+    -------
+    GraphTemplate
+        Created graph template.
+    """
     return globalSpec.new_template(**definitions)
 
 
-def graph_dict(__graph__, **serializers):
-    return globalSpec.to_dict(__graph__, **serializers)
+def graph_dict(graph, **serializers):
+    """
+    Generates a dictionary representing structured values of a graph on the default specification predefined to handle model object in appropriate ways.
+
+    Parameters
+    ----------
+    graph: Graph.View
+        A view of the graph.
+    serializers: {str: NodeSerializer | (str | str -> str, [T] -> T | int, T -> U)}
+        Mapping from property name to `NodeSerializer`s or their equivalents.
+
+    Returns
+    -------
+    {str: object}
+        A dictionary representing the graph.
+    """
+    return globalSpec.to_dict(graph, **serializers)
 
 
 def add_identifier(t, identifier):
     """
-    Add an identifier for a type. The later added identifier has the higher priority.
+    Register a function which extracts identifying key value from the entity to the default specification.
 
-    Be sure to call this function before every definition of GraphTemplate.
+    Be sure to call this function before every invocation of `graph_template()`.
+
+    Parameters
+    ----------
+    c: type
+        Super type of the entity to apply the function.
+    identifier: T -> ID
+        A function which extracts identifying key value from the entity.
     """
     globalSpec.add_identifier(t, identifier)
 
 
 def add_entity_filter(t, entity_filter):
+    """
+    Register a function which determines whether to append the entity into the graph to the default specification.
+
+    Be sure to call this function before every invocation of `graph_template()`.
+
+    Parameters
+    ----------
+    c: type
+        Super type of the entity to apply the function.
+    entity_filter: T -> bool
+        A function which determines whether to append the entity into the graph.
+    """
     globalSpec.add_entity_filter(t, entity_filter)
 
 
 def add_serializer(t, serializer):
+    """
+    Register a function which converts the entity into a serializable value to the default specification.
+
+    Parameters
+    ----------
+    c: type
+        Super type of the entity to apply the function.
+    serializer: T -> U
+        A function which converts the entity into a serializable value.
+    """
     globalSpec.add_serializer(t, serializer)

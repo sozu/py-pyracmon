@@ -4,24 +4,62 @@ from functools import reduce
 
 
 def new_graph(template):
+    """
+    Create a graph from a template.
+
+    Use this function instead of invoking constructor directly.
+
+    Parameters
+    ----------
+    template: GraphTemplate
+        A template of a graph.
+
+    Returns
+    -------
+    Graph
+        Created graph.
+    """
     return Graph(template)
 
 
 class Graph:
-    def __init__(self, template):
-        """
-        Creates a graph by the template.
+    """
+    The instance of this class contains nodes according to the structure defined by the template.
 
-        Parameters
-        ----------
-        template: GraphTemplate
-            The template of this graph.
-        """
+    All entities are appended via `append()` and this method does many things to construct relationships between nodes.
+
+    - Applies entity filters if any and discards ones which does not fulfill the condition.
+    - Searches the identical entity from existing nodes, then, if exists, drops new entity and takes the found one for edge creation.
+    - Identification is not only by the entity value but the identicalness of the parent entity in accordance `IdentifyPolicy`.
+    - Creates edges between selected nodes according to the relationships of template properties.
+
+    By default, the identification policy is simple, which consider entities are identical only when:
+
+    - Identifier for the template property is found.
+    - Values returned by the identitier are equal.
+    - They have the same parent nodes.
+    """
+    def __init__(self, template):
         self.containers = OrderedDict([(p.name, NodeContainer(p)) for p in template._properties])
         self._view = None
 
     @property
     def view(self):
+        """
+        Returns an unmodifiable view of this graph.
+
+        Returning object provides intuitive ways to access graph components:
+
+        - Attribute access by the property name returns the view of corresponding node container.
+        - Iteration access iterates over views of root containers, that is, containers whose properties have no parent.
+
+        See the documentation of `view` property of `NodeContainer`, `Node`, `Node.Children` for further information.
+
+        Returns
+        -------
+        GraphView
+            The view of this graph.
+        """
         if not self._view:
             graph = self
             class GraphView:
@@ -36,11 +74,11 @@ class Graph:
 
     def append(self, **entities):
         """
-        Append entity values with those associated properties.
+        Append entity values with associated property names.
 
         Parameters
         ----------
-        entities: *{str: object}
+        entities: {str: object}
             Dictionary where the key indicates the property name and the value is the entity value.
         """
         props = sorted([self.containers[k].property for k in entities.keys()], reverse=True)
@@ -68,10 +106,12 @@ class IdentifyPolicy:
 
     def identify(self, prop, entity, candidates, new_nodes):
         """
+        Find identical nodes for the new entity according to the policy.
+
         Parameters
         ----------
-        prop: Property
-            Property for the container.
+        prop: GraphTemplate.Property
+            Template property for the container.
         entity: object
             A value to append into the container.
         candidates: object -> [Node]
@@ -150,6 +190,9 @@ class IdentifyPolicy:
 
 
 class NodeContainer:
+    """
+    This class represents a list of nodes for a template property.
+    """
     def __init__(self, prop):
         self.nodes = []
         self.keys = {}
@@ -162,6 +205,22 @@ class NodeContainer:
 
     @property
     def view(self):
+        """
+        Returns an unmodifiable view of this container.
+
+        Returning object provides intuitive ways to access internal nodes:
+
+        - Direct invocation returns the `NodeContainer` instance.
+        - Iteration access iterates over internal node views.
+        - Index access and `len()` works as if it is a list of node views.
+
+        See the documentation of `view` property of `Node`, `Node.Children` for further information.
+
+        Returns
+        -------
+        ContainerView
+            The view of this graph.
+        """
         if not self._view:
             container = self
             class ContainerView:
@@ -182,7 +241,7 @@ class NodeContainer:
 
     def append(self, entity, new_nodes = {}):
         """
-        Add an entity to nodes if the identifying key does not exists yet.
+        Add an entity to nodes if the identical node does not exists yet.
 
         Parameters
         ----------
@@ -228,6 +287,9 @@ class NodeContainer:
 
 
 class Node:
+    """
+    This class represents a node which contains an entity value.
+    """
     class Children:
         def __init__(self):
             self.nodes = []
@@ -273,6 +335,20 @@ class Node:
 
     @property
     def view(self):
+        """
+        Returns an unmodifiable view of this node.
+
+        Returning object provides intuitive ways to access entity and child nodes:
+
+        - Direct invocation returns the entity value.
+        - Iteration access iterates over views of child nodes.
+        - Attribute access by the property name returns the view of corresponding child node.
+
+        Returns
+        -------
+        NodeView
+            The view of this node.
+        """
         if not self._view:
             node = self
             class NodeView:
