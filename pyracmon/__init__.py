@@ -52,7 +52,7 @@ class GraphEntityMixin:
     @classmethod
     def identify(cls, model):
         pks = [c.name for c in cls.columns if c.pk]
-        if len(pks) > 0 and all([hasattr(model, n) for n in pks]):
+        if len(pks) > 0 and all([hasattr(model, n) and getattr(model, n) is not None for n in pks]):
             return tuple(map(lambda n: getattr(model, n), pks))
         else:
             return None
@@ -65,7 +65,7 @@ def _identify(model):
     return type(model).identify(model)
 
 def _filter(model):
-    return not type(model).is_null(model)
+    return model and not type(model).is_null(model)
 
 def _serialize(model):
     return dict([(c.name, v) for c, v in model])

@@ -1,7 +1,7 @@
 import pytest
 from pyracmon.connection import Connection
 from pyracmon.model import *
-from pyracmon.mixin import CRUDMixin, read_row
+from pyracmon.mixin import CRUDMixin, read_row, RowValues
 from pyracmon.query import Q
 from tests.db_api import PseudoAPI, PseudoConnection
 
@@ -362,3 +362,79 @@ class TestQueryString:
 
         assert db.query_list[0] == "DELETE FROM t1 "
         assert list(db.params_list[0]) == []
+
+
+class TestRowValues:
+    def test_attributes(self):
+        m1 = define_model(table1, [CRUDMixin])
+        m2 = define_model(table2, [CRUDMixin])
+
+        a1 = m1.select("a1", ["c1", "c2"])
+        a2 = m2.select("a2", ["c1", "c2", "c3"])
+
+        rv = RowValues([a1, a2, (), "a3", (), "a4"])
+        rv.append(m1(c1 = 1))
+        rv.append(m2(c1 = 2))
+        for i in range(0, 4):
+            rv.append(i+3)
+
+        assert isinstance(rv.a1, m1)
+        assert rv.a1.c1 == 1
+        assert isinstance(rv.a2, m2)
+        assert rv.a2.c1 == 2
+        assert [rv[i] for i in range(2, 6)] == [3, 4, 5, 6]
+        assert rv.a3 == 4
+        assert rv.a4 == 6
+
+    def test_reading_result(self):
+        m1 = define_model(table1, [CRUDMixin])
+        m2 = define_model(table2, [CRUDMixin])
+
+        exps = m1.select("a1", ["c1", "c2"]), m2.select("a2", ["c1", "c2", "c3"])
+
+        row = [1, "c2", 2, "c3", "c4", 3, 4, 5, 6]
+        rv = read_row(row, *exps, (), "a3", (), "a4")
+
+        assert isinstance(rv.a1, m1)
+        assert (rv.a1.c1, rv.a1.c2) == (1, "c2")
+        assert isinstance(rv.a2, m2)
+        assert (rv.a2.c1, rv.a2.c2, rv.a2.c3) == (2, "c3", "c4")
+        assert [rv[i] for i in range(2, 6)] == [3, 4, 5, 6]
+        assert rv.a3 == 4
+        assert rv.a4 == 6
+
+
+class TestExpressions:
+    def test_create_expand(self):
+        m1 = define_model(table1, [CRUDMixin])
+
+        a1 = m1.select("a1")
+        a2 = m1.select("a2")
+        a3 = m1.select()
+
+        exp = a1 + a2 + a3
+
+        assert exp.a1 == a1
+        assert exp.a2 == a2
+        assert exp.t1 == a3
+
+        def f(*args):
+            return list(args)
+        assert f(*exp) == [a1, a2, a3]
+
+    def test_reading_result(self):
+        m1 = define_model(table1, [CRUDMixin])
+        m2 = define_model(table2, [CRUDMixin])
+
+        exp = m1.select("a1", ["c1", "c2"]) + m2.select("a2", ["c1", "c2", "c3"])
+
+        row = [1, "c2", 2, "c3", "c4", 3, 4, 5, 6]
+        rv = read_row(row, *exp, (), "a3", (), "a4")
+
+        assert isinstance(rv.a1, m1)
+        assert (rv.a1.c1, rv.a1.c2) == (1, "c2")
+        assert isinstance(rv.a2, m2)
+        assert (rv.a2.c1, rv.a2.c2, rv.a2.c3) == (2, "c3", "c4")
+        assert [rv[i] for i in range(2, 6)] == [3, 4, 5, 6]
+        assert rv.a3 == 4
+        assert rv.a4 == 6

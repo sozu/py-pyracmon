@@ -69,10 +69,11 @@ def fetch_blogs():
 
     # Execute query to fetch blogs with their categories and total number of posts
     # In this query, blog and category are joined and the total number of posts are counted for each blog.
-    b_, bc_ = blog.select("b"), blog_category.select("c")
+    exp = blog.select("b") + blog_category.select("c")
+
     c.execute(f"""\
         SELECT
-            {b_}, {bc_}, bp.posts
+            {exp.b}, {exp.c}, bp.posts
         FROM
             (
                 SELECT
@@ -88,20 +89,21 @@ def fetch_blogs():
             INNER JOIN blog_category AS c ON b.id = c.blog_id
         """, [10, 0])
     for row in c.fetchall():
-        b, bc, ps = read_row(row, b_, bc_, ())
+        r = read_row(row, *exp, "posts")
         graph.append(
-            blogs = b,
-            categories = bc,
-            total_posts = ps,
+            blogs = r.b,
+            categories = r.c,
+            total_posts = r.posts,
         )
 
     # Execute query to fetch recent posts and their images from selected blogs above.
     # In this query, blog, post and image are joined and total number of comments are counted for each post.
     blog_ids = [b().id for b in graph.view.blogs]
-    p_, i_ = post.select("p"), image.select("i")
+    exp = post.select("p") + image.select("i")
+
     c.execute(f"""\
         SELECT
-            {p_}, {i_}, q.comments
+            {exp.p}, {exp.i}, q.comments
         FROM
             (
                 SELECT
@@ -124,25 +126,27 @@ def fetch_blogs():
             INNER JOIN image AS i ON q.id = i.post_id
         """, blog_ids)
     for row in c.fetchall():
-        p, i, cs = read_row(row, p_, i_, ())
+        r = read_row(row, *exp, "comments")
         graph.append(
-            blogs = blog(id = p.blog_id),
-            recent_posts = p,
-            images = i,
-            total_comments = cs,
+            blogs = blog(id = r.p.blog_id),
+            recent_posts = r.p,
+            images = r.i,
+            total_comments = r.comments,
         )
 
-    # Execute query to fetch most liked comment for recent posts respectively.
+    # Execute query to fetch recent comments and most liked comment for recent posts respectively.
     # In this query, post and post_comments are joined.
     post_ids = [p().id for p in graph.view.recent_posts]
     pc_ = post_comment.select("pc")
     c.execute(f"""\
         SELECT
-            {pc_}
+            {pc_}, q.liked = 1, q.recent <= 3
         FROM
             (
                 SELECT
-                    id, RANK() OVER (PARTITION BY post_id ORDER BY likes DESC) AS rank
+                    id,
+                    RANK() OVER (PARTITION BY post_id ORDER BY likes DESC) AS liked,
+                    RANK() OVER (PARTITION BY post_id ORDER BY id DESC) AS recent
                 FROM
                     post_comment
                 WHERE
@@ -150,13 +154,14 @@ def fetch_blogs():
             ) AS q
             INNER JOIN post_comment AS pc ON q.id = pc.id
         WHERE
-            q.rank = 1
+            q.liked = 1 OR q.recent <= 3
         """, post_ids)
     for row in c.fetchall():
-        pc = read_row(row, pc_)[0]
+        r = read_row(row, pc_, "liked", "recent")
         graph.append(
-            recent_posts = post(id = pc.post_id),
-            most_liked_comment = pc,
+            recent_posts = post(id = r.pc.post_id),
+            most_liked_comment = r.pc if r.liked else None,
+            recent_comments = r.pc if r.recent else None,
         )
 
     # Count total number of blogs.

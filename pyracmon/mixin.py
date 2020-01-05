@@ -23,7 +23,9 @@ class Selection:
 
     >>> c.execute(f"SELECT {s1}, {s2} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
     >>> for row in c.fetchall():
-    >>>     t1, t2 = read_row(row, s1, s2)
+    >>>     r = read_row(row, s1, s2)
+    >>>     assert isinstance(r.t1, table1)
+    >>>     assert isinstance(r.t2, table2)
     """
     def __init__(self, table, alias, columns):
         self.table = table
@@ -41,8 +43,50 @@ class Selection:
         a = f"{self.alias}." if self.alias else ""
         return ', '.join([f"{a}{c.name}" for c in self.columns])
 
+    def __add__(self, other):
+        return Expressions() + self + other
+
     def consume(self, values):
         return self.table(**dict([(c.name, v) for c, v in zip(self.columns, values)]))
+
+
+class Expressions:
+    """
+    The instance of this class works as the composition of `Selection`s which provides attributes to access each `Selection`.
+
+    The main purpose of this class is avoiding a flood of occurrence of `Selection` variables. 
+    Just applying + operator to them creates an instance of `Expressions`, by which all `Selection` are available via attributes of their names.
+
+    >>> exp = table1.select("t1", includes = ["col11", "col12"]) + table2.select("t2")
+    >>> c.execute(f"SELECT {exp.t1}, {exp.t2} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
+    >>> for row in c.fetchall():
+    >>>     r = read_row(row, *exp)
+    >>>     assert isinstance(r.t1, table1)
+    >>>     assert isinstance(r.t2, table2)
+    """
+    def __init__(self):
+        self.__selections = []
+
+    def __add__(self, other):
+        if isinstance(other, Selection):
+            self.__selections.append(other)
+        elif isinstance(other, Expressions):
+            self.__selections += other.__selections
+        else:
+            raise ValueError(f"Operand of + for Expressions must be a Selection or Expressions but {type(other)} is given.")
+        return self
+
+    def __iadd__(self, selection):
+        if not isinstance(selection, Selection):
+            raise ValueError(f"Operand of += for Expressions must be a Selection or Expressions object but {type(selection)} is given.")
+        self.__selections.append(selection)
+        return self
+
+    def __getattr__(self, key):
+        return next(filter(lambda s: s.name == key, self.__selections))
+
+    def __iter__(self):
+        return iter(self.__selections)
 
 
 class RowValues:
