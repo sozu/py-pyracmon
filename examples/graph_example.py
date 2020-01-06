@@ -172,14 +172,19 @@ def fetch_blogs():
     # Return view of the graph.
     return graph.view
 
+def add_thumbnail(s, v):
+    r = s(v)
+    r['thumbnail'] = f"{r['url']}/thumbnail"
+    return r
+
 result = graph_dict(
     fetch_blogs(),
     blogs = (),
-    recent_posts = (),
+    recent_posts = ("posts",),
     total_posts = (None, head),
     categories = (),
-    images = (),
-    recent_comments = (),
+    images = (None, None, add_thumbnail),
+    recent_comments = ("comments",),
     most_liked_comment = (None, head),
     total_comments = (None, head),
     total = (None, head),

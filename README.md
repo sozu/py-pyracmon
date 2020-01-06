@@ -193,7 +193,7 @@ Each invocation of marker object `m` returns a string correponding to parameter,
 
 This is the basic code flow of select operation. See API documentation for further information.
 
-### Crete relational graph
+### Create relational graph
 
 Unfortunately, actual applications require not only records but also additional informations such as:
 
@@ -215,7 +215,7 @@ Suppose you need a structured list of blogs like below.
         {
             "id": 1,
             "title": "Blog title",
-            "recent_posts": [
+            "posts": [
                 {
                     "id": 1,
                     "title": "Post title",
@@ -226,7 +226,7 @@ Suppose you need a structured list of blogs like below.
                         },
                         ...
                     ],
-                    "recent_comments": [
+                    "comments": [
                         {
                             "id": 1,
                             "content": "The content of post comment",
@@ -258,7 +258,9 @@ Suppose you need a structured list of blogs like below.
 
 In addition, `Graph` is designed to accept querying results in straight-forward manner to keep codes simple.
 
-Next code is the example to construct above structured list by using `Graph`.
+Next code is the example to construct similar to above structured list by using `Graph`.
+
+> For the convenience of next chapter, some keys are different from above.
 
 ```
 from pyracmon import graph_template, new_graph
@@ -348,23 +350,36 @@ This example returns `view` attribute of the graph. This is the unmodifiable exp
 
 ### Serialize graph
 
-The another feature of `Graph` is the serialization mechanism. For example in typical HTTP applications, obtained values should be serialized in json strings. For that purpose, this library provides the functionality to convert `Graph` into a `dict`.
+The another feature of `Graph` is the serialization mechanism. For example in typical HTTP applications, obtained values should be serialized in json strings. For that purpose, this library provides the mechanism to convert `Graph` into a hierarchical `dict`. It enables you to separate codes of data handling and response rendering.
 
-`graph_dict()` is the function to do the conversion. It takes a view of graph and optional keyword arguments where each key denotes the node and the value is `NodeSerializer` object or its equivalent `tuple`.
+`graph_dict()` is the function to do the conversion. It takes a view of graph and optional keyword arguments where each key denotes a property name and the value is `NodeSerializer` object or its equivalent `tuple`.
 
 ```
+def add_thumbnail(s, v):
+    r = s(v)
+    r['thumbnail'] = f"{r['url']}/thumbnail"
+    return r
+
 result = graph_dict(
     fetch_blogs(),
     blogs = (),
-    recent_posts = (),
+    recent_posts = ("posts",),
     total_posts = (None, head),
     categories = (),
-    images = (),
-    recent_comments = (),
+    images = (None, None, add_thumbnail),
+    recent_comments = ("comments",),
     most_liked_comment = (None, head),
     total_comments = (None, head),
     total = (None, head),
 )
 ```
 
-TODO
+Basically, each `tuple` is composed of at most 3 items all of which can be omitted.
+
+- (name) Key string used in returned `dict` for the property. By default, the property name is used.
+- (aggregator) Aggregation function to select a node from nodes of the property. By default, each value in returned `dict` is a list despite of the number of nodes.
+- (serializer) Function converting a node entity to a serializable value. By default, default serializer for the entity type is applied if exists, otherwise the entity is used as it is.
+
+Applying order of those items are vise-versa. Node entity in each node is converted to a serializable value, a value or values are selected from converted values, and selected values are stored in dictionary with given name.
+
+Although there remains various options and rules, this is the fundamental mechanism of graph serialization. With one more knowledge that `head` is a function which returns the first value in a `list` or `None` if empty, you would know the structure of returned dictionary.
