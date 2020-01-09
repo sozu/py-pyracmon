@@ -5,25 +5,25 @@ class Q:
     Each parameter passed by the constructor becomes an instance method of created instance,
     which takes a condition clause including placeholders which will accept the parameter in query execution.
 
-    > >>> q = Q(a = 1)
-    > >>> q.a("a = %s")
-    > Condition: 'a = %s' -- (1,)
+    >>> q = Q(a = 1)
+    >>> q.a("a = %s")
+    Condition: 'a = %s' -- (1,)
 
     Method whose name is not passed by the constructor returns empty condition which has no effect on the query.
 
-    > >>> q.b("b = %s")
-    > Condition: '' -- ()
+    >>> q.b("b = %s")
+    Condition: '' -- ()
 
     Those features simplifies a query construction in case some parameters can be absent.
     A function taking Q instance and constructing a query by using it enables caller to control conditions at runtime.
 
-    > def search(db, q):
-    >     w, params = where(q.a("a = %s") & q.b("b = %s"))
-    >     db.cursor().execute(f"SELECT * FROM table {w}", params)
-    >
-    > search(Q(a = 1))        # SELECT * FROM table WHERE a = 1
-    > search(Q(a = 1, b = 2)) # SELECT * FROM table WHERE a = 1 AND b = 2
-    > search(Q())             # SELECT * FROM table
+    >>> def search(db, q):
+    >>>     w, params = where(q.a("a = %s") & q.b("b = %s"))
+    >>>     db.cursor().execute(f"SELECT * FROM table {w}", params)
+    >>> 
+    >>> search(Q(a = 1))        # SELECT * FROM table WHERE a = 1
+    >>> search(Q(a = 1, b = 2)) # SELECT * FROM table WHERE a = 1 AND b = 2
+    >>> search(Q())             # SELECT * FROM table
     """
     class C:
         """
@@ -31,9 +31,9 @@ class Q:
 
         Some bitwise operators are applicable to create another condition by logical operator.
 
-        - & concatenates two conditions by AND.
-        - | concatenates two conditions by OR.
-        - ~ creates inverted condition by NOT.
+        - `&` concatenates two conditions by AND.
+        - `|` concatenates two conditions by OR.
+        - `~` creates inverted condition by NOT.
         """
         def __init__(self, clause, params):
             self.clause = clause
@@ -46,6 +46,23 @@ class Q:
 
         @classmethod
         def concat(cls, c1, c2, op):
+            """
+            Concatenate two conditions with an operator.
+
+            Parameters
+            ----------
+            c1: Q.C
+                First condition,
+            c2: Q.C
+                Second condition,
+            c3: str
+                An operator.
+
+            Returns
+            -------
+            Q.C
+                Concatenated condition.
+            """
             if c1.clause and c2.clause:
                 return cls('({}) {} ({})'.format(c1.clause, op, c2.clause), c1.params + c2.params)
             elif c1.clause:

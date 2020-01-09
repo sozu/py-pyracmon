@@ -109,7 +109,7 @@ def graph_dict(graph, **serializers):
     graph: Graph.View
         A view of the graph.
     serializers: {str: NodeSerializer | (str | str -> str, [T] -> T | int, T -> U)}
-        Mapping from property name to `NodeSerializer`s or their equivalents.
+        Mapping from property name to `NodeSerializer` s or their equivalents.
 
     Returns
     -------

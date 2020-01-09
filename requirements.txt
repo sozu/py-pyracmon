@@ -1,3 +1,5 @@
 pytest
 psycopg2-binary
 PyMySQL
+sphinx
+numpydoc

@@ -25,6 +25,8 @@ On the other hand, this library does NOT support following features which are co
 
 ## Grance of functionalities
 
+Full API documentation is available on <https://sozu.github.io/pyracmon-doc/>.
+
 ### Assumption
 
 Suppose, you have a database including tables as follows (written in PostgreSQL syntax).
