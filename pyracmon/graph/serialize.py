@@ -86,8 +86,15 @@ class NodeSerializer:
 
     def _serialization_of(self, finder, value):
         base = finder(value)
-        return self.serializer(base or as_is, value) if self.serializer \
-            else base(as_is, value) if base else value
+        if self.serializer:
+            if base:
+                return self.serializer(lambda v: base(as_is, v), value)
+            else:
+                return self.serializer(as_is, value)
+        elif base:
+            return base(as_is, value)
+        else:
+            return value
 
     @property
     def be_merged(self):
@@ -195,7 +202,14 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        self.serializer = func
+        if not self.serializer:
+            self.serializer = func
+        else:
+            old = self.serializer
+            def then(s, v):
+                return func(lambda v: old(s, v), v)
+            setattr(old, '__annotations__', getattr(func, '__annotations__', None))
+            self.serializer = then
         return self
 
 
