@@ -188,7 +188,7 @@ def test_add_serializer():
 
     graph.append(m1 = m1(c1 = 1, c2 = "a"))
 
-    add_serializer(m1, lambda x: dict(c1 = x.c1 * 2, c2 = f"__{x.c2}__"))
+    add_serializer(m1, lambda s, x: dict(c1 = x.c1 * 2, c2 = f"__{x.c2}__"))
 
     assert graph_dict(graph.view, m1 = ()) == dict(m1 = [dict(c1 = 2, c2 = "__a__")])
 

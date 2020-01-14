@@ -87,7 +87,7 @@ class NodeSerializer:
     def _serialization_of(self, finder, value):
         base = finder(value)
         return self.serializer(base or as_is, value) if self.serializer \
-            else base(value) if base else value
+            else base(as_is, value) if base else value
 
     @property
     def be_merged(self):

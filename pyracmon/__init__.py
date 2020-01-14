@@ -67,7 +67,7 @@ def _identify(model):
 def _filter(model):
     return model and not type(model).is_null(model)
 
-def _serialize(model):
+def _serialize(s, model):
     return dict([(c.name, v) for c, v in model])
 
 

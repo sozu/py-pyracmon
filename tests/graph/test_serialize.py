@@ -137,7 +137,7 @@ class TestNodeSerializer:
 
     def test_spec_serializer(self):
         spec = GraphSpec()
-        spec.add_serializer(int, lambda x: x*2)
+        spec.add_serializer(int, lambda s, x: x*2)
         assert spec.to_dict(
             self._graph(),
             a = S.of(),
