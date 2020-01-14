@@ -40,7 +40,8 @@ class GraphSpec:
         return next(filter(lambda x: issubclass(t, x[0]), self.entity_filters), (None, None))[1]
 
     def get_serializer(self, v):
-        return next(filter(lambda x: isinstance(v, x[0]), self.serializers), (None, None))[1]
+        t = v if isinstance(v, type) else type(v)
+        return next(filter(lambda x: issubclass(t, x[0]), self.serializers), (None, None))[1]
 
     def add_identifier(self, c, f):
         """
