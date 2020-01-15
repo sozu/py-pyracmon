@@ -1,3 +1,6 @@
+from functools import partial
+
+
 def as_is(x):
     return x
 
@@ -88,7 +91,7 @@ class NodeSerializer:
         base = finder(value)
         if self.serializer:
             if base:
-                return self.serializer(lambda v: base(as_is, v), value)
+                return self.serializer(partial(base, as_is), value)
             else:
                 return self.serializer(as_is, value)
         elif base:
@@ -192,9 +195,16 @@ class NodeSerializer:
 
         To collect child nodes into the result of `to_dict()`, serialization function MUST returns a `dict`.
 
+        The function should takes 2 arguments, where the first one is default serializer and the second one is a target value.
+        The default serializer is one of followings.
+
+        - The last registered converting function if any.
+        - Serializer registered in `GraphSpec` for the value type if any.
+        - Identity function which returns the argument as it is.
+
         Parameters
         ----------
-        func: T -> U
+        func: (S -> T), T -> U
             A function converting a node entity (`T`) into a serializable value (`U`).
 
         Returns
@@ -207,8 +217,7 @@ class NodeSerializer:
         else:
             old = self.serializer
             def then(s, v):
-                return func(lambda v: old(s, v), v)
-            setattr(old, '__annotations__', getattr(func, '__annotations__', None))
+                return func(partial(old, s), v)
             self.serializer = then
         return self
 

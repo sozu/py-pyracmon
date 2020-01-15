@@ -178,3 +178,12 @@ class TestNodeSerializer:
             self._graph(),
             a = S.of().each(lambda s,x: x*3),
         ) == {"a": [3,6,9]}
+
+    def test_propagate(self):
+        def old(s, v):
+            return v*2
+        assert spec.to_dict(
+            self._graph(),
+            a = S.of().each(old).each(lambda s,x: s(x)*3),
+        ) == {"a": [6,12,18]}
+        
