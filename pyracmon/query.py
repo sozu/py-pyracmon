@@ -86,7 +86,12 @@ class Q:
 
     def __getattr__(self, key):
         def attr(c, f=lambda x:x):
-            return Q.C(c, f(self.params[key])) if key in self.params else Q.C('', ())
+            if isinstance(c, str):
+                return Q.C(c, f(self.params[key])) if key in self.params else Q.C('', ())
+            elif callable(c):
+                return Q.C(c(self.params[key]), f(self.params[key]))
+            else:
+                raise ValueError(f"First argument for query attribute method must be a string or callable taking a parameter.")
         return attr
 
     @classmethod

@@ -254,18 +254,22 @@ class CRUDMixin:
             DB connection.
         pks: object | {str: object}
             A primary key or a mapping from column name to a value of primary keys.
+        lock: object
+            An object whose string representation is a valid locking statement.
 
         Returns
         -------
         cls
             A model of the record.
         """
+        def spacer(s):
+            return (" " + str(s)) if s else ""
         where_values = cls._parse_pks(pks)
         c = db.cursor()
         m = db.helper.marker()
         s = cls.select()
         where = ' AND '.join([f"{n} = {m()}" for n in where_values[0]])
-        c.execute(f"SELECT {s} FROM {cls.name} WHERE {where}", m.params(where_values[1]))
+        c.execute(f"SELECT {s} FROM {cls.name} WHERE {where}{spacer(lock)}", m.params(where_values[1]))
         row = c.fetchone()
         return read_row(row, s)[0] if row else None
 
@@ -286,6 +290,8 @@ class CRUDMixin:
             The number of rows to fetch. If `None`, all rows are obtained.
         offset: int
             The number of rows to skip.
+        lock: object
+            An object whose string representation is a valid locking statement.
 
         Returns
         -------
@@ -293,13 +299,13 @@ class CRUDMixin:
             Models of records.
         """
         def spacer(s):
-            return (" " + s) if s else ""
+            return (" " + str(s)) if s else ""
         c = db.cursor()
         m = db.helper.marker()
         s = cls.select()
         wc, wp = _where(gen_condition, m)
         rc, rp = ranged_by(m, limit, offset)
-        c.execute(f"SELECT {s} FROM {cls.name}{spacer(wc)}{spacer(order_by(orders))}{spacer(rc)}", m.params(wp + rp))
+        c.execute(f"SELECT {s} FROM {cls.name}{spacer(wc)}{spacer(order_by(orders))}{spacer(rc)}{spacer(lock)}", m.params(wp + rp))
         return [read_row(row, s)[0] for row in c.fetchall()]
 
     @classmethod

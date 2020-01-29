@@ -123,6 +123,17 @@ class TestFetch:
 
         assert r is None
 
+    def test_lock(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 3]])
+        r = m.fetch(db, 1, lock = "FOR UPDATE")
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c1 = ? FOR UPDATE"
+        assert list(db.params_list[0]) == [1]
+        assert (r.c1, r.c2, r.c3) == (1, "abc", 3)
+
 
 class TestFetchWhere:
     def test_no_condition(self):
@@ -204,14 +215,24 @@ class TestFetchWhere:
         assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 OFFSET ?"
         assert list(db.params_list[0]) == [20]
 
+    def test_lock(self):
+        db = PseudoAPI().connect()
+        m = define_model(table1, [CRUDMixin])
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+        rs = m.fetch_where(db, lambda m: Q.of(f"c3 > {m()}", 5), lock="FOR UPDATE")
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ? FOR UPDATE"
+        assert list(db.params_list[0]) == [5]
+
     def test_all_args(self):
         db = PseudoAPI().connect()
         m = define_model(table1, [CRUDMixin])
 
         db.reserve([[1, "abc", 10], [2, "def", 20]])
-        rs = m.fetch_where(db, lambda m: Q.of(f"c3 > {m()}", 5), dict(c1 = True, c3 = False), limit = 10, offset = 20)
+        rs = m.fetch_where(db, lambda m: Q.of(f"c3 > {m()}", 5), dict(c1 = True, c3 = False), limit = 10, offset = 20, lock = "FOR UPDATE")
 
-        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ? ORDER BY c1 ASC, c3 DESC LIMIT ? OFFSET ?"
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE c3 > ? ORDER BY c1 ASC, c3 DESC LIMIT ? OFFSET ? FOR UPDATE"
         assert list(db.params_list[0]) == [5, 10, 20]
 
 

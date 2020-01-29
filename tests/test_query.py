@@ -63,6 +63,12 @@ class TestQuery:
         assert c.clause == "(a = %s) AND (b = %s)"
         assert c.params == (2, 3)
 
+    def test_func(self):
+        q = Q(a = 1, b = "abc")
+        c = q.a(lambda v: f"a{v} = %s") & q.b(lambda v: f"b = {len(v)}", lambda x: ())
+        assert c.clause == "(a1 = %s) AND (b = 3)"
+        assert c.params == (1,)
+
 
 class TestMarker:
     api = PseudoAPI()
