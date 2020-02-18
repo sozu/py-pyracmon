@@ -86,7 +86,7 @@ class GraphSpec:
         """
         self.serializers[0:0] = [(c, f)]
 
-    def new_template(self, **template):
+    def new_template(self, *bases, **template):
         """
         Creates a graph template with given definitions for template properties.
 
@@ -104,6 +104,8 @@ class GraphSpec:
 
         Parameters
         ----------
+        bases: [GraphTemplate]
+            Base templates whose properties and relations are merged into new template.
         template: {str: (type, T -> ID, T -> bool) | type | None}
             Definitions of template properties.
 
@@ -133,7 +135,20 @@ class GraphSpec:
                 return d, make_identifier(self.get_identifier(d)), self.get_entity_filter(d)
             else:
                 raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
-        return GraphTemplate([(n, *definition(d)) for n, d in template.items()])
+
+        template = GraphTemplate([(n, *definition(d)) for n, d in template.items()])
+
+        for t in bases:
+            for p in t._properties:
+                if hasattr(template, p.name):
+                    raise ValueError(f"Template property '{p.name}' conflicts.")
+                prop = GraphTemplate.Property(template, p.name, p.kind, p.identifier, p.entity_filter)
+                template._properties.append(prop)
+                setattr(template, p.name, prop)
+            for f, t in t._relations:
+                getattr(template, f.name) >> getattr(template, t.name)
+
+        return template
 
     def to_dict(self, graph, **serializers):
         """

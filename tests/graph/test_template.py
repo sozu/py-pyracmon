@@ -67,3 +67,42 @@ class TestPropertyLessThan:
         assert t.c < t.a
         assert not (t.c < t.b)
         assert t.b < t.a
+
+
+class TestMerge:
+    def test_merge(self):
+        id1 = lambda x:x*2
+        ef1 = lambda x:x%2==0
+
+        t1 = spec.new_template(
+            a = (int, id1, ef1),
+        )
+        t2 = spec.new_template(
+            t1,
+            b = str,
+        )
+
+        assert t2._properties == [t2.b, t2.a]
+        assert t2.a.kind is int
+        assert t2.a.identifier.identifier(5) == 10
+        assert t2.a.entity_filter(2) and not t2.a.entity_filter(3)
+
+    def test_merge_relation(self):
+        t1 = spec.new_template(
+            a = int,
+            b = int,
+            c = int,
+            d = int,
+        )
+        t1.a << [t1.b, t1.d >> t1.c]
+
+        t2 = spec.new_template(
+            t1,
+            e = str,
+        )
+
+        assert t2._properties == [t2.e, t2.a, t2.b, t2.c, t2.d]
+        assert t2.a.parent is None
+        assert t2.b.parent is t2.a
+        assert t2.c.parent is t2.a
+        assert t2.d.parent is t2.c
