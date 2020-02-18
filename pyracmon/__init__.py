@@ -83,12 +83,14 @@ globalSpec = GraphSpec(
     ]
 )
 
-def graph_template(**definitions):
+def graph_template(*bases, **definitions):
     """
     Create a graph template on the default specification predefined to handle model object in appropriate ways.
 
     Parameters
     ----------
+        bases: [GraphTemplate]
+            Base templates whose properties and relations are merged into new template.
     definitions: {str: (type, T -> ID, T -> bool) | type | None}
         Definitions of template properties. See `GraphSpec.new_template` for the detail.
 
@@ -97,7 +99,7 @@ def graph_template(**definitions):
     GraphTemplate
         Created graph template.
     """
-    return globalSpec.new_template(**definitions)
+    return globalSpec.new_template(*bases, **definitions)
 
 
 def graph_dict(graph, **serializers):
