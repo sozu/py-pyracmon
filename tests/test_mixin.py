@@ -291,6 +291,15 @@ class TestQueryString:
         assert db.query_list[0] == "UPDATE t1 SET c2 = ? * 2, c3 = ? WHERE c1 = ?"
         assert list(db.params_list[0]) == [2, 3, 1]
 
+    def test_update_exclude_pk(self):
+        db = self._db()
+        m = define_model(table1, [CRUDMixin])
+
+        m.update(db, 1, m(c1 = 5, c2 = 2, c3 = 3))
+
+        assert db.query_list[0] == "UPDATE t1 SET c2 = ?, c3 = ? WHERE c1 = ?"
+        assert list(db.params_list[0]) == [2, 3, 1]
+
     def test_update_where(self):
         db = self._db()
         m = define_model(table1, [CRUDMixin])

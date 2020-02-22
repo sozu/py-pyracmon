@@ -70,6 +70,19 @@ class TestQuery:
         assert c.params == (1,)
 
 
+class TestQueryEach:
+    def test_and(self):
+        q = Q(a = [1,2,3])
+        c = q.a.all("a = %s")
+        assert c.clause == "((a = %s) AND (a = %s)) AND (a = %s)"
+        assert c.params == (1, 2, 3)
+
+    def test_or(self):
+        q = Q(a = [1,2,3])
+        c = q.a.any("a = %s")
+        assert c.clause == "((a = %s) OR (a = %s)) OR (a = %s)"
+        assert c.params == (1, 2, 3)
+
 class TestMarker:
     api = PseudoAPI()
 

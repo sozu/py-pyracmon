@@ -468,7 +468,7 @@ class CRUDMixin:
 
 
 def _update(cls, db, values, qualifier):
-    value_dict = model_values(cls, values)
+    value_dict = model_values(cls, values, excludes_pk=True)
     cls._check_columns(value_dict)
     column_values = split_dict(value_dict)
     qualifier = index_qualifier(qualifier, column_values[0])

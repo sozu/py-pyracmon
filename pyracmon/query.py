@@ -1,3 +1,5 @@
+from functools import reduce
+
 class Q:
     """
     The instance of this class holds parameters to build query conditions.
@@ -81,21 +83,42 @@ class Q:
         def __invert__(self):
             return Q.C(f"NOT ({self.clause})", self.params)
 
+    class Attribute:
+        def __init__(self, value):
+            self.value = value
+
+        def __call__(self, clause, holder=lambda x:x):
+            if callable(clause):
+                clause = clause(self.value)
+            elif not isinstance(clause, str):
+                raise ValueError(f"The first argument for query attribute method must be a string or callable taking a parameter.")
+
+            if callable(holder):
+                holder = holder(self.value)
+
+            return Q.C(clause, holder)
+
+        def all(self, clause, holder=lambda x: x):
+            conds = [Q.Attribute(v)(clause, holder) for v in self.value]
+            return reduce(lambda acc, c: acc & c, conds, Q.C('', ()))
+
+        def any(self, clause, holder=lambda x: x):
+            conds = [Q.Attribute(v)(clause, holder) for v in self.value]
+            return reduce(lambda acc, c: acc | c, conds, Q.C('', ()))
+
     def __init__(self, **kwargs):
         self.params = dict([(k, v) for k, v in kwargs.items() if v is not None])
 
     def __getattr__(self, key):
-        def attr(c, f=lambda x:x):
-            if isinstance(c, str):
-                return Q.C(c, f(self.params[key])) if key in self.params else Q.C('', ())
-            elif callable(c):
-                return Q.C(c(self.params[key]), f(self.params[key]))
-            else:
-                raise ValueError(f"First argument for query attribute method must be a string or callable taking a parameter.")
-        return attr
+        if key in self.params:
+            return Q.Attribute(self.params[key])
+        else:
+            def true(*args, **kwargs):
+                return Q.C('', ())
+            return true
 
     @classmethod
-    def of(cls, clause, params):
+    def of(cls, clause="", params=[]):
         """
         Utility method to create condition object directly from where clause and the parameters.
 
