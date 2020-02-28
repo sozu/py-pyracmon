@@ -4,8 +4,8 @@ from functools import partial
 def as_is(x):
     return x
 
-def head(vs):
-    return vs[0] if len(vs) > 0 else None
+def head(vs, alt=None):
+    return vs[0] if len(vs) > 0 else alt
 
 
 class S:
@@ -148,28 +148,38 @@ class NodeSerializer:
         self.namer = namer or (lambda x:x)
         return self
 
-    def head(self):
+    def head(self, alt=None):
         """
         Set an aggregator which picks up the first element.
 
+        Parameters
+        ----------
+        alt: object
+            A value used when there exists no nodes.
+
         Returns
         -------
         NodeSerializer
             This instance.
         """
-        self.aggregator = lambda vs: vs[0] if len(vs) > 0 else None
+        self.aggregator = lambda vs: vs[0] if len(vs) > 0 else alt
         return self
 
-    def tail(self):
+    def tail(self, alt=None):
         """
         Set an aggregator which picks up the last element.
 
+        Parameters
+        ----------
+        alt: object
+            A value used when there exists no nodes.
+
         Returns
         -------
         NodeSerializer
             This instance.
         """
-        self.aggregator = lambda vs: vs[-1] if len(vs) > 0 else None
+        self.aggregator = lambda vs: vs[-1] if len(vs) > 0 else alt
         return self
 
     def fold(self, aggregator):
