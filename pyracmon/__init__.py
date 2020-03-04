@@ -3,7 +3,7 @@ import types
 from pyracmon.connection import connect, Connection
 from pyracmon.mixin import CRUDMixin, read_row
 from pyracmon.model import define_model
-from pyracmon.graph import new_graph, GraphSpec
+from pyracmon.graph import new_graph, GraphSpec, S
 from pyracmon.query import Q
 
 
@@ -17,6 +17,7 @@ __all__ = [
     "add_identifier",
     "add_serializer",
     "new_graph",
+    "S",
     "Q",
 ]
 

@@ -56,6 +56,9 @@ def read_schema(db, excludes = [], includes = []):
         columns = [column_of(*c[1:]) for c in cols]
         tables.append(Table(t, columns))
 
+    if len(tables) == 0:
+        return tables
+
     c.execute(f"""\
         SELECT
             relname, oid

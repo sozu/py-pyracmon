@@ -79,3 +79,29 @@ class TestParsePKs:
         with pytest.raises(ValueError):
             m = define_model(table2)
             m._parse_pks(1)
+
+class TestEqual:
+    def test_equal(self):
+        m = define_model(table1)
+        assert m(c1 = 1, c2 = 2, c3 = 3) == m(c1 = 1, c2 = 2, c3 = 3)
+
+    def test_subset(self):
+        m = define_model(table1)
+        assert m(c1 = 1, c3 = 3) == m(c1 = 1, c3 = 3)
+
+    def test_different(self):
+        m = define_model(table1)
+        assert m(c1 = 1, c2 = 2, c3 = 3) != m(c1 = 1, c2 = 5, c3 = 3)
+
+    def test_different_type(self):
+        m1 = define_model(table1)
+        m2 = define_model(table2)
+        assert m1(c1 = 1, c2 = 2, c3 = 3) != m2(c1 = 1, c2 = 2, c3 = 3)
+
+    def test_shortage(self):
+        m = define_model(table1)
+        assert m(c1 = 1, c2 = None, c3 = 3) != m(c1 = 1, c3 = 3)
+
+    def test_redundant(self):
+        m = define_model(table1)
+        assert m(c1 = 1, c3 = 3) != m(c1 = 1, c2 = None, c3 = 3)

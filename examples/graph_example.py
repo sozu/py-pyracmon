@@ -1,6 +1,5 @@
 import psycopg2
-from pyracmon import connect, declare_models, graph_template, new_graph, read_row, graph_dict
-from pyracmon.graph import head
+from pyracmon import connect, declare_models, graph_template, new_graph, read_row, graph_dict, S
 from pyracmon.dialect import postgresql
 
 db = connect(
@@ -181,13 +180,13 @@ result = graph_dict(
     fetch_blogs(),
     blogs = (),
     recent_posts = ("posts",),
-    total_posts = (None, head),
+    total_posts = S.head(),
     categories = (),
-    images = (None, None, add_thumbnail),
+    images = S.each(add_thumbnail),
     recent_comments = ("comments",),
-    most_liked_comment = (None, head),
-    total_comments = (None, head),
-    total = (None, head),
+    most_liked_comment = S.head(),
+    total_comments = S.head(),
+    total = S.head(),
 )
 
 import pprint

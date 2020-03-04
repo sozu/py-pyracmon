@@ -2,19 +2,17 @@
 
 ## Overview
 
-This library provides functionalities to refine DB handling codes. The main peculiar concepts are *model declaration* and *relational graph*.
+This library provides functionalities which refine codes executing DB operations. The main peculiar concepts are *model declaration* and *relational graph*.
 
-*Model* is a class representing a table and its instance corresponds to a record. This library provides a way to declare the classes by reverse-engineering from actual tables. Once you connect DB, model classes are importable from a module you specified. Those classes have various methods executing simple operations on a table.
+*Model* is the class representing a table and its instance corresponds to a record. This library provides a way to declare model classes by reverse-engineering from actual tables. Once you connect DB, model classes are importable from a module you specified. Those classes have various methods executing simple operations on a table.
 
-*Graph* is composed of *node*s and *edge*s, where each node contains a model object or any kind of value. Edge between nodes represents the relation between their values, such as relation between records. *Graph*s are designed to accept rows obtained from DB with straight-forward codes and provide flexible way to represent them, threfore, you will be free from suffering from the reconstruction of data structure of query result.
-
-In addition, various utilties to construct SQL are available.
+*Graph* is composed of *node*s and *edge*s, where each node contains a model object or any kind of value. An edge between nodes represents the relation between their values, such as relation between records. *Graph*s are designed to accept rows obtained from DB with straight-forward codes, which makes you free from suffering from the reconstruction of data structure for query result. Additionally, *graph view* provides intuitive interfaces to traverse it and *graph serialization* feature enables conversion from a *graph* into a `dict` with keeping its structure and applying flexible representation to each node. As a result, you no longer need to care how the result of DB operation is used in other modules.
 
 On the other hand, this library does NOT support following features which are common in libraries called O/R mapper.
 
 - Query generation which resolves relations (foreign keys) automatically.
 - Object based query operation such as lazy loading or dirty state handling.
-- Database migration based on entity declarations.
+- Code first migrations, that is, database migrations based on entity declarations.
 
 ## Prerequisite
 
@@ -29,7 +27,7 @@ Full API documentation is available on <https://sozu.github.io/pyracmon-doc/>.
 
 ### Assumption
 
-Suppose, you have a database including tables as follows (written in PostgreSQL syntax).
+Suppose, you have a database having tables as follows (written in PostgreSQL syntax).
 
 ```
 CREATE TABLE blog (
@@ -65,7 +63,7 @@ CREATE TABLE post_comment (
 
 ### Model declaration
 
-Model classes are importable just by giving a connection object to `declare_models()`. Any kind of DB adapter module conforming to DB-API 2.0 specifications is available to obtain the connection object. What you have to do is invoking `connect()` imported from `pyracmon` package. This function takes the module in the first argument, and other arguments are passed to `connect()` function defined in the module. Next code shows the case where `psycopg2` is used.
+Model classes get importable just by giving a `Connection` object to `declare_models()`. Any kind of DB adapter module conforming to DB-API 2.0 specifications is available to obtain the `Connection` object. What you have to do is invoking `connect()` imported from `pyracmon` package. This function takes the module in the first argument, and other arguments are passed to `connect()` function defined in the module. Next code shows the case where `psycopg2` is used.
 
 ```
 import psycopg2
@@ -80,7 +78,7 @@ import models
 declare_models(postgresql, db, models)
 ```
 
-Model classes are declared into the module specified in third argument of `declare_models()` (`models` in above example). After that, model classes are available by importing from the module.
+Model classes are declared into the module specified in third argument of `declare_models()` (`models` in above example). After that, they get available by importing from the module.
 
 > Currently, the name of model class is the same as the table name. This causes the restriction that the table name must be a valid identifier of python.
 
@@ -93,41 +91,41 @@ assert [c.name for c in post.columns] == ["id", "blog_id", "title", "content"]
 
 ### Model based operations
 
-Model class provides static methods executing typical data operations for its corresponding table.
+Model class provides static methods executing typical CRUD operations on its corresponding table.
 
 ```
-from pyracmon.query import Q, order_by
+from pyracmon import Q
 
 # Insert a record (you can omit the column where the value is assigned in database side).
-# sql: INSERT INTO blog (title) VALUES (?)
+# sql: INSERT INTO blog (title) VALUES (%s)
 # parameters: "Blog title"
 blog.insert(db, dict(title = "Blog title"))
 
 # Update a record by primary key.
-# sql: UPDATE blog SET title = ? WHERE id = ?
+# sql: UPDATE blog SET title = %s WHERE id = %s
 # parameters: "New title", 1
 blog.update(db, 1, dict(title = "New title"))
 
 # Delete a record by primary key.
-# sql: DELETE FROM blog WHERE id = ?
+# sql: DELETE FROM blog WHERE id = %s
 # parameters: title", 1
 blog.delete(db, 1)
 
 # Update records by condition.
-# sql: UPDATE blog SET title = ?, content = ? WHERE blog_id = ?
+# sql: UPDATE blog SET title = %s, content = %s WHERE blog_id = %s
 # parameters: "New title", "New content", 2
 post.update_where(
     db,
     dict(title = "New title", content = "New content"),
-    lambda m: Q.condition(f"blog_id = {m()}", 2),
+    lambda m: Q.of(f"blog_id = {m()}", 2),
 )
 
 # Delete records by condition
-# sql: DELETE FROM blog WHERE blog_id = ?
+# sql: DELETE FROM blog WHERE blog_id = %s
 # parameters: 2
 post.delete_where(
     db,
-    lambda m: Q.condition(f"blog_id = {m()}", 2),
+    lambda m: Q.of(f"blog_id = {m()}", 2),
 )
 ```
 
@@ -135,24 +133,26 @@ Data fetching operations return model instance(s). Model instance has attributes
 
 ```
 # Fetch a record by primary key.
-# sql: SELECT id, blog_id, title, content FROM post WHERE id = ?
+# sql: SELECT id, blog_id, title, content FROM post WHERE id = %s
 # parameters: 1
 p = post.fetch(db, 1)
 print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.content}")
 
 # Fetch records by condition.
-# sql: SELECT id, blog_id, title, content FROM post WHERE blog_id = ? ORDER BY title ASC limit ? OFFSET ?
+# sql: SELECT id, blog_id, title, content FROM post WHERE blog_id = %s ORDER BY title ASC limit %s OFFSET %s
 # parameters: 2, 10, 20
 m = db.helper.marker()
 for p in post.fetch_where(
     db,
     lambda m: Q.condition(f"blog_id = {m()}", 2),
-    order_by(dict(title: True)), 10, 20,
+    orders = dict(title = True),
+    limit = 10,
+    offset = 20,
 ):
     print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.content}")
 
 # Counting records. Returned value n is a number of records.
-# sql: SELECT COUNT(*) FROM post WHERE blog_id = ?
+# sql: SELECT COUNT(*) FROM post WHERE blog_id = %s
 # parameters: 2
 n = post.count(db, lambda m: Q.condition(f"blog_id = {m()}", 2))
 ```
@@ -191,23 +191,21 @@ c.execute(f"""
 blog_post_pairs = [read_row(row, b_, p_) for row in c.fetchall()]
 ```
 
-Each invocation of marker object `m` returns a string correponding to parameter, `%s` in this case. `select()` method of the model returns `Selection` object which determines columns to select and their orders. It is also used in `read_row()` to parse obtained rows into model objects. In query string, `holders()` method of the helper is used to generates the number of markers concatenated with comma.
+Invoking marker object `m` returns a place holder string determined by `paramstyle` attribute of DB-API 2.0 module, in this case, `%s`. `select()` returns `Selection` object which determines columns to select and their orders. `Selection` objects are also used in `read_row()` to parse obtained rows into model objects.
 
-This is the basic code flow of select operation. See API documentation for further information.
+This is the basic flow of selecting operation. See API documentation for further information.
 
 ### Create relational graph
 
-Unfortunately, actual applications require not only records but also additional informations such as:
+This is often the case that the actual application requires not only records but also additional informations such as:
 
 - Count of grouping records.
 - Total number of existing records.
 - Maximum/Minimum value of a column in each group.
 - Calculation or transformation to column value.
-...
+- etc...
 
-Those sometimes are obtained by query and sometimes have to be obtained by programs. This kind of requirements often cause problems like fat model.
-
-Also, we often have to merge results of multiple queries according to their relationships, which can make codes complicated.
+Those values are sometimes obtained by query and sometimes by programs. Despite how they are obtained, this kind of additional informations tend to be a cause of problems like fat model. Also, we often have to merge results of multiple queries according to their relationships, which can make codes complicated.
 
 Suppose you need a structured list of blogs like below.
 
@@ -258,11 +256,11 @@ Suppose you need a structured list of blogs like below.
 
 `Graph` is a data structure where nodes are connected by edges according to predefined hierarchical relationships in `GraphTemplate`. Therefore, you can separate the definition of data structure (`GraphTemplate`) from data handling operations.
 
-In addition, `Graph` is designed to accept querying results in straight-forward manner to keep codes simple.
+In addition, `Graph` is designed to accept querying results in straight-forward manner in order to keep codes simple.
 
 Next code is the example to construct similar to above structured list by using `Graph`.
 
-> For the convenience of next chapter, some keys are different from above.
+> Some keys intentionally are set to different keys from above example. They are modified in next chapter.
 
 ```
 from pyracmon import graph_template, new_graph
@@ -338,17 +336,17 @@ def fetch_blogs():
 
 You might be able to guess what this code does without description and it would be correct. `graph_template()` declares a sturcture of a `Graph`. Each item of keyword arguments correspond to a name of node list and a type of entity stored in the node (Actually, you can supply additional arguments to control the graph behavior). Bit-shift operators in following lines declare parent-child relationships between nodes, that is, edges of the graph.
 
-`new_graph()` creates an empty `Graph` instance which works according to the template structure. `append()` is a method, in short, which inserts values into the nodes specified by each key of keyword arguments respectively, and then, creates edges between related nodes. Howerver, it does not alway insert given values actually. Before insertion, `Graph` searches node which have *identical* entity to inserting value and, if exists, `Graph` does not insert it and creates edge to the found node.
+`new_graph()` creates an empty `Graph` instance which works according to the template structure. `append()` is a method which inserts values into the nodes specified by each key of keyword arguments respectively, and then, creates edges between related nodes. In order to construct correct relationships, the method first searches a node whose entity is *identical* to each inserting value and, if exists, it does not insert the value and creates an edge toward found node.
 
 The key of this behavior is *identicalness* of node entity. By default, only model objects fulfilling following conditions are *identical*:
 
 - Corresponding table has primary key(s).
-- Every primary key value is not null.
+- Every primary key is set.
 - Every primary key value is equal. Equality is obtained by `==` operator.
 
 You can add or override identifying methods in some ways. Start from documentation of `GraphSpec` to know the detail.
 
-This example returns `view` attribute of the graph. This is the unmodifiable expressios of the graph which provides intuitive interfaces to access nodes according to the graph structure. See the documentation of this attribute to know them.
+This example returns `view` attribute of the graph. This is the unmodifiable expressios of the graph which provides intuitive interfaces to access nodes according to the graph structure.
 
 ### Serialize graph
 
@@ -357,6 +355,8 @@ The another feature of `Graph` is the serialization mechanism. For example in ty
 `graph_dict()` is the function to do the conversion. It takes a view of graph and optional keyword arguments where each key denotes a property name and the value is `NodeSerializer` object or its equivalent `tuple`.
 
 ```
+from pyracmon import S
+
 def add_thumbnail(s, v):
     r = s(v)
     r['thumbnail'] = f"{r['url']}/thumbnail"
@@ -366,22 +366,27 @@ result = graph_dict(
     fetch_blogs(),
     blogs = (),
     recent_posts = ("posts",),
-    total_posts = (None, head),
+    total_posts = S.head(),
     categories = (),
-    images = (None, None, add_thumbnail),
+    images = S.each(add_thumbnail),
     recent_comments = ("comments",),
-    most_liked_comment = (None, head),
-    total_comments = (None, head),
-    total = (None, head),
+    most_liked_comment = S.head(),
+    total_comments = S.head(),
+    total = S.head(),
 )
 ```
 
-Basically, each `tuple` is composed of at most 3 items all of which can be omitted.
+`S` is an utility class to create `NodeSerializer` instance via builder methods. The behavior of `NodeSerializer` consists of 3 phases below.
 
-- (name) Key string used in returned `dict` for the property. By default, the property name is used.
-- (aggregator) Aggregation function to select a node from nodes of the property. By default, each value in returned `dict` is a list despite of the number of nodes.
-- (serializer) Function converting a node entity to a serializable value. By default, default serializer for the entity type is applied if exists, otherwise the entity is used as it is.
+- Naming phase which determines a key of the property.
+    - By default, property name is used as the key.
+    - Given strings (`"posts"` or `"comments"` in the example) are used instead of original property names (`recent_posts` or `recent_comments`).
+- Aggregation phase which aggregates nodes of the property into a node.
+    - By default, every property is represented with a `list` of serialized nodes.
+    - According to the aggregation function, the property is represented with a value obtained from a selected node.
+    - In the exmaple, `head()` set the aggregation function which select the first node (or `None` if no nodes exist).
+- Serialization phase which converts a node entity into a serializable value. 
+    - By default, model object is converted into a `dict` representing column name and value. Any other types are passed without conversion.
+    - Serialization function can be set by `each()` method.
 
-Applying order of those items are vise-versa. Node entity in each node is converted to a serializable value, a value or values are selected from converted values, and selected values are stored in dictionary with given name.
-
-Although there remains various options and rules, this is the fundamental mechanism of graph serialization. With one more knowledge that `head` is a function which returns the first value in a `list` or `None` if empty, you would know the structure of returned dictionary.
+Although there remains various options and rules, this is the fundamental mechanism of graph serialization. 

@@ -162,6 +162,11 @@ def order_by(columns):
     ----------
     columns: { str: bool }
         An ordered dictionary mapping column name to its direction, where `True` denotes `ASC` and `False` denotes `DESC`.
+
+    Returns
+    -------
+    str
+        ORDER BY clause.
     """
     def col(cd):
         return f"{cd[0]} ASC" if cd[1] else f"{cd[0]} DESC"
@@ -169,6 +174,21 @@ def order_by(columns):
 
 
 def ranged_by(marker, limit = None, offset = None):
+    """
+    Generates LIMIT and OFFSET clause using marker.
+
+    Parameters
+    ----------
+    limit: int
+        Limit value or `None`.
+    offset: int
+        OFfset value or `None`.
+
+    Returns
+    -------
+    str
+        LIMIT and OFFSET clause.
+    """
     clause, params = [], []
     if limit is not None:
         clause.append(f"LIMIT {marker()}")

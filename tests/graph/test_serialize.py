@@ -143,16 +143,16 @@ class TestNodeSerializer:
             a = S.of(),
         ) == {"a": [2,4,6]}
 
-    def test_namer(self):
+    def test_name(self):
         assert spec.to_dict(
             self._graph(),
             a = S.of().name("A"),
         ) == {"A": [1,2,3]}
 
-    def test_namer(self):
+    def test_merge(self):
         assert spec.to_dict(
             self._graph(),
-            a = S.of().name(lambda n: f"__{n}__"),
+            a = S.of().merge(lambda n: f"__{n}__"),
         ) == {}
 
     def test_head(self):
@@ -187,3 +187,58 @@ class TestNodeSerializer:
             a = S.of().each(old).each(lambda s,x: s(x)*3),
         ) == {"a": [6,12,18]}
         
+
+class TestFactory:
+    def _graph(self):
+        t = spec.new_template(
+            a = int,
+        )
+
+        graph = Graph(t)
+        graph.append(a = 1)
+        graph.append(a = 2)
+        graph.append(a = 3)
+
+        return graph.view
+
+    def test_name(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.name("A")
+        ) == {"A": [1,2,3]}
+
+    def test_merge(self):
+        assert spec.to_dict(
+            self._graph(),
+            b = S.merge(lambda n: f"__{n}__")
+        ) == {}
+
+    def test_at(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.at(1)
+        ) == {"a": 2}
+
+    def test_head(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.head()
+        ) == {"a": 1}
+
+    def test_tail(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.tail()
+        ) == {"a": 3}
+
+    def test_fold(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.fold(sum)
+        ) == {"a": 6}
+
+    def test_each(self):
+        assert spec.to_dict(
+            self._graph(),
+            a = S.each(lambda s,x: x*2)
+        ) == {"a": [2,4,6]}

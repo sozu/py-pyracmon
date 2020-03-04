@@ -71,6 +71,17 @@ def define_model(table, mixins = []):
             cls = type(self)
             return map(lambda c: (c, getattr(self, c.name)), filter(lambda c: hasattr(self, c.name), cls.columns))
 
+        def __eq__(self, other):
+            cls = type(self)
+            if cls != type(other):
+                return False
+            for k in [c.name for c in cls.columns]:
+                if hasattr(self, k) ^ hasattr(other, k):
+                    return False
+                if getattr(self, k, None) != getattr(other, k, None):
+                    return False
+            return True
+
         @classmethod
         def _parse_pks(cls, pks):
             if isinstance(pks, dict):

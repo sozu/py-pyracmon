@@ -1,4 +1,4 @@
-from functools import partial
+from functools import partial, reduce
 
 
 def as_is(x):
@@ -31,14 +31,22 @@ class S:
         NodeSerializer
             Created instance.
         """
-        if namer and not isinstance(namer, str) and not callable(namer):
-            raise ValueError(f"Naming element must be a string or callable object but {type(namer)} is given.")
-        if aggregator and not isinstance(aggregator, int) and not callable(aggregator):
-            raise ValueError(f"Aggregation element must be an integer or callable object but {type(aggregator)} is given.")
-        if serializer and not callable(serializer):
-            raise ValueError(f"Serialization element must be a callable object but {type(serializer)} is given.")
+        s = NodeSerializer()
+        if namer:
+            s._set_namer(namer)
+        if aggregator:
+            s._set_aggregator(aggregator)
+        if serializer:
+            s.each(serializer)
 
-        return NodeSerializer(namer, aggregator, serializer)
+        return s
+
+    @classmethod
+    def factory(cls, factory):
+        def f(*args, **kwargs):
+            return factory(S.of(), *args, **kwargs)
+        setattr(S, factory.__name__, f)
+        return factory
 
 
 class NodeSerializer:
@@ -69,15 +77,31 @@ class NodeSerializer:
     In this case, the property name `b` is ignored and converted values are forcibly aggregated even when no `aggregator` is set.
     Also, (each) converted value must be a `dict`, otherwise, all values are discarded.
     """
-    def __init__(self, namer, aggregator, serializer):
-        self.namer = namer
-        self.aggregator = aggregator
-        self.serializer = serializer
+    def __init__(self):
+        self.namer = None
+        self.aggregator = None
+        self._serializers = []
 
     def _name_of(self, name):
         return name if not self.namer else \
             self.namer if isinstance(self.namer, str) else \
                 self.namer(name)
+
+    def _set_namer(self, namer):
+        if isinstance(namer, str):
+            return self.name(namer)
+        elif callable(namer):
+            return self.merge(namer)
+        else:
+            raise ValueError(f"Naming element must be a string or callable object but {type(namer)} is given.")
+
+    def _set_aggregator(self, aggregator):
+        if isinstance(aggregator, int):
+            return self.at(aggregator)
+        elif callable(aggregator):
+            return self.fold(aggregator)
+        else:
+            raise ValueError(f"Aggregation element must be an integer or callable object but {type(aggregator)} is given.")
 
     def _aggregation_of(self, values):
         if self.aggregator is None:
@@ -89,15 +113,8 @@ class NodeSerializer:
 
     def _serialization_of(self, finder, value):
         base = finder(value)
-        if self.serializer:
-            if base:
-                return self.serializer(partial(base, as_is), value)
-            else:
-                return self.serializer(as_is, value)
-        elif base:
-            return base(as_is, value)
-        else:
-            return value
+        s = reduce(lambda acc,x: partial(x, acc), ([base] if base else []) + self._serializers, as_is)
+        return s(value)
 
     @property
     def be_merged(self):
@@ -105,18 +122,16 @@ class NodeSerializer:
 
     @property
     def be_singular(self):
-        # TODO a serializer is considered to aggregate values into a value when the aggregator is set currently.
         return self.aggregator is not None
 
-    def name(self, namer):
+    @S.factory
+    def name(self, name):
         """
         Set a key in parent dictionary.
 
-        TODO Deny the argument when it is not `str`.
-
         Parameters
         ----------
-        namer: str
+        name: str
             A key string.
 
         Returns
@@ -124,14 +139,15 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        self.namer = namer
+        if not isinstance(name, str):
+            raise ValueError(f"The name of node must be a string but {type(name)} is given.")
+        self.namer = name
         return self
 
+    @S.factory
     def merge(self, namer=None):
         """
         Set a naming function taking a property name and returning a key in parent dictionary.
-
-        TODO Deny the argument when ist is not callable.
 
         By using callable as `namer`, key-value pairs of the converted result are merged into parent dictionary.
 
@@ -145,9 +161,32 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
+        if namer and not callable(namer):
+            raise ValueError(f"The method merging a node into its parent node must be callable or None.")
         self.namer = namer or (lambda x:x)
         return self
 
+    @S.factory
+    def at(self, index, alt=None):
+        """
+        Set an aggregator which picks up the element at the index.
+
+        Parameters
+        ----------
+        index: int
+            An index of the element.
+        alt: object
+            A value used when no node is found at the index.
+
+        Returns
+        -------
+        NodeSerializer
+            This instance.
+        """
+        self.aggregator = lambda vs: vs[index] if len(vs) > index else alt
+        return self
+
+    @S.factory
     def head(self, alt=None):
         """
         Set an aggregator which picks up the first element.
@@ -165,6 +204,7 @@ class NodeSerializer:
         self.aggregator = lambda vs: vs[0] if len(vs) > 0 else alt
         return self
 
+    @S.factory
     def tail(self, alt=None):
         """
         Set an aggregator which picks up the last element.
@@ -182,6 +222,7 @@ class NodeSerializer:
         self.aggregator = lambda vs: vs[-1] if len(vs) > 0 else alt
         return self
 
+    @S.factory
     def fold(self, aggregator):
         """
         Set an aggregation function converting a list of values into a serializable value.
@@ -199,6 +240,7 @@ class NodeSerializer:
         self.aggregator = aggregator
         return self
 
+    @S.factory
     def each(self, func):
         """
         Set a function converting a node entity into a serializable value.
@@ -222,13 +264,7 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        if not self.serializer:
-            self.serializer = func
-        else:
-            old = self.serializer
-            def then(s, v):
-                return func(partial(old, s), v)
-            self.serializer = then
+        self._serializers.append(func)
         return self
 
 
