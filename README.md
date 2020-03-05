@@ -21,6 +21,12 @@ On the other hand, this library does NOT support following features which are co
     - MySQL >= 8.0
     - PostgreSQL >= 10
 
+## Installation
+
+```
+$ pip install pyracmon
+```
+
 ## Grance of functionalities
 
 Full API documentation is available on <https://sozu.github.io/pyracmon-doc/>.
