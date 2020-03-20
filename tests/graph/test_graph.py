@@ -20,10 +20,10 @@ class TestView:
 
     def test_node_view(self):
         t = self._template()
-        n = Node(t.a, 1, None)
-        n.add_child(Node(t.b, 2, None))
-        n.add_child(Node(t.c, 3, None))
-        n.add_child(Node(t.c, 4, None))
+        n = Node(t.a, 1, None, 0)
+        n.add_child(Node(t.b, 2, None, 0))
+        n.add_child(Node(t.c, 3, None, 0))
+        n.add_child(Node(t.c, 4, None, 1))
         view = n.view
 
         assert view() == 1
@@ -41,8 +41,12 @@ class TestView:
 
         assert view() == c
         assert len(view) == 3
+        assert bool(view)
         assert [n() for n in view] == [1, 2, 3]
         assert [view[0](), view[1](), view[2]()] == [1, 2, 3]
+        with pytest.raises(Exception):
+            _ = view[3]
+        assert view[3:4]() == 4
 
     def test_graph_view(self):
         view = Graph(self._template()).view
@@ -53,6 +57,32 @@ class TestView:
         assert view.c().name == "c"
         assert view.d().name == "d"
         assert view.e().name == "e"
+
+    def test_container_head(self):
+        view = new_graph(self._template()) \
+            .append(a = 1, b = 2, d = 3) \
+            .append(a = 10, b = 20, d = 30) \
+            .view
+
+        assert view.a.b.d[0]() == 3
+        assert view.a.b.d[1:]() is None
+
+    def test_empty_root(self):
+        view = new_graph(self._template()).view
+
+        assert not bool(view.a)
+        assert not bool(view.a.b)
+        assert view.a[0:10]() == 10
+        assert view.a.b.d[0:10]() == 10
+        with pytest.raises(Exception):
+            _ = view.a.b.c
+
+    def test_empty_child(self):
+        view = new_graph(self._template()).append(a = 1).view
+
+        assert bool(view.a)
+        assert not bool(view.a.b)
+        assert view.a.b.d[0:10]() == 10
 
 
 class TestGraph:
@@ -216,6 +246,114 @@ class TestGraph:
         assert [n() for n in graph.view.a[0].b] == [0, 1]
         assert [n() for n in graph.view.a[1].b] == [1]
         assert [n() for n in graph.view.a[2].b] == [2]
+
+
+class TestGraphBase:
+    def test_base(self):
+        t1 = spec.new_template(a = (), b = ())
+        t2 = spec.new_template(t1, c = ())
+        base = new_graph(t1)
+        base.append(a = 1, b = "a").append(a = 2, b = "b").append(a = 3, b = "c")
+
+        graph = new_graph(t2, base)
+
+        assert [n() for n in graph.view.a] == [1, 2, 3]
+        assert [n() for n in graph.view.b] == ["a", "b", "c"]
+        assert [n() for n in graph.view.c] == []
+
+    def test_edge(self):
+        t1 = spec.new_template(
+            a = (None, lambda x:x),
+            b = (None, lambda x:x),
+            c = (None, lambda x:x),
+            d = (None, lambda x:x),
+        )
+        t1.a << [t1.b, t1.d >> t1.c]
+        t2 = spec.new_template(t1, e = ())
+        base = new_graph(t1)
+        base.append(a=1).append(a=2).append(a=3).append(a=4)
+        base.append(b=1).append(b=2).append(b=3).append(b=4)
+        base.append(c=1).append(c=2).append(c=3).append(c=4)
+        base.append(d=1).append(d=2).append(d=3).append(d=4)
+        base.containers['a'].nodes[0].add_child(base.containers['b'].nodes[0])
+        base.containers['a'].nodes[1].add_child(base.containers['b'].nodes[1])
+        base.containers['a'].nodes[1].add_child(base.containers['b'].nodes[2])
+        base.containers['a'].nodes[1].add_child(base.containers['c'].nodes[0])
+        base.containers['a'].nodes[1].add_child(base.containers['c'].nodes[1])
+        base.containers['a'].nodes[2].add_child(base.containers['c'].nodes[2])
+        base.containers['c'].nodes[0].add_child(base.containers['d'].nodes[0])
+        base.containers['c'].nodes[0].add_child(base.containers['d'].nodes[1])
+        base.containers['c'].nodes[1].add_child(base.containers['d'].nodes[2])
+        base.containers['c'].nodes[3].add_child(base.containers['d'].nodes[3])
+
+        graph = new_graph(t2, base)
+
+        assert [n() for n in graph.view.a] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.b] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.c] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.d] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.a[0].b] == [1]
+        assert [n() for n in graph.view.a[1].b] == [2, 3]
+        assert [n() for n in graph.view.a[2].b] == []
+        assert [n() for n in graph.view.a[3].b] == []
+        assert [n() for n in graph.view.a[0].c] == []
+        assert [n() for n in graph.view.a[1].c] == [1, 2]
+        assert [n() for n in graph.view.a[2].c] == [3]
+        assert [n() for n in graph.view.a[3].c] == []
+        assert [n() for n in graph.view.c[0].d] == [1, 2]
+        assert [n() for n in graph.view.c[1].d] == [3]
+        assert [n() for n in graph.view.c[2].d] == []
+        assert [n() for n in graph.view.c[3].d] == [4]
+
+    def test_multi_parent(self):
+        t1 = spec.new_template(
+            a = (None, lambda x:x),
+            b = (None, lambda x:x),
+            c = (None, lambda x:x),
+            d = (None, lambda x:x),
+        )
+        t1.a << [t1.b, t1.d >> t1.c]
+        t2 = spec.new_template(t1, e = ())
+        base = new_graph(t1)
+        base.append(a=1).append(a=2).append(a=3).append(a=4)
+        base.append(b=1).append(b=2).append(b=3).append(b=4)
+        base.append(c=1).append(c=2).append(c=3).append(c=4)
+        base.append(d=1).append(d=2).append(d=3).append(d=4)
+        base.containers['a'].nodes[0].add_child(base.containers['b'].nodes[0])
+        base.containers['a'].nodes[0].add_child(base.containers['b'].nodes[1])
+        base.containers['a'].nodes[1].add_child(base.containers['b'].nodes[0])
+        base.containers['a'].nodes[1].add_child(base.containers['b'].nodes[1])
+        base.containers['a'].nodes[1].add_child(base.containers['b'].nodes[2])
+        base.containers['a'].nodes[1].add_child(base.containers['c'].nodes[0])
+        base.containers['a'].nodes[1].add_child(base.containers['c'].nodes[1])
+        base.containers['a'].nodes[2].add_child(base.containers['c'].nodes[1])
+        base.containers['a'].nodes[2].add_child(base.containers['c'].nodes[2])
+        base.containers['c'].nodes[0].add_child(base.containers['d'].nodes[0])
+        base.containers['c'].nodes[0].add_child(base.containers['d'].nodes[1])
+        base.containers['c'].nodes[1].add_child(base.containers['d'].nodes[0])
+        base.containers['c'].nodes[1].add_child(base.containers['d'].nodes[2])
+        base.containers['c'].nodes[1].add_child(base.containers['d'].nodes[3])
+        base.containers['c'].nodes[2].add_child(base.containers['d'].nodes[3])
+        base.containers['c'].nodes[3].add_child(base.containers['d'].nodes[3])
+
+        graph = new_graph(t2, base)
+
+        assert [n() for n in graph.view.a] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.b] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.c] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.d] == [1, 2, 3, 4]
+        assert [n() for n in graph.view.a[0].b] == [1, 2]
+        assert [n() for n in graph.view.a[1].b] == [1, 2, 3]
+        assert [n() for n in graph.view.a[2].b] == []
+        assert [n() for n in graph.view.a[3].b] == []
+        assert [n() for n in graph.view.a[0].c] == []
+        assert [n() for n in graph.view.a[1].c] == [1, 2]
+        assert [n() for n in graph.view.a[2].c] == [2, 3]
+        assert [n() for n in graph.view.a[3].c] == []
+        assert [n() for n in graph.view.c[0].d] == [1, 2]
+        assert [n() for n in graph.view.c[1].d] == [1, 3, 4]
+        assert [n() for n in graph.view.c[2].d] == [4]
+        assert [n() for n in graph.view.c[3].d] == [4]
 
 
 class TestP:

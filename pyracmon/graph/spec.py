@@ -142,7 +142,7 @@ class GraphSpec:
             for p in t._properties:
                 if hasattr(template, p.name):
                     raise ValueError(f"Template property '{p.name}' conflicts.")
-                prop = GraphTemplate.Property(template, p.name, p.kind, p.identifier, p.entity_filter)
+                prop = GraphTemplate.Property(template, p.name, p.kind, p.identifier, p.entity_filter, origin=p)
                 template._properties.append(prop)
                 setattr(template, p.name, prop)
             for f, t in t._relations:

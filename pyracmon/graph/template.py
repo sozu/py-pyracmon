@@ -14,12 +14,13 @@ class GraphTemplate:
     >>> template.c << template.d
     """
     class Property:
-        def __init__(self, template, name, kind, identifier, entity_filter):
+        def __init__(self, template, name, kind, identifier, entity_filter, origin=None):
             self.template = template
             self.name = name
             self.kind = kind
             self.identifier = identifier
             self.entity_filter = entity_filter
+            self._origin = origin
 
         def _assert_canbe_parent(self, another):
             if another.parent is not None:
@@ -41,6 +42,16 @@ class GraphTemplate:
         @property
         def children(self):
             return [r[0] for r in self.template._relations if r[1] == self]
+
+        @property
+        def origin(self):
+            p = self
+            while p._origin:
+                p = p._origin
+            return p
+
+        def is_compatible(self, other):
+            return self.origin is other.origin
 
         def __lt__(self, other):
             p = self.parent
