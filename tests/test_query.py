@@ -321,3 +321,161 @@ class TestValues:
         assert h.values(2, 3, { 1: lambda x: f"{x}::text"}) == "(?, ?::text), (?, ?::text), (?, ?::text)"
 
 
+class TestEq:
+    def test_eq(self):
+        m = PyformatMarker()
+        c = Q.eq(a = 1)(m)
+        assert c.clause == "a = %s"
+        assert c.params == (1,)
+
+    def test_eqs(self):
+        m = PyformatMarker()
+        c = Q.eq(a = 1, b = 2)(m)
+        assert c.clause == "a = %s AND b = %s"
+        assert c.params == (1,2)
+
+    def test_eq_null(self):
+        m = PyformatMarker()
+        c = Q.eq(a = None)(m)
+        assert c.clause == "a IS NULL"
+        assert c.params == ()
+
+    def test_eqs_or(self):
+        m = PyformatMarker()
+        c = Q.eq(False, a = 1, b = 2)(m)
+        assert c.clause == "a = %s OR b = %s"
+        assert c.params == (1,2)
+
+
+class TestNeq:
+    def test_neq(self):
+        m = PyformatMarker()
+        c = Q.neq(a = 1)(m)
+        assert c.clause == "a != %s"
+        assert c.params == (1,)
+
+    def test_neqs(self):
+        m = PyformatMarker()
+        c = Q.neq(a = 1, b = 2)(m)
+        assert c.clause == "a != %s AND b != %s"
+        assert c.params == (1,2)
+
+    def test_neq_null(self):
+        m = PyformatMarker()
+        c = Q.neq(a = None)(m)
+        assert c.clause == "a IS NOT NULL"
+        assert c.params == ()
+
+    def test_neqs_or(self):
+        m = PyformatMarker()
+        c = Q.neq(False, a = 1, b = 2)(m)
+        assert c.clause == "a != %s OR b != %s"
+        assert c.params == (1,2)
+
+
+class TestIn:
+    def test_in(self):
+        m = PyformatMarker()
+        c = Q.in_(a = [1,2])(m)
+        assert c.clause == "a IN (%s,%s)"
+        assert c.params == (1,2)
+
+    def test_ins(self):
+        m = PyformatMarker()
+        c = Q.in_(a = [1,2], b = [3,4])(m)
+        assert c.clause == "a IN (%s,%s) AND b IN (%s,%s)"
+        assert c.params == (1,2,3,4)
+
+    def test_in_empty(self):
+        m = PyformatMarker()
+        c = Q.in_(a = [])(m)
+        assert c.clause == ""
+        assert c.params == ()
+
+    def test_in_empty_one(self):
+        m = PyformatMarker()
+        c = Q.in_(a = [], b = [1,2])(m)
+        assert c.clause == "b IN (%s,%s)"
+        assert c.params == (1,2)
+
+    def test_ins_or(self):
+        m = PyformatMarker()
+        c = Q.in_(False, a = [1,2], b = [3,4])(m)
+        assert c.clause == "a IN (%s,%s) OR b IN (%s,%s)"
+        assert c.params == (1,2,3,4)
+
+
+class TestLike:
+    def test_like(self):
+        m = PyformatMarker()
+        c = Q.like(a = "abc")(m)
+        assert c.clause == "a LIKE %s"
+        assert c.params == ("%abc%",)
+
+    def test_likes(self):
+        m = PyformatMarker()
+        c = Q.like(a = "abc", b = "def")(m)
+        assert c.clause == "a LIKE %s AND b LIKE %s"
+        assert c.params == ("%abc%", "%def%")
+
+    def test_likes_or(self):
+        m = PyformatMarker()
+        c = Q.like(False, a = "abc", b = "def")(m)
+        assert c.clause == "a LIKE %s OR b LIKE %s"
+        assert c.params == ("%abc%", "%def%")
+
+    def test_like_escape(self):
+        m = PyformatMarker()
+        c = Q.like(a = "%abc_")(m)
+        assert c.clause == "a LIKE %s"
+        assert c.params == ("%\\%abc\\_%",)
+
+    def test_prefix(self):
+        m = PyformatMarker()
+        c = Q.prefix(a = "abc")(m)
+        assert c.clause == "a LIKE %s"
+        assert c.params == ("abc%",)
+
+    def test_postfix(self):
+        m = PyformatMarker()
+        c = Q.postfix(a = "abc")(m)
+        assert c.clause == "a LIKE %s"
+        assert c.params == ("%abc",)
+
+
+class TestCompare:
+    def test_lt(self):
+        m = PyformatMarker()
+        c = Q.lt(a = 1)(m)
+        assert c.clause == "a < %s"
+        assert c.params == (1,)
+
+    def test_le(self):
+        m = PyformatMarker()
+        c = Q.le(a = 1)(m)
+        assert c.clause == "a <= %s"
+        assert c.params == (1,)
+
+    def test_gt(self):
+        m = PyformatMarker()
+        c = Q.gt(a = 1)(m)
+        assert c.clause == "a > %s"
+        assert c.params == (1,)
+
+    def test_ge(self):
+        m = PyformatMarker()
+        c = Q.ge(a = 1)(m)
+        assert c.clause == "a >= %s"
+        assert c.params == (1,)
+
+    def test_lts(self):
+        m = PyformatMarker()
+        c = Q.lt(a = 1, b = 2)(m)
+        assert c.clause == "a < %s AND b < %s"
+        assert c.params == (1, 2)
+
+    def test_lts_or(self):
+        m = PyformatMarker()
+        c = Q.lt(False, a = 1, b = 2)(m)
+        assert c.clause == "a < %s OR b < %s"
+        assert c.params == (1, 2)

@@ -26,6 +26,25 @@ class Q:
     >>> search(Q(a = 1))        # SELECT * FROM table WHERE a = 1
     >>> search(Q(a = 1, b = 2)) # SELECT * FROM table WHERE a = 1 AND b = 2
     >>> search(Q())             # SELECT * FROM table
+
+    Additionally, this class provides utility `classmethod` s creating condition or condition generation function directly.
+
+    Using `of()` is the most simple way to create a condition clause.
+
+    >>> Q.of("a = %s", 1)
+    Condition: 'a = %s' -- (1,)
+
+    Other utility methods correspond to basic operators defined in SQL.
+    They create condition clause by applying the operator to pairs of column and some value(s) obtained from optional keyword arguments.
+
+    >>> Q.eq(a = 1)
+    Condition: 'a = %s' -- (1,)
+    >>> Q.eq(a = 1, b = 2)
+    Condition: 'a = %s AND b = %s' -- (1, 2)
+    >>> Q.in_(a = [1, 2, 3])
+    Condition: 'a IN (%s, %s, %s)' -- (1, 2, 3)
+    >>> Q.like(a = "abc")
+    Condition: 'a LIKE %s' -- ("%abc%",)
     """
     class C:
         """
@@ -135,6 +154,130 @@ class Q:
             Created condition.
         """
         return Q.C(clause, params)
+
+    @classmethod
+    def eq(cls, __and=True, __key=None, **kwargs):
+        """
+        Creates a function which generates a condition checking a column value equals to a value.
+
+        Parameters
+        ----------
+        __and: bool
+            Specifies concatenating operator of conditions. `True` means `AND` whereas `False` means `OR`.
+        __key: str | int | [str]
+            Value(s) passed to marker.
+        kwargs: {str:object}
+            Mapping from a column name to a value.
+
+        Returns
+        -------
+        Marker -> Q.C
+            A function which takes a marker and then returns a condition.
+        """
+        null_handler = lambda c: (f"{c} IS NULL", [])
+        return _queries("=", __key, __and, kwargs.items(), null_handler)
+
+    @classmethod
+    def neq(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value does NOT equal to a value.
+        """
+        null_handler = lambda c: (f"{c} IS NOT NULL", [])
+        return _queries("!=", __key, __and, kwargs.items(), null_handler)
+
+    @classmethod
+    def in_(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is one of list items using `IN` operator.
+        """
+        return _queries("IN", __key, __and, [(k, vs) for k, vs in kwargs.items() if vs])
+
+    @classmethod
+    def like(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is a sub-string of a value using `LIKE` operator.
+        """
+        return _queries("LIKE", __key, __and, [(k, f"%{_escape_like(v)}%") for k, v in kwargs.items()])
+
+    @classmethod
+    def prefix(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is a prefix of a value using `LIKE` operator.
+        """
+        return _queries("LIKE", __key, __and, [(k, f"{_escape_like(v)}%") for k, v in kwargs.items()])
+
+    @classmethod
+    def postfix(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is a postfix of a value using `LIKE` operator.
+        """
+        return _queries("LIKE", __key, __and, [(k, f"%{_escape_like(v)}") for k, v in kwargs.items()])
+
+    @classmethod
+    def lt(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is less than a value using `<` operator.
+        """
+        return _queries("<", __key, __and, kwargs.items())
+
+    @classmethod
+    def le(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is less than or equal to a value using `<=` operator.
+        """
+        return _queries("<=", __key, __and, kwargs.items())
+
+    @classmethod
+    def gt(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is greater than a value using `>` operator.
+        """
+        return _queries(">", __key, __and, kwargs.items())
+
+    @classmethod
+    def ge(cls, __and=True, __key=None, **kwargs):
+        """
+        Works like `eq`, but checks a column value is greater than or equal to a value using `>=` operator.
+        """
+        return _queries(">=", __key, __and, kwargs.items())
+
+
+def _queries(op, key, and_, column_values, null_handler=None):
+    def gen(m):
+        concat = " AND " if and_ else " OR "
+        queries = []
+        values = []
+        for col, val in column_values:
+            if null_handler and val is None:
+                q, vs = null_handler(col)
+                queries.append(q)
+                values += vs
+            else:
+                if isinstance(val, list):
+                    num = len(val)
+                    keys = key if isinstance(key, list) \
+                        else [key+i for i in range(num)] if isinstance(key, int) \
+                        else [None] * num
+                    queries.append(f"{col} {op} ({','.join([m(keys[i]) for i in range(num)])})")
+                    values += val
+                else:
+                    queries.append(f"{col} {op} {m(key)}")
+                    values.append(val)
+        return Q.of(concat.join(queries), values)
+    return gen
+
+
+def _escape_like(v):
+    def esc(c):
+        if c == "\\":
+            return r"\\\\"
+        elif c == "%":
+            return r"\%"
+        elif c == "_":
+            return r"\_"
+        else:
+            return c
+    return ''.join(map(esc, v))
 
 
 def where(condition):
