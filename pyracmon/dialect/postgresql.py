@@ -16,7 +16,8 @@ def read_schema(db, excludes = [], includes = []):
 
     c.execute(f"""\
         SELECT
-            c.table_name, c.column_name, c.data_type, c.udt_name, e.data_type, e.udt_name, k.constraint_type, c.column_default
+            c.table_name, c.column_name, c.data_type, c.udt_name,
+            e.data_type, e.udt_name, k.constraint_type, c.column_default, c.ordinal_position
         FROM
             information_schema.columns AS c
             INNER JOIN information_schema.tables AS t ON c.table_name = t.table_name
@@ -42,7 +43,8 @@ def read_schema(db, excludes = [], includes = []):
         ORDER BY c.table_name ASC, c.ordinal_position ASC
         """, excludes + includes)
 
-    def column_of(n, t, udt, et, eudt, constraint, default):
+    def column_of(n, t, udt, et, eudt, constraint, default, pos):
+        nonlocal column_positions
         m = SequencePattern.match(default or "")
         cs = (constraint or "").split(',')
         seq = m.group(1) if m else None
@@ -51,10 +53,13 @@ def read_schema(db, excludes = [], includes = []):
         return Column(n, ptype, info, 'PRIMARY KEY' in cs, 'FOREIGN KEY' in cs, seq)
 
     tables = []
+    column_positions = {}
 
     for t, cols in groupby(c.fetchall(), lambda row: row[0]):
+        cols = list(cols)
         columns = [column_of(*c[1:]) for c in cols]
         tables.append(Table(t, columns))
+        column_positions[t] = {c[1]:c[-1] for c in cols}
 
     if len(tables) == 0:
         return tables
@@ -78,7 +83,7 @@ def read_schema(db, excludes = [], includes = []):
 
         for i, col in enumerate(t.columns):
             m = db.helper.marker()
-            c.execute(f"SELECT col_description({m()}, {m()})", [table_oids[t.name], i+1])
+            c.execute(f"SELECT col_description({m()}, {m()})", [table_oids[t.name], column_positions[t.name][col.name]])
             col.comment = c.fetchone()[0] or ""
 
     c.close()
