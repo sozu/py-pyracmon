@@ -389,13 +389,13 @@ class TestIn:
     def test_in_empty(self):
         m = PyformatMarker()
         c = Q.in_(a = [])(m)
-        assert c.clause == ""
+        assert c.clause == "1 = 0"
         assert c.params == ()
 
     def test_in_empty_one(self):
         m = PyformatMarker()
         c = Q.in_(a = [], b = [1,2])(m)
-        assert c.clause == "b IN (%s,%s)"
+        assert c.clause == "1 = 0 AND b IN (%s,%s)"
         assert c.params == (1,2)
 
     def test_ins_or(self):
@@ -479,3 +479,54 @@ class TestCompare:
         c = Q.lt(False, a = 1, b = 2)(m)
         assert c.clause == "a < %s OR b < %s"
         assert c.params == (1, 2)
+
+
+class TestConditional:
+    def test_and(self):
+        m = PyformatMarker()
+        c1 = Q.by(lambda m: f"a = {m()}", 1)
+        c2 = Q.eq(b = 2)
+        c = c1 & c2
+        assert where(c(m)) == ("WHERE (a = %s) AND (b = %s)", [1, 2])
+
+    def test_or(self):
+        m = PyformatMarker()
+        c1 = Q.by(lambda m: f"a = {m()}", 1)
+        c2 = Q.eq(b = 2)
+        c = c1 | c2
+        assert where(c(m)) == ("WHERE (a = %s) OR (b = %s)", [1, 2])
+
+    def test_not(self):
+        m = PyformatMarker()
+        c = ~Q.by(lambda m: f"a = {m()}", 1)
+        assert where(c(m)) == ("WHERE NOT (a = %s)", [1])
+
+    def test_and_c(self):
+        m = PyformatMarker()
+        c1 = Q.eq(a = 2)
+        c2 = Q.of("b = %s", 3)
+        c = c1 & c2
+        assert where(c(m)) == ("WHERE (a = %s) AND (b = %s)", [2, 3])
+
+    def test_or_c(self):
+        m = PyformatMarker()
+        c1 = Q.eq(a = 2)
+        c2 = Q.of("b = %s", 3)
+        c = c1 | c2
+        assert where(c(m)) == ("WHERE (a = %s) OR (b = %s)", [2, 3])
+
+    def test_c_and(self):
+        m = PyformatMarker()
+        c1 = Q.eq(a = 2)
+        c2 = Q.of("b = %s", 3)
+        c = c2 & c1
+        assert where(c(m)) == ("WHERE (b = %s) AND (a = %s)", [3, 2])
+
+    def test_c_or(self):
+        m = PyformatMarker()
+        c1 = Q.eq(a = 2)
+        c2 = Q.of("b = %s", 3)
+        c = c2 | c1
+        assert where(c(m)) == ("WHERE (b = %s) OR (a = %s)", [3, 2])
+
+

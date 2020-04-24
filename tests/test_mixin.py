@@ -326,7 +326,7 @@ class TestQueryString:
         m = define_model(table1, [CRUDMixin])
 
         with pytest.raises(ValueError):
-            m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.of("", []))
+            m.update_where(db, m(c2 = 2, c3 = 3), lambda x: Q.of("", []), allow_all = False)
 
     def test_update_all_ok(self):
         db = self._db()
@@ -382,7 +382,7 @@ class TestQueryString:
         m = define_model(table1, [CRUDMixin])
 
         with pytest.raises(ValueError):
-            m.delete_where(db, lambda mk: Q.of("", []))
+            m.delete_where(db, lambda mk: Q.of("", []), allow_all = False)
 
     def test_delete_all_ok(self):
         db = self._db()

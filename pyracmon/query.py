@@ -65,6 +65,9 @@ class Q:
         def __repr__(self):
             return f"Condition: '{self.clause}' -- {self.params}"
 
+        def __call__(self, marker):
+            return self
+
         @classmethod
         def concat(cls, c1, c2, op):
             """
@@ -76,7 +79,7 @@ class Q:
                 First condition,
             c2: Q.C
                 Second condition,
-            c3: str
+            op: str
                 An operator.
 
             Returns
@@ -94,10 +97,16 @@ class Q:
                 return cls('', ())
 
         def __and__(self, other):
-            return Q.C.concat(self, other, 'AND')
+            if isinstance(other, Q.C):
+                return Q.C.concat(self, other, 'AND')
+            else:
+                return _Conditional(self) & other
 
         def __or__(self, other):
-            return Q.C.concat(self, other, 'OR')
+            if isinstance(other, Q.C):
+                return Q.C.concat(self, other, 'OR')
+            else:
+                return _Conditional(self) | other
 
         def __invert__(self):
             return Q.C(f"NOT ({self.clause})", self.params)
@@ -156,6 +165,25 @@ class Q:
         return Q.C(clause, params)
 
     @classmethod
+    def by(cls, gen_clause="", params=[]):
+        """
+        Utility method to create conditional function object from the clause generator and the parameters.
+
+        Parameters
+        ----------
+        gen_clause: Marker -> str
+            A function generating where clause by taking marker object.
+        params: [object]
+            Parameters used in the condition.
+
+        Returns
+        -------
+        _Conditional
+            Conditional function object.
+        """
+        return _Conditional(lambda m: Q.of(gen_clause(m), params))
+
+    @classmethod
     def eq(cls, __and=True, __key=None, **kwargs):
         """
         Creates a function which generates a condition checking a column value equals to a value.
@@ -171,8 +199,8 @@ class Q:
 
         Returns
         -------
-        Marker -> Q.C
-            A function which takes a marker and then returns a condition.
+        _Conditional
+            Conditional function object.
         """
         null_handler = lambda c: (f"{c} IS NULL", [])
         return _queries("=", __key, __and, kwargs.items(), null_handler)
@@ -190,7 +218,7 @@ class Q:
         """
         Works like `eq`, but checks a column value is one of list items using `IN` operator.
         """
-        return _queries("IN", __key, __and, [(k, vs) for k, vs in kwargs.items() if vs])
+        return _queries("IN", __key, __and, [(k, vs) for k, vs in kwargs.items()])
 
     @classmethod
     def like(cls, __and=True, __key=None, **kwargs):
@@ -255,16 +283,49 @@ def _queries(op, key, and_, column_values, null_handler=None):
             else:
                 if isinstance(val, list):
                     num = len(val)
-                    keys = key if isinstance(key, list) \
-                        else [key+i for i in range(num)] if isinstance(key, int) \
-                        else [None] * num
-                    queries.append(f"{col} {op} ({','.join([m(keys[i]) for i in range(num)])})")
-                    values += val
+                    if op == 'IN' and num == 0:
+                        # Because some RDBMS does not support boolean constants (true/false),
+                        # an expression which always returns false is used.
+                        queries.append('1 = 0')
+                    else:
+                        keys = key if isinstance(key, list) \
+                            else [key+i for i in range(num)] if isinstance(key, int) \
+                            else [None] * num
+                        queries.append(f"{col} {op} ({','.join([m(keys[i]) for i in range(num)])})")
+                        values += val
                 else:
                     queries.append(f"{col} {op} {m(key)}")
                     values.append(val)
         return Q.of(concat.join(queries), values)
-    return gen
+    return _Conditional(gen)
+
+
+class _Conditional:
+    """
+    This class wraps the function which takes a marker and returns a condition and parameters.
+
+    Instances can be composed by boolean operators.
+    """
+    def __init__(self, gen):
+        self.gen = gen
+
+    def __call__(self, marker):
+        return self.gen(marker)
+
+    def __and__(self, other):
+        def _gen(m):
+            return self(m) & other(m)
+        return _gen
+
+    def __or__(self, other):
+        def _gen(m):
+            return self(m) | other(m)
+        return _gen
+
+    def __invert__(self):
+        def _gen(m):
+            return ~(self(m))
+        return _gen
 
 
 def _escape_like(v):

@@ -369,7 +369,7 @@ class CRUDMixin:
         return cls.update_where(db, values, gen_condition, qualifier, False)
 
     @classmethod
-    def update_where(cls, db, values, gen_condition, qualifier = {}, allow_all = False):
+    def update_where(cls, db, values, gen_condition, qualifier = {}, allow_all = True):
         """
         Update records which fulfill a condition.
 
@@ -422,7 +422,7 @@ class CRUDMixin:
         return cls.delete_where(db, gen_condition)
 
     @classmethod
-    def delete_where(cls, db, gen_condition, allow_all = False):
+    def delete_where(cls, db, gen_condition, allow_all = True):
         """
         Delete records which fulfill a condition.
 
