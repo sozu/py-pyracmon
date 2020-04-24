@@ -1,7 +1,7 @@
 import sys
 import types
 from pyracmon.connection import connect, Connection
-from pyracmon.mixin import CRUDMixin, read_row
+from pyracmon.mixin import CRUDMixin, read_row, expressions
 from pyracmon.model import define_model
 from pyracmon.graph import new_graph, GraphSpec, S
 from pyracmon.query import Q
@@ -12,6 +12,7 @@ __all__ = [
     "Connection",
     "declare_models",
     "read_row",
+    "expressions",
     "graph_template",
     "graph_dict",
     "add_identifier",

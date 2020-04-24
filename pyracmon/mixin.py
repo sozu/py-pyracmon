@@ -66,27 +66,85 @@ class Expressions:
     """
     def __init__(self):
         self.__selections = []
+        self.__keys = {}
 
     def __add__(self, other):
         if isinstance(other, Selection):
             self.__selections.append(other)
+            self.__keys[other.name] = other
         elif isinstance(other, Expressions):
             self.__selections += other.__selections
+            self.__keys.update(other.__keys)
+        elif isinstance(other, str):
+            self.__selections.append(other)
+            self.__keys[other] = other
+        elif other is ():
+            self.__selections.append(other)
         else:
             raise ValueError(f"Operand of + for Expressions must be a Selection or Expressions but {type(other)} is given.")
         return self
 
     def __iadd__(self, selection):
-        if not isinstance(selection, Selection):
+        if isinstance(selection, Selection):
+            self.__selections.append(selection)
+            self.__keys[selection.name] = selection
+        elif isinstance(other, str):
+            self.__selections.append(other)
+            self.__keys[other] = other
+        elif other is ():
+            self.__selections.append(other)
+        else:
             raise ValueError(f"Operand of += for Expressions must be a Selection or Expressions object but {type(selection)} is given.")
-        self.__selections.append(selection)
         return self
 
     def __getattr__(self, key):
-        return next(filter(lambda s: s.name == key, self.__selections))
+        return self.__keys[key]
 
     def __iter__(self):
         return iter(self.__selections)
+
+    class Instance:
+        def __init__(self, exp, *args, **kwargs):
+            self.exp = exp
+            self.args = args
+            self.kwargs = kwargs
+
+        def __repr__(self):
+            args = list(self.args)
+            def _repr(s):
+                if isinstance(s, Selection):
+                    return s.__repr__()
+                elif isinstance(s, str):
+                    return self.kwargs.get(s, s)
+                elif s == ():
+                    return args.pop(0)
+            return ', '.join(map(_repr, self.exp))
+
+    def __call__(self, *args, **kwargs):
+        return Expressions.Instance(self, *args, **kwargs)
+
+    def __repr__(self):
+        return self().__repr__()
+
+
+def expressions(*exps):
+    """
+    Creates a sequence of expressions.
+
+    Parameters
+    ----------
+    exps: [Selection | str | ...]
+        Sequence of values each of which corresponds to an SQL expression.
+
+    Returns
+    -------
+    Expressions
+        Sequence of expressions.
+    """
+    exp = Expressions()
+    for x in exps:
+        exp += x
+    return exp
 
 
 class RowValues:

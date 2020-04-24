@@ -451,20 +451,38 @@ class TestExpressions:
         def f(*args):
             return list(args)
         assert f(*exp) == [a1, a2, a3]
+        assert str(exp) == "a1.c1, a1.c2, a1.c3, a2.c1, a2.c2, a2.c3, c1, c2, c3"
+
+    def test_not_column(self):
+        m1 = define_model(table1, [CRUDMixin])
+
+        a1 = m1.select("a1")
+        a2 = m1.select("a2")
+
+        exp = a1 + "b" + () + a2
+
+        assert exp.a1 == a1
+        assert exp.a2 == a2
+        assert exp.b == "b"
+        assert str(exp("xyz", b="pqr")) == "a1.c1, a1.c2, a1.c3, pqr, xyz, a2.c1, a2.c2, a2.c3"
 
     def test_reading_result(self):
         m1 = define_model(table1, [CRUDMixin])
         m2 = define_model(table2, [CRUDMixin])
 
-        exp = m1.select("a1", ["c1", "c2"]) + m2.select("a2", ["c1", "c2", "c3"])
+        exp = m1.select("a1", ["c1", "c2"]) + "b" + () + m2.select("a2", ["c1", "c2", "c3"]) + "d"
 
-        row = [1, "c2", 2, "c3", "c4", 3, 4, 5, 6]
+        row = [1, "c2", "b1", "d1", 2, "c3", "c4", "d2", 3, 4, 5, 6]
         rv = read_row(row, *exp, (), "a3", (), "a4")
 
         assert isinstance(rv.a1, m1)
         assert (rv.a1.c1, rv.a1.c2) == (1, "c2")
+        assert rv.b == "b1"
+        assert rv[2] == "d1"
         assert isinstance(rv.a2, m2)
         assert (rv.a2.c1, rv.a2.c2, rv.a2.c3) == (2, "c3", "c4")
-        assert [rv[i] for i in range(2, 6)] == [3, 4, 5, 6]
+        assert rv.d == "d2"
+        assert rv[5] == 3
         assert rv.a3 == 4
+        assert rv[7] == 5
         assert rv.a4 == 6
