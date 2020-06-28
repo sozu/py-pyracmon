@@ -315,17 +315,17 @@ class _Conditional:
     def __and__(self, other):
         def _gen(m):
             return self(m) & other(m)
-        return _gen
+        return _Conditional(_gen)
 
     def __or__(self, other):
         def _gen(m):
             return self(m) | other(m)
-        return _gen
+        return _Conditional(_gen)
 
     def __invert__(self):
         def _gen(m):
             return ~(self(m))
-        return _gen
+        return _Conditional(_gen)
 
 
 def _escape_like(v):

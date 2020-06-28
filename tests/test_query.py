@@ -529,4 +529,11 @@ class TestConditional:
         c = c2 | c1
         assert where(c(m)) == ("WHERE (b = %s) OR (a = %s)", [3, 2])
 
+    def test_many(self):
+        m = PyformatMarker()
+        c1 = Q.eq(a = 2)
+        c2 = Q.of("b = %s", 3)
+        c3 = Q.in_(c = [1, 2, 3])
+        c = c1 & c2 & c3
+        assert where(c(m)) == ("WHERE ((a = %s) AND (b = %s)) AND (c IN (%s,%s,%s))", [2, 3, 1, 2, 3])
 
