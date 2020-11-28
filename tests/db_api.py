@@ -2,10 +2,10 @@ from pyracmon.query import QueryHelper
 
 
 class PseudoAPI:
-    def __init__(self):
+    def __init__(self, paramstyle="qmark"):
         self.apilevel = '1.0'
         self.threadsafety = 1
-        self.paramstyle = 'qmark'
+        self.paramstyle = paramstyle
 
     def connect(self, **kwargs):
         return PseudoConnection(self)
