@@ -1,5 +1,6 @@
 from functools import reduce
 from .sql import Sql
+from .marker import Marker
 
 
 class Q:
@@ -52,7 +53,7 @@ class Q:
         def __init__(self, value):
             self.value = value
 
-        def __call__(self, clause, convert=None):
+        def __call__(self, expression, convert=None):
             """
             Craetes conditional object composed of given clause and the attribute value as parameters.
 
@@ -69,10 +70,10 @@ class Q:
             Conditional
                 Conditional object.
             """
-            clause = clause if isinstance(clause, str) else clause(self.value)
+            expression = expression if isinstance(expression, str) else expression(self.value)
             params = convert(self.value) if convert else [self.value]
 
-            return Conditional(clause, params if isinstance(params, list) else [params])
+            return Conditional(expression, params if isinstance(params, list) else [params])
 
         @property
         def all(self):
@@ -93,8 +94,8 @@ class Q:
             super().__init__(value)
             self._and = and_
 
-        def __call__(self, clause, convert=None):
-            conds = [Q.Attribute(v)(clause, convert) for v in self.value]
+        def __call__(self, expression, convert=None):
+            conds = [Q.Attribute(v)(expression, convert) for v in self.value]
             return Conditional.all(conds) if self._and else Conditional.any(conds)
 
         def __getattr__(self, key):
@@ -105,7 +106,7 @@ class Q:
             return invoke
 
     class NoAttribute:
-        def __call__(self, clause, holder=lambda x:x):
+        def __call__(self, expression, holder=lambda x:x):
             return Conditional()
 
         @property
@@ -132,14 +133,14 @@ class Q:
             return Q.NoAttribute()
 
     @classmethod
-    def of(cls, clause="", params=[]):
+    def of(cls, expression="", params=[]):
         """
-        Utility method to create condition object directly from where clause and the parameters.
+        Utility method to create condition object directly from where expression and the parameters.
 
         Parameters
         ----------
-        clause: str
-            Condition clause.
+        expression: str
+            Condition expression.
         params: [object]
             Parameters used in the condition.
 
@@ -148,7 +149,13 @@ class Q:
         Conditional
             Conditional object.
         """
-        return Conditional(clause, params)
+        if isinstance(params, list):
+            pass
+        elif isinstance(params, tuple):
+            params = list(params)
+        else:
+            params = [params]
+        return Conditional(expression, params)
 
     @classmethod
     def eq(cls, __alias=None, __and=True, **kwargs):
@@ -280,12 +287,18 @@ def _conditional(op, and_, column_values, gen=None, alias=None):
     return cond
 
 
-class Conditional:
+class Expression:
+    def __init__(self, expression, params):
+        self.expression = expression
+        self.params = params
+
+
+class Conditional(Expression):
     """
-    Represents a single condition composed of a clause and parameters used for place holders in the clause.
+    Represents a single condition composed of a expression and parameters used for place holders in the expression.
 
     Parameters must be a list where the index of each parameter matches the index of place holder for it.
-    The clause accepts only the automatic numbering template parameter, that is `$_`.
+    The expression accepts only the automatic numbering template parameter, that is `$_`.
     """
     @classmethod
     def all(cls, conditionals):
@@ -321,77 +334,64 @@ class Conditional:
         """
         return reduce(lambda acc, c: acc | c, conditionals, Conditional())
 
-    def __init__(self, clause="", params=None):
-        self.clause = clause
-        self.params = list(params or [])
+    def __init__(self, expression="", params=None):
+        super().__init__(expression, params or [])
 
     def __repr__(self):
-        return f"Condition: '{self.clause}' -- {self.params}"
+        return f"Condition: '{self.expression}' -- {self.params}"
 
     def __call__(self, marker):
         """
         Deprecated.
         """
-        return self
+        c, p = Sql(marker, self.expression).render(*self.params)
+        if not isinstance(p, list):
+            raise ValueError(f"Only list style marker is available.")
+        return Conditional(c, p)
 
     def __and__(self, other):
-        clause = ""
-        if self.clause and other.clause:
-            clause = f"({self.clause}) AND ({other.clause})"
-        elif self.clause:
-            clause = self.clause
-        elif other.clause:
-            clause = other.clause
+        expression = ""
+        if self.expression and other.expression:
+            expression = f"({self.expression}) AND ({other.expression})"
+        elif self.expression:
+            expression = self.expression
+        elif other.expression:
+            expression = other.expression
 
-        return Conditional(clause, self.params + other.params)
+        return Conditional(expression, self.params + other.params)
 
     def __or__(self, other):
-        clause = ""
-        if self.clause and other.clause:
-            clause = f"({self.clause}) OR ({other.clause})"
-        elif self.clause:
-            clause = self.clause
-        elif other.clause:
-            clause = other.clause
+        expression = ""
+        if self.expression and other.expression:
+            expression = f"({self.expression}) OR ({other.expression})"
+        elif self.expression:
+            expression = self.expression
+        elif other.expression:
+            expression = other.expression
 
-        return Conditional(clause, self.params + other.params)
+        return Conditional(expression, self.params + other.params)
 
     def __invert__(self):
-        if self.clause:
-            return Conditional(f"NOT ({self.clause})", self.params)
+        if self.expression:
+            return Conditional(f"NOT ({self.expression})", self.params)
         else:
             return Conditional(f"1 = 0", [])
 
 
-class _Conditional:
-    """
-    This class wraps the function which takes a marker and returns a condition and parameters.
-
-    Instances can be composed by boolean operators.
-    """
-    def __init__(self, gen):
-        self.gen = gen
-
-    def __call__(self, marker):
-        return self.gen(marker)
-
-    def __and__(self, other):
-        def _gen(m):
-            return self(m) & other(m)
-        return _Conditional(_gen)
-
-    def __or__(self, other):
-        def _gen(m):
-            return self(m) | other(m)
-        return _Conditional(_gen)
-
-    def __invert__(self):
-        def _gen(m):
-            return ~(self(m))
-        return _Conditional(_gen)
-
-
 def escape_like(v):
+    """
+    Escape characters for the use in `LIKE` condition.
+
+    Parameters
+    ----------
+    v: str
+        A string.
+
+    Returns
+    -------
+    str
+        Escaped string.
+    """
     def esc(c):
         if c == "\\":
             return r"\\\\"
@@ -410,15 +410,17 @@ def where(condition):
 
     Parameters
     ----------
-    condition: Q.C
-        A condition built by `Q` and concatenated with operators.
+    condition: Conditional
+        Conditional object.
 
     Returns
     -------
     str
         A where clause starting from `WHERE` or empty string if the condition is empty.
+    [object]
+        Parameters for place holders in where clause.
     """
-    return ('', []) if condition.clause == '' else (f'WHERE {condition.clause}', list(condition.params))
+    return ('', []) if condition.expression == '' else (f'WHERE {condition.expression}', condition.params)
 
 
 def order_by(columns):
@@ -440,14 +442,14 @@ def order_by(columns):
     return '' if len(columns) == 0 else f"ORDER BY {', '.join(map(col, columns.items()))}"
 
 
-def ranged_by(marker, limit = None, offset = None):
+def ranged_by(limit=None, offset=None):
     """
     Generates LIMIT and OFFSET clause using marker.
 
     Parameters
     ----------
     limit: int
-        Limit value or `None`.
+        Limit value or `None`. 
     offset: int
         OFfset value or `None`.
 
@@ -455,15 +457,80 @@ def ranged_by(marker, limit = None, offset = None):
     -------
     str
         LIMIT and OFFSET clause.
+    [object]
+        Parameters for place holders in LIMIT and OFFSET clause.
     """
     clause, params = [], []
+
     if limit is not None:
-        clause.append(f"LIMIT {marker()}")
+        clause.append("LIMIT $_")
         params.append(limit)
+
     if offset is not None:
-        clause.append(f"OFFSET {marker()}")
+        clause.append("OFFSET $_")
         params.append(offset)
-    return ' '.join(clause), params
+
+    return ' '.join(clause) if clause else '', params
+
+
+def holders(length_or_keys, qualifier=None):
+    """
+    Generates partial query string containing place holders separated by comma.
+
+    Parameters
+    ----------
+    length_or_keys: int | [str]
+        The number of place holders or keys assigned to them.
+    qualifier: {int: str -> str}
+        Mapping from indexes to functions. Each function converts place holder string at paired index.
+
+    Returns
+    -------
+    str
+        Query string.
+    """
+    if isinstance(length_or_keys, int):
+        hs = ["${_}"] * length_or_keys
+    else:
+        def key(k):
+            if isinstance(k, int):
+                return f"${{_{k}}}"
+            elif k:
+                return f"${{{k}}}"
+            else:
+                return "${_}"
+        hs = [key(k) for k in length_or_keys]
+
+    if qualifier:
+        hs = [qualifier.get(i, _noop)(h) for i, h in enumerate(hs)]
+
+    return ', '.join(hs)
+
+
+def values(length_or_key_gen, rows, qualifier=None):
+    """
+    Generates partial query string for `VALUES` clause in insertion query.
+
+    Parameters
+    ----------
+    length_or_key_gen: int | [int -> str]
+        The number of place holders or functions which takes a row index and returns a key.
+    rows: int
+        The number of rows to insert.
+    qualifier: {int: str -> str}
+        Mapping from indexes to functions. Each function converts place holder string at paired index.
+
+    Returns
+    -------
+    str
+        Query string.
+    """
+    if isinstance(length_or_key_gen, int):
+        lok = (lambda i: length_or_key_gen)
+    else:
+        lok = (lambda i: [g(i) for g in length_or_key_gen])
+
+    return ', '.join([f"({holders(lok(i), qualifier)})" for i in range(rows)])
 
 
 class QueryHelper:
@@ -472,83 +539,32 @@ class QueryHelper:
 
     The instance can be obtained via `helper` attribute in `pyracmon.connection.Connection`.
     """
-    def __init__(self, api):
+    def __init__(self, api, config):
         self.api = api
+        self.config = config
 
     def marker(self):
         """
-        Create new marker.
-
-        Returns
-        -------
-        Marker
-            Created marker.
+        Deprecated. Don't create marker.
         """
-        return _marker_of(self.api.paramstyle)
+        # TODO read paramstyle from config.
+        return Marker.of(self.api.paramstyle)
 
     def holders(self, keys, qualifier = None, start = 0, marker = None):
         """
-        Generates partial query string containing place holder markers with comma.
-
-        >>> # when db.api.paramstyle == "format"
-        >>> db.helper.holders(5)
-        '%s, %s, %s, %s, %s'
-
-        >>> # when db.api.paramstyle == "numeric"
-        >>> db.helper.holders(5, start=3)
-        ':3, :4, :5, :6, :7'
-
-        >>> # when db.api.paramstyle == "named"
-        >>> db.helper.holders(['a', 'b', 'c', 'd', 'e'])
-        ':a, :b, :c, :d, :e'
-
-        Parameters
-        ----------
-        keys: int / [str]
-            The number of holders / Keys of holders.
-        qualifier: {int: str -> str}
-            Functions for each index converting the marker into another expression.
-        start: int
-            First index to calculate integral marker parameter.
-        marker: Marker
-            A marker object used in this method. If `None`, new marker instance is created and used.
-
-        Returns
-        -------
-        str
-            Generated string.
+        Deprecated. Use global `holders` instead.
         """
-        key_map = dict([(i, start + i + 1) for i in range(0, keys)]) if isinstance(keys, int) \
-            else dict([(i, k) for i, k in enumerate(keys)])
-        qualifier = qualifier or {}
         m = marker or self.marker()
-        return ', '.join([qualifier.get(i, _noop)(m(key_map[i])) for i in range(0, len(key_map))])
+        qualifier = qualifier or {}
+
+        if isinstance(keys, int):
+            return ', '.join([qualifier.get(i, _noop)(m(i + start)) for i in range(keys)])
+        else:
+            return ', '.join([qualifier.get(i, _noop)(m(k)) for i, k in enumerate(keys)])
 
     def values(self, keys, rows, qualifier = None, start = 0, marker = None):
         """
-        Generates partial query string corresponding `VALUES` clause in insertion query.
-
-        >>> # when db.api.paramstyle == "format"
-        >>> db.helper.values(5, 3)
-        '(%s, %s, %s, %s, %s), (%s, %s, %s, %s, %s), (%s, %s, %s, %s, %s)'
-
-        Parameters
-        ----------
-        keys: int / [str]
-            The number of holders / Keys of holders.
-        rows: int
-            The number of rows to insert.
-        qualifier: {int: str -> str}
-            Functions for each index converting the marker into another expression.
-        start: int
-            First index to calculate integral marker parameter.
-        marker: Marker
-            A marker object used in this method. If `None`, new marker instance is created and used.
-
-        Returns
-        -------
-        str
-            Generated string.
+        Deprecated. Use global `values` instead.
         """
         num = keys if isinstance(keys, int) else len(keys)
         m = marker or self.marker()

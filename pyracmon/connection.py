@@ -1,4 +1,7 @@
-from pyracmon.query import QueryHelper
+from .query import QueryHelper
+from .sql import Sql
+from .marker import Marker
+from .context import ConnectionContext
 
 
 def connect(api, *args, **kwargs):
@@ -50,4 +53,44 @@ class Connection:
 
     @property
     def helper(self):
-        return QueryHelper(self.api)
+        return QueryHelper(self.api, None)
+
+    def stmt(self, context=None):
+        return Statement(self, context)
+
+
+class Statement:
+    """
+    Statement object executes a query on provided configuration.
+    """
+    def __init__(self, conn, context):
+        self.conn = conn
+        self.context = context
+
+    def execute(self, sql, *args, **kwargs):
+        """
+        Executes a query and returns a cursor object used for the execution.
+
+        Parameters
+        ----------
+        sql: str
+            SQL template.
+        args: [object]
+            Indexed parameters in the SQL.
+        kwargs: {str: object}
+            Keyword parameters in the SQL.
+
+        Returns
+        -------
+        Cursor
+            Cursor object which has been used for the query execution.
+        """
+        sql = Sql(Marker.of(self.conn.api.paramstyle), sql)
+
+        sql, params = sql.render(*args, **kwargs)
+
+        c = self.conn.cursor()
+
+        c.execute(sql, params)
+
+        return c

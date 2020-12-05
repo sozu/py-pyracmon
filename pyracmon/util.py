@@ -1,31 +1,18 @@
-from functools import reduce
-from collections import OrderedDict
+def key_to_index(values, ordered_keys):
+    """
+    Generates a dictionary whose values are same as given dictionary but each key is an index of original key in the ordered key list.
 
-def split_dict(d):
-    def add(acc, kv):
-        acc[0].append(kv[0])
-        acc[1].append(kv[1])
-        return acc
-    return reduce(add, d.items(), ([], []))
-
-
-def index_qualifier(qualifier, ordered_names):
+    Parameters
+    ----------
+    values: {(str|int): object}
+        A dictionary.
+    ordered_keys: [str]
+        Ordered key list. If some original keys are not contained in this list, `ValueError` raises.
+    """
     def index(k):
         if isinstance(k, int):
             return k
         else:
-            return ordered_names.index(k)
+            return ordered_keys.index(k)
 
-    return dict([(index(k), q) for k, q in qualifier.items()])
-
-
-def model_values(cls, values, excludes_pk=False):
-    if isinstance(values, (dict, OrderedDict)):
-        if excludes_pk:
-            pks = {c.name for c in cls.columns if c.pk}
-            values = {k:v for k,v in values.items() if k not in pks}
-        return values
-    elif isinstance(values, cls):
-        return OrderedDict([(cv[0].name, cv[1]) for cv in values if not excludes_pk or not cv[0].pk])
-    else:
-        raise TypeError(f"Values to insert or update must be a dictionary or model.")
+    return {index(k):v for k, v in values.items()}

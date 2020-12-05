@@ -20,8 +20,8 @@ class Sql:
             else:
                 return self.marker(key)
 
-    def __init__(self, api, template):
-        self.api = api
+    def __init__(self, marker, template):
+        self.marker = marker
         self.template = template
 
     def render(self, *args, **kwargs):
@@ -40,10 +40,10 @@ class Sql:
         object
             Values available as parameters of the SQL.
         """
-        m = Marker.of(self.api.paramstyle)
+        self.marker.reset()
 
-        sub = Sql.Substitute(m)
+        sub = Sql.Substitute(self.marker)
 
-        return Template(self.template).substitute(sub), m.params(*args, **kwargs)
+        return Template(self.template).substitute(sub), self.marker.params(*args, **kwargs)
 
 

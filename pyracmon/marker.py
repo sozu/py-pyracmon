@@ -82,8 +82,8 @@ class Marker:
 
 
 class ListMarker(Marker):
-    def __init__(self):
-        self.index = 0
+    def __init__(self, start=0):
+        self.index = start
         self.param_keys = []
 
     def render(self):
@@ -117,8 +117,8 @@ class ListMarker(Marker):
 
 
 class DictMarker(Marker):
-    def __init__(self):
-        self.index = 0
+    def __init__(self, start=0):
+        self.index = start
         self.param_keys = {}
 
     def render(self, key):
