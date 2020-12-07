@@ -1,3 +1,9 @@
+DROP MATERIALIZED VIEW IF EXISTS mv2;
+DROP TABLE IF EXISTS types;
+DROP TYPE IF EXISTS t_record;
+DROP TYPE IF EXISTS t_enum;
+DROP MATERIALIZED VIEW IF EXISTS mv1;
+DROP VIEW IF EXISTS v1;
 DROP TABLE IF EXISTS t4;
 DROP TABLE IF EXISTS t3;
 DROP TABLE IF EXISTS t2;
@@ -37,4 +43,49 @@ CREATE TABLE t4 (
     c43 integer NOT NULL,
     FOREIGN KEY (c42, c43) REFERENCES t2 (c21, c22) ON DELETE CASCADE,
     PRIMARY KEY (c41, c42, c43)
-)
+);
+
+CREATE VIEW v1 AS
+    SELECT
+        t1.c11, t1.c12, t3.c31, t3.c32
+    FROM 
+        t1
+        INNER JOIN t3 ON t1.c11 = t3.c31;
+
+COMMENT ON VIEW v1 IS 'comment of v1';
+COMMENT ON COLUMN v1.c11 IS 'comment of c11 in v1';
+
+CREATE MATERIALIZED VIEW mv1 AS
+    SELECT
+        t1.c11, t1.c12, t3.c31, t3.c32
+    FROM 
+        t1
+        INNER JOIN t3 ON t1.c11 = t3.c31;
+
+COMMENT ON MATERIALIZED VIEW mv1 IS 'comment of mv1';
+COMMENT ON COLUMN mv1.c11 IS 'comment of c11 in mv1';
+
+CREATE TYPE t_enum AS ENUM ('a', 'b');
+CREATE TYPE t_record AS (
+    r1 integer,
+    r2 integer
+);
+
+CREATE TABLE types (
+    bool_ boolean,
+    double_ real,
+    int_ integer,
+    string_ text,
+    bytes_ bytea,
+    date_ date,
+    datetime_ timestamp with time zone,
+    time_ time,
+    delta_ interval,
+    uuid_ uuid,
+    enum_ t_enum,
+    record_ t_record,
+    array_ integer[],
+    deeparray_ integer[][]
+);
+
+CREATE MATERIALIZED VIEW mv2 AS SELECT * FROM types;

@@ -1,5 +1,5 @@
 from functools import reduce
-from pyracmon.util import split_dict, index_qualifier, model_values
+from pyracmon.util import key_to_index
 
 class MultiInsertMixin:
     """
@@ -32,7 +32,7 @@ class MultiInsertMixin:
         dict_rows = [model_values(cls, r) for r in rows]
 
         col_names = list(cls._check_columns(dict_rows[0]))
-        qualifier = index_qualifier(qualifier, col_names)
+        qualifier = key_to_index(qualifier, col_names)
 
         c = db.cursor()
         remainders = dict_rows

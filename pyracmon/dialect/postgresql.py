@@ -5,16 +5,36 @@ from uuid import UUID
 from itertools import groupby
 from pyracmon.model import Table, Column
 from pyracmon.dialect.shared import MultiInsertMixin
+from pyracmon.query import Q, where, holders
+
 
 SequencePattern = re.compile(r"nextval\(\'([a-zA-Z0-9_]+)\'(\:\:regclass)?\)")
 
-def read_schema(db, excludes = [], includes = []):
-    c = db.cursor()
 
-    ex_cond = "" if len(excludes) == 0 else f"AND c.table_name NOT IN ({db.helper.holders(len(excludes))})"
-    in_cond = "" if len(includes) == 0 else f"AND c.table_name IN ({db.helper.holders(len(includes), start = len(excludes))})"
+def read_schema(db, excludes=None, includes=None):
+    """
+    Collect tables in current database.
 
-    c.execute(f"""\
+    Parameters
+    ----------
+    excludes: [str]
+        Excluding table names.
+    includes: [str]
+        Including table names. If not specified, all tables are collected.
+
+    Returns
+    -------
+    [Table]
+        Tables.
+    """
+    q = Q(excludes = excludes, includes = includes)
+
+    cond = Q.of("c.table_catalog = current_catalog") & Q.eq("c", table_schema="public") & Q.in_("t", table_type=["BASE TABLE", "VIEW"]) \
+        & q.excludes.not_in("c.table_name") & q.includes.in_("c.table_name")
+
+    w, params = where(cond)
+
+    cursor = db.stmt().execute(f"""\
         SELECT
             c.table_name, c.column_name, c.data_type, c.udt_name,
             e.data_type, e.udt_name, k.constraint_type, c.column_default, c.ordinal_position
@@ -35,64 +55,96 @@ def read_schema(db, excludes = [], includes = []):
             LEFT JOIN information_schema.element_types AS e
                 ON ((c.table_catalog, c.table_schema, c.table_name, 'TABLE', c.dtd_identifier) =
                     (e.object_catalog, e.object_schema, e.object_name, e.object_type, e.collection_type_identifier))
-        WHERE
-            c.table_schema = 'public'
-            AND t.table_type = 'BASE TABLE'
-            {ex_cond}
-            {in_cond}
+        {w}
         ORDER BY c.table_name ASC, c.ordinal_position ASC
-        """, excludes + includes)
+        """, *params)
+
+    map_types = db.context.config.type_mapping or _map_types
 
     def column_of(n, t, udt, et, eudt, constraint, default, pos):
-        nonlocal column_positions
         m = SequencePattern.match(default or "")
         cs = (constraint or "").split(',')
         seq = m.group(1) if m else None
-        ptype = _map_types(t) if t != 'ARRAY' else [_map_types(et)]
+        ptype = map_types(t) if t != 'ARRAY' else [map_types(et)]
         info = (t, udt) if t != 'ARRAY' else (et, eudt)
         return Column(n, ptype, info, 'PRIMARY KEY' in cs, 'FOREIGN KEY' in cs, seq)
 
     tables = []
     column_positions = {}
 
-    for t, cols in groupby(c.fetchall(), lambda row: row[0]):
+    for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
         cols = list(cols)
         columns = [column_of(*c[1:]) for c in cols]
         tables.append(Table(t, columns))
         column_positions[t] = {c[1]:c[-1] for c in cols}
 
+    cursor.close()
+
+    # Materialized views
+    cond = Q.eq("c", relkind = "m") & Q.ge("a", attnum = 1) \
+        & q.excludes.not_in("c.relname") & q.includes.in_("c.relname")
+
+    w, params = where(cond)
+
+    cursor = db.stmt().execute(f"""\
+        SELECT
+            c.relname, a.attname, t.typname, et.typname, a.attnum
+        FROM
+            pg_class AS c
+            INNER JOIN pg_attribute AS a ON c.oid = a.attrelid
+            INNER JOIN pg_type AS t ON a.atttypid = t.oid
+            LEFT JOIN pg_type AS et ON t.typelem = et.oid
+        {w}
+        ORDER BY
+            c.oid ASC, a.attnum ASC
+        """, *params)
+
+    def mv_column_of(n, udt, eudt, pos):
+        ptype = map_types(_map_alternates(udt)) if eudt is None else [map_types(_map_alternates(eudt))]
+        info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
+        return Column(n, ptype, info, False, False, None)
+
+    for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
+        cols = list(cols)
+        columns = [mv_column_of(*c[1:]) for c in cols]
+        tables.append(Table(t, columns))
+        column_positions[t] = {c[1]:c[-1] for c in cols}
+
+    cursor.close()
+
     if len(tables) == 0:
         return tables
 
-    c.execute(f"""\
+    cursor = db.stmt().execute(f"""\
         SELECT
             relname, oid
         FROM
             pg_class
         WHERE
-            relname IN ({db.helper.holders(len(tables))})
-        """, [t.name for t in tables])
+            relname IN ({holders(len(tables))})
+        """, *[t.name for t in tables])
 
     table_oids = {}
-    for n, oid in c.fetchall():
+    for n, oid in cursor.fetchall():
         table_oids[n] = oid
 
     for t in tables:
-        c.execute(f"SELECT col_description({db.helper.marker()()}, 0)", [table_oids[t.name]])
-        t.comment = c.fetchone()[0] or ""
+        cc = db.stmt().execute(f"SELECT col_description($_, 0)", *[table_oids[t.name]])
+        t.comment = cc.fetchone()[0] or ""
 
         for i, col in enumerate(t.columns):
             m = db.helper.marker()
-            c.execute(f"SELECT col_description({m()}, {m()})", [table_oids[t.name], column_positions[t.name][col.name]])
-            col.comment = c.fetchone()[0] or ""
+            cc = db.stmt().execute(f"SELECT col_description($_, $_)", *[table_oids[t.name], column_positions[t.name][col.name]])
+            col.comment = cc.fetchone()[0] or ""
 
-    c.close()
+        cc.close()
+
+    cursor.close()
 
     return tables
 
 
 def _map_types(t):
-    # TODO Actually, this mapping depends on connection module.
     if t == "boolean":
         return bool
     elif t == "real" or t == "double precision":
@@ -109,7 +161,7 @@ def _map_types(t):
         return date
     elif t.startswith("timestamp "):
         return datetime
-    elif t.startswith("time "):
+    elif t == "time" or t.startswith("time "):
         return time
     elif t == "interval":
         return timedelta
@@ -117,6 +169,33 @@ def _map_types(t):
         return UUID
     else:
         return object
+
+
+def _map_alternates(n):
+    if n == "int2":
+        return "smallint"
+    elif n == "int" or n == "int4":
+        return "integer"
+    elif n == "int8":
+        return "bigint"
+    elif n == "float4":
+        return "real"
+    elif n == "float8":
+        return "double precision"
+    elif n == "decimal":
+        return "numeric"
+    elif n == "bool":
+        return "boolean"
+    elif n == "char":
+        return "character"
+    elif n == "varchar":
+        return "character varying"
+    elif n == "timetz":
+        return "time with time zone"
+    elif n == "timestamptz":
+        return "timestamp with time zone"
+    else:
+        return n
 
 
 class PostgreSQLMixin(MultiInsertMixin):

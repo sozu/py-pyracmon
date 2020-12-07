@@ -40,6 +40,15 @@ class TestDefineModel:
 
         assert m.name == "t1"
         assert [c.name for c in m.columns] == ["c1", "c2", "c3"]
+        assert m.table == table1
+        assert m.columns == table1.columns
+        assert m.c1 is table1.columns[0]
+        assert m.c2 is table1.columns[1]
+        assert m.c3 is table1.columns[2]
+
+        v = m()
+        assert not hasattr(v, "name")
+        assert not hasattr(v, "c1")
 
     def test_mixins(self):
         m = define_model(table1, [A, B])
@@ -60,6 +69,14 @@ class TestModelInstance:
         assert v.c3 == "abc"
         assert not hasattr(v, "c2")
         assert list(v) == [(table1.columns[0], 1), (table1.columns[2], "abc")]
+
+    def test_get_item(self):
+        m = define_model(table1)
+        v = m(c1 = 1, c3 = "abc")
+
+        assert v['c1'] == 1
+        assert v['c3'] == "abc"
+        assert 'c2' not in v
 
     def test_set(self):
         m = define_model(table1)

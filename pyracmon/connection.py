@@ -1,3 +1,4 @@
+from uuid import uuid4
 from .query import QueryHelper
 from .sql import Sql
 from .marker import Marker
@@ -20,6 +21,7 @@ def connect(api, *args, **kwargs):
     Connection
         Wrapper of DB-API 2.0 connection.
     """
+    # TODO inject context factory for multiple connections
     return Connection(api, api.connect(*args, **kwargs))
 
 
@@ -30,8 +32,10 @@ class Connection:
     Every instance works as the proxy object to original connection, therefore any attribute in it is still available.
     """
     def __init__(self, api, conn):
+        self.identifier = uuid4()
         self.api = api
         self.conn = conn
+        self.context_factory = None
 
     def __getattr__(self, name):
         return getattr(self.conn, name)
@@ -51,12 +55,23 @@ class Connection:
                 self.conn.commit()
             self.conn.close()
 
+    def __del__(self):
+        ConnectionContext.reset(self.identifier)
+
     @property
     def helper(self):
         return QueryHelper(self.api, None)
 
+    @property
+    def context(self):
+        return ConnectionContext.get(self.identifier)
+
+    def use(self, factory):
+        self.context_factory = factory
+        return self
+
     def stmt(self, context=None):
-        return Statement(self, context)
+        return Statement(self, context or self.context)
 
 
 class Statement:
@@ -85,12 +100,12 @@ class Statement:
         Cursor
             Cursor object which has been used for the query execution.
         """
-        sql = Sql(Marker.of(self.conn.api.paramstyle), sql)
+        paramstyle = self.context.config.paramstyle or self.conn.api.paramstyle
+
+        sql = Sql(Marker.of(paramstyle), sql)
 
         sql, params = sql.render(*args, **kwargs)
 
         c = self.conn.cursor()
 
-        c.execute(sql, params)
-
-        return c
+        return self.context.execute(c, sql, params)

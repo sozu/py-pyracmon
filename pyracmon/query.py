@@ -207,6 +207,19 @@ class Q:
         return _conditional("IN", __and, kwargs, in_list, __alias)
 
     @classmethod
+    def not_in(cls, __alias=None, __and=True, **kwargs):
+        """
+        Works like `eq`, but checks a column value is one of list items using `NOT IN` operator.
+        """
+        def in_list(col, val):
+            if len(val) == 0:
+                return "", []
+            else:
+                holder = ', '.join(['$_'] * len(val))
+                return f"{col} NOT IN ({holder})", val
+        return _conditional("NOT IN", __and, kwargs, in_list, __alias)
+
+    @classmethod
     def match(cls, __alias=None, __and=True, **kwargs):
         """
         Works like `eq`, but checks a column value matches a string escaped for `LIKE` operator.

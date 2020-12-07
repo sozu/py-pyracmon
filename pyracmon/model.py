@@ -2,7 +2,7 @@ from collections import OrderedDict
 
 
 class Column:
-    def __init__(self, name, ptype, type_info, pk, fk, incremental, comment = ""):
+    def __init__(self, name, ptype, type_info, pk, fk, incremental, comment=""):
         """
         Create a column schema.
 
@@ -37,7 +37,7 @@ class Table:
         self.comment = ""
 
 
-def define_model(table, mixins = []):
+def define_model(table_, mixins=[]):
     """
     Create a model type representing the table.
 
@@ -45,7 +45,7 @@ def define_model(table, mixins = []):
 
     Parameters
     ----------
-    table: Table
+    table_: Table
         Schema of table.
     mixins: [type]
         Types the created model type inherits.
@@ -55,14 +55,21 @@ def define_model(table, mixins = []):
     type
         Created model type.
     """
-    column_names = {c.name for c in table.columns}
+    column_names = {c.name for c in table_.columns}
 
-    class Model(type("ModelBase", tuple(mixins), {})):
-        name = table.name
-        columns = table.columns
+    class Meta(type):
+        name = table_.name
+        table = table_
+        columns = table_.columns
 
+    for c in table_.columns:
+        setattr(Meta, c.name, c)
+
+    class Base(metaclass=Meta):
+        pass
+
+    class Model(type("ModelBase", tuple([Base] + mixins), {})):
         def __init__(self, **kwargs):
-            cls = type(self)
             for k, v in kwargs.items():
                 setattr(self, k, v)
 
@@ -82,6 +89,12 @@ def define_model(table, mixins = []):
             if key not in column_names:
                 raise TypeError(f"{key} is not a column of {type(self).name}")
             object.__setattr__(self, key, value)
+
+        def __getitem__(self, key):
+            return getattr(self, key)
+
+        def __contains__(self, key):
+            return hasattr(self, key)
 
         def __eq__(self, other):
             cls = type(self)

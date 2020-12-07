@@ -226,6 +226,28 @@ class TestIn:
         assert (c.expression, c.params) == ("1 = 0", [])
 
 
+class TestNotIn:
+    def test_one(self):
+        c = Q.not_in(a = [1, 2])
+        assert (c.expression, c.params) == ("a NOT IN ($_, $_)", [1, 2])
+
+    def test_and(self):
+        c = Q.not_in(a = [1, 2], b = [3, 4])
+        assert (c.expression, c.params) == ("(a NOT IN ($_, $_)) AND (b NOT IN ($_, $_))", [1, 2, 3, 4])
+
+    def test_or(self):
+        c = Q.not_in(None, False, a = [1, 2], b = [3, 4])
+        assert (c.expression, c.params) == ("(a NOT IN ($_, $_)) OR (b NOT IN ($_, $_))", [1, 2, 3, 4])
+
+    def test_alias(self):
+        c = Q.not_in("t", a = [1, 2], b = [3, 4])
+        assert (c.expression, c.params) == ("(t.a NOT IN ($_, $_)) AND (t.b NOT IN ($_, $_))", [1, 2, 3, 4])
+
+    def test_empty(self):
+        c = Q.not_in(a = [])
+        assert (c.expression, c.params) == ("", [])
+
+
 class TestLike:
     def test_like(self):
         c = Q.like(a = "abc")
