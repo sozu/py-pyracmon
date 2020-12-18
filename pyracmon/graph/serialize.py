@@ -112,7 +112,8 @@ class NodeSerializer:
             return self.aggregator(values)
 
     def _serialization_of(self, finder, value):
-        base = finder(value)
+        # TODO Use dynamic type?
+        base = finder(type(value))
         s = reduce(lambda acc,x: partial(x, acc), ([base] if base else []) + self._serializers, as_is)
         return s(value)
 

@@ -29,6 +29,8 @@ class GraphTemplate:
                 raise ValueError(f"Properties can make parent-child relationship only when they are declared in the same template.")
             if self == another:
                 raise ValueError(f"Recursive relationship is not allowed.")
+            if isinstance(self.kind, GraphTemplate):
+                raise ValueError(f"Property for graph template can't have child.")
             p = self
             while p.parent is not None:
                 if p.parent == another:
@@ -53,13 +55,22 @@ class GraphTemplate:
         def is_compatible(self, other):
             return self.origin is other.origin
 
+        def move_template(self, dest, new_name=None):
+            new_name = new_name or self.name
+            prop = GraphTemplate.Property(dest, new_name, self.kind, self.identifier, self.entity_filter, origin=self)
+            _set_template_property(dest, prop)
+            for c in self.children:
+                cc = c.move_template(dest)
+                prop << cc
+            return prop
+
         def __lt__(self, other):
             p = self.parent
             while p is not None:
                 if p == other:
                     return True
                 p = p.parent
-            return False
+            return True if self.parent is not None and other.parent is None else False
             
         def __lshift__(self, children):
             """
@@ -75,11 +86,11 @@ class GraphTemplate:
             [Graph.Property] | Graph.Property
                 Child properties given in the argument.
             """
-            children = [children] if isinstance(children, GraphTemplate.Property) else children
-            for c in children:
+            targets = [children] if isinstance(children, GraphTemplate.Property) else children
+            for c in targets:
                 self._assert_canbe_parent(c)
-            self.template._relations += [(c, self) for c in children]
-            return children[0] if len(children) == 1 else children
+            self.template._relations += [(c, self) for c in targets]
+            return children
 
         def __rshift__(self, parent):
             """
@@ -99,6 +110,10 @@ class GraphTemplate:
             self.template._relations += [(self, parent)]
             return parent
 
+        def __rrshift__(self, children):
+            self.__lshift__(children)
+            return self
+
     def __init__(self, definitions):
         """
         Construct template with its properties.
@@ -108,29 +123,86 @@ class GraphTemplate:
         definitions: [(str, type, T -> ID, T -> bool)]
             Definitions of template properties.
         """
-        self._properties = [GraphTemplate.Property(self, n, kind, ident, ef) for n, kind, ident, ef in definitions]
+        self._properties = []
         self._relations = []
-        for p in self._properties:
-            setattr(self, p.name, p)
 
+        for d in definitions:
+            it = iter(d)
+            name, kind, ident, ef = (next(it), next(it), next(it, None), next(it, None))
 
-class P:
-    @classmethod
-    def of(cls, kind=None, identifier=None, entity_filter=None):
-        return P(kind, identifier, entity_filter)
+            if isinstance(kind, GraphTemplate):
+                prop = GraphTemplate.Property(self, name, kind, None, None)
+                _set_template_property(self, prop)
+                #for p in filter(lambda p: p.parent is None, kind._properties):
+                #    prop << p.move_template(self)
+            elif isinstance(kind, GraphTemplate.Property):
+                kind.move_template(self, name)
+            else:
+                _set_template_property(self, GraphTemplate.Property(self, name, kind, ident, ef))
 
-    def __init__(self, kind, identifier, entity_filter):
-        self.kind = kind
-        self.identifier = identifier
-        self.entity_filter = entity_filter
+    def __iter__(self):
+        return sort_properties(self._properties)
 
-    def build(self, name, template):
-        return GraphTemplate.Property(template, name, self.kind, self.identifier, self.entity_filter)
+    def __iadd__(self, another):
+        """
+        Merge this template and another template.
+        """
+        for p in another._properties:
+            prop = GraphTemplate.Property(self, p.name, p.kind, p.identifier, p.entity_filter, origin=p)
+            _set_template_property(self, prop)
 
-    def identify(self, identifier):
-        self.identifier = identifier
+        for n, p in another._relations:
+            getattr(self, n.name) >> getattr(self, p.name)
+
         return self
 
-    def accept(self, entity_filter):
-        self.entity_filter = entity_filter
-        return self
+    def __add__(self, another):
+        template = GraphTemplate([])
+        template += self
+        template += another
+
+        return template
+
+
+def _set_template_property(template, prop):
+    if hasattr(template, prop.name):
+        raise ValueError(f"Property name '{prop.name}' conflicts.'")
+    template._properties.append(prop)
+    setattr(template, prop.name, prop)
+
+
+def sort_properties(properties, parent=None):
+    names = {p.name for p in properties}
+
+    def walk(p):
+        yield p
+        for q in p.children:
+            for r in walk(q):
+                yield r
+
+    for p in filter(lambda p: p.parent is parent, properties):
+        for q in walk(p):
+            yield q
+
+
+#class P:
+#    pass
+#    @classmethod
+#    def of(cls, kind=None, identifier=None, entity_filter=None):
+#        return P(kind, identifier, entity_filter)
+#
+#    def __init__(self, kind, identifier, entity_filter):
+#        self.kind = kind
+#        self.identifier = identifier
+#        self.entity_filter = entity_filter
+#
+#    def build(self, name, template):
+#        return GraphTemplate.Property(template, name, self.kind, self.identifier, self.entity_filter)
+#
+#    def identify(self, identifier):
+#        self.identifier = identifier
+#        return self
+#
+#    def accept(self, entity_filter):
+#        self.entity_filter = entity_filter
+#        return self

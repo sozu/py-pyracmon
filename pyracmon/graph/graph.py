@@ -1,9 +1,8 @@
-from collections import OrderedDict
-from itertools import chain
-from functools import reduce
+from .identify import neverPolicy
+from .template import sort_properties, GraphTemplate
 
 
-def new_graph(template, base=None):
+def new_graph(template, *bases):
     """
     Create a graph from a template.
 
@@ -23,27 +22,8 @@ def new_graph(template, base=None):
     """
     graph = Graph(template)
 
-    if base:
-        base = base.view if isinstance(base, Graph) else base
-
-        # copy nodes whose properties exist in new graph also.
-        for c_ in base().containers.values():
-            c = graph._container_of(c_.property)
-            if c:
-                for n_ in c_.nodes:
-                    c.nodes.append(Node(n_.property, n_.entity, n_.key, n_._index))
-                c.keys = c_.keys.copy()
-
-        # create edges by reconstructing parent-child relationships between nodes.
-        for c_ in base().containers.values():
-            c = graph._container_of(c_.property)
-            if c:
-                for n, n_ in zip(c.nodes, c_.nodes):
-                    for ch in n_.children.values():
-                        cc = graph._container_of(ch.property)
-                        if cc:
-                            for cn in ch.nodes:
-                                n.add_child(cc.nodes[cn._index])
+    for b in bases:
+        graph += b
 
     return graph
 
@@ -67,12 +47,47 @@ class Graph:
     """
     def __init__(self, template):
         self.template = template
-        self.containers = OrderedDict([(p.name, NodeContainer(p)) for p in template._properties])
+        self.containers = {p.name:self._to_container(p) for p in template._properties}
         self._view = None
 
+    def _to_container(self, prop):
+        if isinstance(prop.kind, GraphTemplate):
+            return GraphNodeContainer(prop)
+        else:
+            return NodeContainer(prop)
+
     def _container_of(self, prop):
-        c = self.containers.get(prop.name, None)
-        return None if not c else c if c.property.is_compatible(prop) else None
+        cands = [c for c in self.containers.values() if c.property.is_compatible(prop)]
+        if len(cands) > 1:
+            raise ValueError(f"Container can't be determined from property '{prop.name}'.")
+        return cands[0] if cands else None
+
+    def __add__(self, another):
+        graph = Graph(self.template)
+
+        graph += self
+        graph += another
+
+        return graph
+
+    def __iadd__(self, another):
+        another = another if isinstance(another, Graph) else another()
+
+        roots_ = filter(lambda c: c.property.parent is None, another.containers.values())
+
+        def add(n, anc):
+            c = self._container_of(n.property)
+            if c:
+                c.append(n.entity, anc)
+            for ch_ in n.children.values():
+                for m in ch_.nodes:
+                    add(m, anc.copy())
+
+        for c_ in roots_:
+            for n_ in c_.nodes:
+                add(n_, {})
+
+        return self
 
     @property
     def view(self):
@@ -91,7 +106,7 @@ class Graph:
         GraphView
             The view of this graph.
         """
-        if not self._view:
+        if self._view is None:
             graph = self
             class GraphView:
                 def __call__(self):
@@ -120,116 +135,19 @@ class Graph:
         Graph
             This graph.
         """
-        props = sorted([self.containers[k].property for k in entities.keys()], reverse=True)
+        props = [p for p in self.template if p.name in entities]
 
         filtered = set()
         for p in props:
-            if p.parent is None or (p.parent.name not in entities or p.parent.name in filtered):
+            if (p.parent is None) or (p.parent.name not in entities) or (p.parent.name in filtered):
                 if p.entity_filter is None or p.entity_filter(entities[p.name]):
                     filtered.add(p.name)
 
-        keys = [p.name for p in props if p.name in filtered]
-
-        nodes = {}
-        for k in keys:
-            ns, edges = self.containers[k].append(entities[k], nodes)
-            for c, p in edges:
-                p.add_child(c)
-            nodes[k] = ns
+        ancestors = {}
+        for k in [p.name for p in props if p.name in filtered]:
+            self.containers[k].append(entities[k], ancestors)
 
         return self
-
-
-class IdentifyPolicy:
-    def __init__(self, identifier, policy):
-        self.identifier = identifier or (lambda x: None)
-        self.policy = policy
-
-    def identify(self, prop, entity, candidates, new_nodes):
-        """
-        Find identical nodes for the new entity according to the policy.
-
-        Parameters
-        ----------
-        prop: GraphTemplate.Property
-            Template property for the container.
-        entity: object
-            A value to append into the container.
-        candidates: object -> [Node]
-            Function returning nodes from a identifying key.
-        new_nodes: {str: Node}
-            Ancestor nodes in this appending session.
-
-        Returns
-        -------
-        object
-            Key of the entity.
-        [Node]
-            Identical nodes.
-        [Node]
-            Parent nodes in session where new node should be appended.
-        [(Node, Node)]
-            Edges contains existing nodes.
-        """
-        key = self.identifier(entity)
-        if key is not None:
-            # acc: ([Node], set(Node), [(Node, Node)])
-            def merge(acc, c):
-                is_identical, parents, edges = self.policy(c, new_nodes)
-                if is_identical:
-                    acc[0].append(c)
-                    for p in parents:
-                        acc[1].add(p)
-                    for e in edges:
-                        acc[2].append(e)
-                return acc
-            identicals, parents, new_edges = reduce(merge, candidates(key), ([], set(), []))
-            return key, identicals, parents, new_edges
-        else:
-            return None, [], [], []
-
-    @classmethod
-    def never(cls):
-        return IdentifyPolicy(lambda x: None, lambda c, ns: (False, [], []))
-
-    @classmethod
-    def always(cls, identifier):
-        def policy(candidate, new_nodes):
-            session_parents = new_nodes.get(candidate.property.parent.name, [])
-            return True, [], [(candidate, sp) for sp in session_parents if not sp.has_child(candidate)] 
-        return IdentifyPolicy(identifier, policy)
-
-    @classmethod
-    def hierarchical(cls, identifier):
-        def policy(candidate, new_nodes):
-            """
-            Check a node having the same key as appending node.
-
-            Returns
-            -------
-            bool
-                True if this node should be identical as the appending node in this policy.
-            [Node]
-                Nodes which should be parent of appending node but currently doesn't have.
-            [(Node, Node)]
-                Edges contains existing nodes.
-            """
-            p = candidate.property.parent
-
-            if p is None or p.name not in new_nodes:
-                # Graph root or session root node is identified just by its key.
-                return True, [], []
-            else:
-                session_parents = new_nodes.get(p.name, [])
-                # This node is identical if one of its parents exists in session parents.
-                is_identical = any(map(lambda p: p in session_parents, candidate.parents))
-                if is_identical:
-                    # Select session parents which doesn't contain this candidate.
-                    return True, [sp for sp in session_parents if not sp.has_child(candidate)], []
-                else:
-                    # No existing nodes are identical.
-                    return False, [], []
-        return IdentifyPolicy(identifier, policy)
 
 
 class _EmptyNodeView:
@@ -237,7 +155,7 @@ class _EmptyNodeView:
         self.property = prop
         self.result = result
 
-    def __call__(self):
+    def __call__(self, alt=None):
         return self.result
 
     def __iter__(self):
@@ -269,7 +187,7 @@ class _EmptyContainerView:
 
     def __getitem__(self, index):
         if isinstance(index, slice):
-            return _EmptyNodeView(self.property, index.stop)
+            return []
         else:
             raise IndexError(f"Index for container '{self.property.name}' is out of range.")
 
@@ -313,7 +231,7 @@ class NodeContainer:
         ContainerView
             The view of this graph.
         """
-        if not self._view:
+        if self._view is None:
             container = self
             class ContainerView:
                 def __bool__(self):
@@ -331,10 +249,7 @@ class NodeContainer:
                 def __getitem__(self, index):
                     """Returns a view of a node at the index."""
                     if isinstance(index, slice):
-                        if len(container.nodes) > index.start:
-                            return container.nodes[index.start].view
-                        else:
-                            return _EmptyNodeView(container.property, index.stop)
+                        return [n.view for n in container.nodes[index]]
                     else:
                         return container.nodes[index].view
                 def __getattr__(self, key):
@@ -347,7 +262,7 @@ class NodeContainer:
             self._view = ContainerView()
         return self._view
 
-    def append(self, entity, new_nodes = {}):
+    def append(self, entity, ancestors):
         """
         Add an entity to nodes if the identical node does not exists yet.
 
@@ -365,34 +280,63 @@ class NodeContainer:
         [(Node, Node)]
             Edges.
         """
-        def cand(k):
+        def get_nodes(k):
             return [self.nodes[i] for i in self.keys.get(k, [])]
 
-        key, existings, parents, new_edges = self.property.identifier.identify(
-            self.property,
-            entity,
-            cand,
-            new_nodes,
-        )
+        policy = self.property.identifier or neverPolicy()
 
-        edges = [(c, p) for c, p in new_edges]
+        key = self.property.identifier.identifier(entity) if self.property.identifier else None
 
-        if len(existings) > 0:
-            edges += sum([[(n, p) for n in existings] for p in new_nodes.get(self.property.name, [])], [])
-            for p in parents:
-                node = Node(self.property, entity, key, len(self.nodes))
-                self.nodes.append(node)
-                existings.append(node)
-                edges.append((node, p))
-            return existings, edges
-        else:
+        parents, identicals = policy.identify(self.property, [self.nodes[i] for i in self.keys.get(key, [])], ancestors)
+
+        new_nodes = identicals.copy()
+
+        for p in parents:
             index = len(self.nodes)
-            if key is not None:
-                self.keys.setdefault(key, []).append(index)
+
             node = Node(self.property, entity, key, index)
             self.nodes.append(node)
-            edges += [(node, p) for p in new_nodes.get(self.property.parent.name, [])] if self.property.parent else []
-            return [node], edges
+            if key is not None:
+                self.keys.setdefault(key, []).append(index)
+            new_nodes.append(node)
+
+            if p is not None:
+                p.add_child(node)
+
+        ancestors[self.property.name] = new_nodes
+
+
+class GraphNodeContainer(NodeContainer):
+    def append(self, entity, ancestors):
+        if not isinstance(entity, (dict, Graph)):
+            raise ValueError(f"Node of graph only accepts dict or Graph object.")
+
+        policy = self.property.identifier or neverPolicy()
+
+        parents, _ = policy.identify(self.property, [], ancestors)
+
+        for p in parents:
+            index = len(self.nodes)
+
+            graphs = []
+
+            if p is None or len(p.children[self.name].nodes) == 0:
+                g = Graph(self.property.kind)
+                node = GraphNode(self.property, g, None, index)
+                self.nodes.append(node)
+
+                if p is not None:
+                    p.add_child(node)
+
+                graphs.append(g)
+            else:
+                graphs.extend([n.entity for n in p.children[self.name].nodes])
+
+            for g in graphs:
+                if isinstance(entity, dict):
+                    g.append(**entity)
+                else:
+                    g += entity
 
 
 class Node:
@@ -408,7 +352,7 @@ class Node:
 
         @property
         def view(self):
-            if not self._view:
+            if self._view is None:
                 base = self
                 class ChildrenView:
                     def __bool__(self):
@@ -426,10 +370,7 @@ class Node:
                     def __getitem__(self, index):
                         """Returns a view of child node at the index."""
                         if isinstance(index, slice):
-                            if len(base.nodes) > index.start:
-                                return base.nodes[index.start].view
-                            else:
-                                return _EmptyNodeView(base.property, index.stop)
+                            return [n.view for n in base.nodes[index]]
                         else:
                             return base.nodes[index].view
                     def __getattr__(self, key):
@@ -441,6 +382,9 @@ class Node:
                             raise KeyError(f"Graph property '{base.property.name}' does not have a child property '{key}'.")
                 self._view = ChildrenView()
             return self._view
+
+        def has(self, node):
+            return node in self.keys
 
         def append(self, node):
             if node not in self.keys:
@@ -476,10 +420,10 @@ class Node:
         NodeView
             The view of this node.
         """
-        if not self._view:
+        if self._view is None:
             node = self
             class NodeView:
-                def __call__(self):
+                def __call__(self, alt=None):
                     """Returns an entity of this node."""
                     return node.entity
                 def __getattr__(self, name):
@@ -492,11 +436,28 @@ class Node:
         return self._view
 
     def add_child(self, child):
-        self.children.setdefault(child.property.name, Node.Children(child.property)).append(child)
+        if child.property.template != self.property.template:
+            raise ValueError(f"Nodes from difference graph template can't be associated.")
+        self.children[child.property.name].append(child)
         child.parents.add(self)
+        return self
 
     def has_child(self, child):
-        if child.property.name in self.children:
+        if child.property.template != self.property.template:
+            return False
+        elif child.property.name in self.children:
             return child in self.children[child.property.name].keys
         else:
             return False
+
+
+class GraphNode(Node):
+    @property
+    def view(self):
+        return self.entity.view
+
+    def add_child(self, child):
+        raise TypeError(f"GraphNode does not have child.")
+
+    def has_child(self, child):
+        return False

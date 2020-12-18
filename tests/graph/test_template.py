@@ -1,108 +1,234 @@
 import pytest
-from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import *
+from pyracmon.graph.identify import IdentifyPolicy
 
-spec = GraphSpec()
 
-class TestGraphTemplate:
+class TestCreateGraphTemplate:
+    def test_empty(self):
+        t = GraphTemplate([])
+
+        assert t._properties == []
+        assert t._relations == []
+
+    def test_create(self):
+        ident = IdentifyPolicy(lambda x:x)
+        ef = lambda x:True
+
+        t = GraphTemplate([
+            ("a", int, ident, ef),
+            ("b", str, ident, ef),
+        ])
+
+        assert isinstance(t.a, GraphTemplate.Property)
+        assert (t.a.template, t.a.name, t.a.kind, t.a.identifier, t.a.entity_filter) \
+            == (t, "a", int, ident, ef)
+        assert isinstance(t.b, GraphTemplate.Property)
+        assert (t.b.template, t.b.name, t.b.kind, t.b.identifier, t.b.entity_filter) \
+            == (t, "b", str, ident, ef)
+
+    def test_fail_name_duplicate(self):
+        with pytest.raises(ValueError):
+            t = GraphTemplate([
+                ("b", int, None, None),
+                ("b", str, None, None),
+            ])
+
+
+class TestCopiedProperty:
+    def test_copy_property(self):
+        t = GraphTemplate([
+            ("a", int, None, None),
+            ("b", int, None, None),
+            ("c", int, None, None),
+        ])
+        t.a << t.b << t.c
+
+        u = GraphTemplate([
+            ("d", t.b),
+            ("e", int, None, None),
+            ("f", int, None, None),
+        ])
+        u.f << u.d
+        u.c << u.e
+
+        assert list(u) == [u.f, u.d, u.c, u.e]
+        assert u.d.parent is u.f
+        assert u.c.parent is u.d
+        assert u.e.parent is u.c
+
+    def test_copy_template(self):
+        t = GraphTemplate([
+            ("a", int, None, None),
+            ("b", int, None, None),
+            ("c", int, None, None),
+        ])
+        t.a << t.b << t.c
+
+        u = GraphTemplate([
+            ("d", t),
+            ("e", int, None, None),
+            ("f", int, None, None),
+        ])
+        u.f << u.d
+
+        assert list(u) == [u.e, u.f, u.d]
+        assert u.d.parent is u.f
+        assert u.e.parent is None
+
+
+class TestShift:
     def _template(self):
-        return spec.new_template(
-            a = (),
-            b = (int,),
-            c = int,
-            d = (str, len)
-        )
-
-    def test_rshift(self):
-        t = self._template()
-
-        t.a >> t.b
-        assert t._relations == [(t.a, t.b)]
-        assert t.a.parent == t.b
-        assert t.b.children == [t.a]
+        return GraphTemplate([
+            ("a", int, None, None),
+            ("b", int, None, None),
+            ("c", int, None, None),
+        ])
 
     def test_lshift(self):
         t = self._template()
+        r = t.a << t.b << t.c
 
-        t.c << t.b
-        assert t._relations == [(t.b, t.c)]
-        assert t.b.parent == t.c
-        assert t.c.children == [t.b]
+        assert r is t.c
+        assert t.a.parent is None
+        assert t.b.parent is t.a
+        assert t.c.parent is t.b
+        assert t.a.children == [t.b]
+        assert t.b.children == [t.c]
+        assert t.c.children == []
 
     def test_multi_lshift(self):
         t = self._template()
+        r = t.a << [t.b, t.c]
 
-        t.c << [t.a, t.b]
-        assert t._relations == [(t.a, t.c), (t.b, t.c)]
-        assert t.a.parent == t.c
-        assert t.b.parent == t.c
+        assert r == [t.b, t.c]
+        assert t.a.parent is None
+        assert t.b.parent is t.a
+        assert t.c.parent is t.a
+        assert t.a.children == [t.b, t.c]
+        assert t.b.children == []
+        assert t.c.children == []
+
+    def test_rshift(self):
+        t = self._template()
+        r = t.a >> t.b >> t.c
+
+        assert r is t.c
+        assert t.a.parent is t.b
+        assert t.b.parent is t.c
+        assert t.c.parent is None
+        assert t.a.children == []
+        assert t.b.children == [t.a]
+        assert t.c.children == [t.b]
+
+    def test_multi_rshift(self):
+        t = self._template()
+        r = [t.a, t.b] >> t.c
+
+        assert r is t.c
+        assert t.a.parent is t.c
+        assert t.b.parent is t.c
+        assert t.c.parent is None
+        assert t.a.children == []
+        assert t.b.children == []
         assert t.c.children == [t.a, t.b]
 
+    def test_fail_multi_parent(self):
+        t = self._template()
+        t.a >> t.b
+        with pytest.raises(ValueError):
+            t.a >> t.c
 
-class TestPropertyLessThan:
+    def test_fail_recursive(self):
+        t = self._template()
+        t.a >> t.b >> t.c
+        with pytest.raises(ValueError):
+            t.c >> t.a
+
+    def test_fail_another_template(self):
+        t1 = self._template()
+        t2 = self._template()
+        with pytest.raises(ValueError):
+            t1.a >> t2.b
+
+    def test_fail_graph_property(self):
+        t = self._template()
+        u = GraphTemplate([
+            ("t", t),
+            ("d", int, None, None),
+        ])
+        with pytest.raises(ValueError):
+            u.d >> u.t
+
+
+class TestIterProperties:
     def _template(self):
-        t = spec.new_template(
-            a = (), b = (), c = (), d = ()
-        )
-        return t
+        return GraphTemplate([
+            ("a", int, None, None),
+            ("b", int, None, None),
+            ("c", int, None, None),
+            ("d", int, None, None),
+        ])
 
-    def test_lt(self):
+    def test_iter(self):
         t = self._template()
-        t.a << t.b << t.c << t.d
+        assert list(t) == [t.a, t.b, t.c, t.d]
 
-        assert t.d < t.a
-        assert t.d < t.b
-        assert t.d < t.c
-        assert t.c < t.b
-        assert t.c < t.b
-        assert t.b < t.a
-
-    def test_unstable_lt(self):
+    def test_hierarchy1(self):
         t = self._template()
-        t.a << [t.b, t.d >> t.c]
+        t.a << t.c << t.b
+        assert list(t) == [t.a, t.c, t.b, t.d]
 
-        assert t.d < t.a
-        assert not (t.d < t.b)
-        assert t.d < t.c
-        assert t.c < t.a
-        assert not (t.c < t.b)
-        assert t.b < t.a
+    def test_hierarchy2(self):
+        t = self._template()
+        t.a << [t.c, t.b]
+        t.d << t.a
+        assert list(t) == [t.d, t.a, t.c, t.b]
 
 
-class TestMerge:
-    def test_merge(self):
-        id1 = lambda x:x*2
-        ef1 = lambda x:x%2==0
+class TestMergeTemplate:
+    def _template(self, index):
+        return GraphTemplate([
+            (f"a{index}", int, None, None),
+            (f"b{index}", int, None, None),
+            (f"c{index}", int, None, None),
+        ])
 
-        t1 = spec.new_template(
-            a = (int, id1, ef1),
-        )
-        t2 = spec.new_template(
-            t1,
-            b = str,
-        )
+    def test_iadd(self):
+        t1 = self._template(1)
+        t2 = self._template(2)
 
-        assert t2._properties == [t2.b, t2.a]
-        assert t2.a.kind is int
-        assert t2.a.identifier.identifier(5) == 10
-        assert t2.a.entity_filter(2) and not t2.a.entity_filter(3)
+        t1.a1 << [t1.b1, t1.c1]
+        t2.b2 << t2.c2
 
-    def test_merge_relation(self):
-        t1 = spec.new_template(
-            a = int,
-            b = int,
-            c = int,
-            d = int,
-        )
-        t1.a << [t1.b, t1.d >> t1.c]
+        t1 += t2
 
-        t2 = spec.new_template(
-            t1,
-            e = str,
-        )
+        t1.b1 << t1.b2
+        t1.a2 << t1.a1
 
-        assert t2._properties == [t2.e, t2.a, t2.b, t2.c, t2.d]
-        assert t2.a.parent is None
-        assert t2.b.parent is t2.a
-        assert t2.c.parent is t2.a
-        assert t2.d.parent is t2.c
+        assert list(t1) == [t1.a2, t1.a1, t1.b1, t1.b2, t1.c2, t1.c1]
+        assert t1.a1.parent == t1.a2
+        assert t1.a2.children == [t1.a1]
+        assert t1.b2.parent == t1.b1
+        assert t1.b1.children == [t1.b2]
+        assert t1.c2.parent == t1.b2
+        assert t1.b2.children == [t1.c2]
+
+    def test_add(self):
+        t1 = self._template(1)
+        t2 = self._template(2)
+
+        t1.a1 << [t1.b1, t1.c1]
+        t2.b2 << t2.c2
+
+        t = t1 + t2
+
+        t.b1 << t.b2
+        t.a2 << t.a1
+
+        assert list(t) == [t.a2, t.a1, t.b1, t.b2, t.c2, t.c1]
+        assert t.a1.parent == t.a2
+        assert t.a2.children == [t.a1]
+        assert t.b2.parent == t.b1
+        assert t.b1.children == [t.b2]
+        assert t.c2.parent == t.b2
+        assert t.b2.children == [t.c2]

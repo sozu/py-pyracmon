@@ -1,6 +1,7 @@
 from itertools import zip_longest
-from pyracmon.graph.graph import IdentifyPolicy
-from pyracmon.graph.template import P, GraphTemplate
+from functools import reduce
+from pyracmon.graph.identify import IdentifyPolicy
+from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.serialize import S, SerializationContext, NodeSerializer
 
 
@@ -28,7 +29,7 @@ class GraphSpec:
     serializers: [(type, T -> U)]
         A list of pairs of type and function which converts the entity into a serializable value.
     """
-    def __init__(self, identifiers = None, entity_filters = None, serializers = None):
+    def __init__(self, identifiers=None, entity_filters=None, serializers=None):
         self.identifiers = identifiers or []
         self.entity_filters = entity_filters or []
         self.serializers = serializers or []
@@ -39,8 +40,7 @@ class GraphSpec:
     def get_entity_filter(self, t):
         return next(filter(lambda x: issubclass(t, x[0]), self.entity_filters), (None, None))[1]
 
-    def get_serializer(self, v):
-        t = v if isinstance(v, type) else type(v)
+    def get_serializer(self, t):
         return next(filter(lambda x: issubclass(t, x[0]), self.serializers), (None, None))[1]
 
     def add_identifier(self, c, f):
@@ -85,6 +85,26 @@ class GraphSpec:
             A function which converts the entity into a serializable value.
         """
         self.serializers[0:0] = [(c, f)]
+
+    def make_identifier(f):
+        if isinstance(f, IdentifyPolicy):
+            return f
+        elif callable(f):
+            return IdentifyPolicy.hierarchical(f)
+        else:
+            return IdentifyPolicy.never()
+
+    def get_property_definition(d):
+        if d is None or isinstance(d, tuple):
+            d = iter(d or ())
+            kind = next(d, None)
+            ident = self.make_identifier(next(d, kind))
+            ef = next(d, self.get_entity_filter(kind))
+            return kind, ident, ef
+        elif isinstance(d, type):
+            return d, self.make_identifier(self.get_identifier(d)), self.get_entity_filter(d)
+        else:
+            raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
 
     def new_template(self, *bases, **template):
         """
@@ -136,15 +156,39 @@ class GraphSpec:
             else:
                 raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
 
-        template = GraphTemplate([(n, *definition(d)) for n, d in template.items()])
+        def classify(acc, d):
+            if isinstance(d[1], GraphTemplate):
+                acc[2].append(d)
+            elif isinstance(d[1], GraphTemplate.Property):
+                acc[1].append(d)
+            else:
+                acc[0].append(d)
+            return acc
+
+        new_props, other_props, other_templates = reduce(classify, template.items(), ([], [], []))
+
+        template = GraphTemplate([(n, *definition(d)) for n, d in new_props])
+
+        def assign(n, p):
+            if hasattr(template, n):
+                raise ValueError(f"Template property '{n}' conflicts.")
+            template._properties.append(p)
+            setattr(template, n, p)
+
+        for n, p in other_props:
+            assign(n, p.move_template(template, n))
+
+        for n, t in other_templates:
+            prop = GraphTemplate.Property(template, n, None, None, None)
+            assign(n, prop)
+            for p in filter(lambda p: p.parent is None, t._properties):
+                assign(p.name, p.move_template(template))
+                prop << p
 
         for t in bases:
             for p in t._properties:
-                if hasattr(template, p.name):
-                    raise ValueError(f"Template property '{p.name}' conflicts.")
                 prop = GraphTemplate.Property(template, p.name, p.kind, p.identifier, p.entity_filter, origin=p)
-                template._properties.append(prop)
-                setattr(template, p.name, prop)
+                assign(p.name, prop)
             for f, t in t._relations:
                 getattr(template, f.name) >> getattr(template, t.name)
 
