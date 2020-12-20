@@ -14,11 +14,11 @@ class GraphTemplate:
     >>> template.c << template.d
     """
     class Property:
-        def __init__(self, template, name, kind, identifier, entity_filter, origin=None):
+        def __init__(self, template, name, kind, policy, entity_filter, origin=None):
             self.template = template
             self.name = name
             self.kind = kind
-            self.identifier = identifier
+            self.policy = policy
             self.entity_filter = entity_filter
             self._origin = origin
 
@@ -57,7 +57,7 @@ class GraphTemplate:
 
         def move_template(self, dest, new_name=None):
             new_name = new_name or self.name
-            prop = GraphTemplate.Property(dest, new_name, self.kind, self.identifier, self.entity_filter, origin=self)
+            prop = GraphTemplate.Property(dest, new_name, self.kind, self.policy, self.entity_filter, origin=self)
             _set_template_property(dest, prop)
             for c in self.children:
                 cc = c.move_template(dest)
@@ -133,8 +133,6 @@ class GraphTemplate:
             if isinstance(kind, GraphTemplate):
                 prop = GraphTemplate.Property(self, name, kind, None, None)
                 _set_template_property(self, prop)
-                #for p in filter(lambda p: p.parent is None, kind._properties):
-                #    prop << p.move_template(self)
             elif isinstance(kind, GraphTemplate.Property):
                 kind.move_template(self, name)
             else:
@@ -148,7 +146,7 @@ class GraphTemplate:
         Merge this template and another template.
         """
         for p in another._properties:
-            prop = GraphTemplate.Property(self, p.name, p.kind, p.identifier, p.entity_filter, origin=p)
+            prop = GraphTemplate.Property(self, p.name, p.kind, p.policy, p.entity_filter, origin=p)
             _set_template_property(self, prop)
 
         for n, p in another._relations:
@@ -183,26 +181,3 @@ def sort_properties(properties, parent=None):
     for p in filter(lambda p: p.parent is parent, properties):
         for q in walk(p):
             yield q
-
-
-#class P:
-#    pass
-#    @classmethod
-#    def of(cls, kind=None, identifier=None, entity_filter=None):
-#        return P(kind, identifier, entity_filter)
-#
-#    def __init__(self, kind, identifier, entity_filter):
-#        self.kind = kind
-#        self.identifier = identifier
-#        self.entity_filter = entity_filter
-#
-#    def build(self, name, template):
-#        return GraphTemplate.Property(template, name, self.kind, self.identifier, self.entity_filter)
-#
-#    def identify(self, identifier):
-#        self.identifier = identifier
-#        return self
-#
-#    def accept(self, entity_filter):
-#        self.entity_filter = entity_filter
-#        return self

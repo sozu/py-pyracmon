@@ -1,11 +1,19 @@
 from functools import partial, reduce
+from inspect import signature, Signature
+from typing import TypeVar
+from .template import GraphTemplate
+from .graph import Node
 
 
 def as_is(x):
     return x
 
+
 def head(vs, alt=None):
     return vs[0] if len(vs) > 0 else alt
+
+
+T = TypeVar('T')
 
 
 class S:
@@ -13,7 +21,7 @@ class S:
     An utility class to construct `NodeSerializer`.
     """
     @classmethod
-    def of(cls, namer=None, aggregator=None, serializer=None):
+    def of(cls, namer=None, aggregator=None, *serializers):
         """
         Create an instance of `NodeSerializer` with arguments.
 
@@ -31,22 +39,14 @@ class S:
         NodeSerializer
             Created instance.
         """
-        s = NodeSerializer()
-        if namer:
-            s._set_namer(namer)
-        if aggregator:
-            s._set_aggregator(aggregator)
-        if serializer:
-            s.each(serializer)
-
-        return s
+        return NodeSerializer(namer, aggregator, *serializers)
 
     @classmethod
-    def factory(cls, factory):
+    def builder(cls, builder):
         def f(*args, **kwargs):
-            return factory(S.of(), *args, **kwargs)
-        setattr(S, factory.__name__, f)
-        return factory
+            return builder(S.of(), *args, **kwargs)
+        setattr(S, builder.__name__, f)
+        return builder
 
 
 class NodeSerializer:
@@ -77,55 +77,84 @@ class NodeSerializer:
     In this case, the property name `b` is ignored and converted values are forcibly aggregated even when no `aggregator` is set.
     Also, (each) converted value must be a `dict`, otherwise, all values are discarded.
     """
-    def __init__(self):
-        self.namer = None
-        self.aggregator = None
-        self._serializers = []
+    def __init__(self, namer=None, aggregator=None, *serializers):
+        self._namer = namer
+        self._aggregator = aggregator
+        self._serializers = list(serializers)
 
-    def _name_of(self, name):
-        return name if not self.namer else \
-            self.namer if isinstance(self.namer, str) else \
-                self.namer(name)
-
-    def _set_namer(self, namer):
-        if isinstance(namer, str):
-            return self.name(namer)
-        elif callable(namer):
-            return self.merge(namer)
+    @property
+    def namer(self):
+        if not self._namer:
+            return lambda n: n
+        elif isinstance(self._namer, str):
+            return lambda n: self._namer
         else:
-            raise ValueError(f"Naming element must be a string or callable object but {type(namer)} is given.")
+            return lambda n: self._namer(n)
 
-    def _set_aggregator(self, aggregator):
-        if isinstance(aggregator, int):
-            return self.at(aggregator)
-        elif callable(aggregator):
-            return self.fold(aggregator)
+    @property
+    def aggregator(self):
+        if self._aggregator is None:
+            def agg(values: [T]) -> [T]:
+                return values
+            return agg
+        elif signature(self._aggregator).return_annotation == Signature.empty:
+            def agg(values: [T]) -> [T]:
+                return self._aggregator(values)
+            return agg
         else:
-            raise ValueError(f"Aggregation element must be an integer or callable object but {type(aggregator)} is given.")
+            return self._aggregator
 
-    def _aggregation_of(self, values):
-        if self.aggregator is None:
-            return values
-        elif isinstance(self.aggregator, int):
-            return values[self.aggregator] if len(values) > self.aggregator else None
-        else:
-            return self.aggregator(values)
+    @property
+    def serializer(self):
+        def wrap(f):
+            try:
+                sig = signature(f)
+                def g(cxt, node, base, value) -> sig.return_annotation:
+                    ba = sig.bind(*(value, base, node, cxt)[len(sig.parameters)-1::-1])
+                    return f(*ba.args)
+                return g
+            except:
+                def g(cxt, node, base, value):
+                    return f(value)
+                return g
 
-    def _serialization_of(self, finder, value):
-        # TODO Use dynamic type?
-        base = finder(type(value))
-        s = reduce(lambda acc,x: partial(x, acc), ([base] if base else []) + self._serializers, as_is)
-        return s(value)
+        funcs = [wrap(s) for s in self._serializers]
+        rt = next(filter(lambda rt: rt != Signature.empty, map(lambda f: signature(f).return_annotation, funcs[::-1])), Signature.empty)
+
+        def composed(cxt, node, base, value) -> rt:
+            return reduce(lambda acc,f: partial(f, cxt, node, acc), [base or as_is] + funcs)(value)
+
+        return composed
 
     @property
     def be_merged(self):
-        return callable(self.namer)
+        return callable(self._namer)
 
     @property
     def be_singular(self):
-        return self.aggregator is not None
+        return not isinstance(signature(self.aggregator).return_annotation, list)
 
-    @S.factory
+    def _set_aggregator(self, aggregator, folds):
+        try:
+            rt = signature(aggregator).return_annotation
+        except:
+            rt = Signature.empty
+
+        if rt == Signature.empty:
+            def agg(vs: [T]) -> (T if folds else [T]):
+                return aggregator(vs)
+            self._aggregator = agg
+        elif isinstance(rt, list) ^ (not folds):
+            raise ValueError(f"Return annotation of function is not valid.")
+        else:
+            self._aggregator = aggregator
+
+        return self
+
+    #----------------------------------------------------------------
+    # Naming
+    #----------------------------------------------------------------
+    @S.builder
     def name(self, name):
         """
         Set a key in parent dictionary.
@@ -142,10 +171,10 @@ class NodeSerializer:
         """
         if not isinstance(name, str):
             raise ValueError(f"The name of node must be a string but {type(name)} is given.")
-        self.namer = name
+        self._namer = name
         return self
 
-    @S.factory
+    @S.builder
     def merge(self, namer=None):
         """
         Set a naming function taking a property name and returning a key in parent dictionary.
@@ -164,10 +193,13 @@ class NodeSerializer:
         """
         if namer and not callable(namer):
             raise ValueError(f"The method merging a node into its parent node must be callable or None.")
-        self.namer = namer or (lambda x:x)
+        self._namer = namer or (lambda x:x)
         return self
 
-    @S.factory
+    #----------------------------------------------------------------
+    # Aggregation
+    #----------------------------------------------------------------
+    @S.builder
     def at(self, index, alt=None):
         """
         Set an aggregator which picks up the element at the index.
@@ -184,10 +216,9 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        self.aggregator = lambda vs: vs[index] if len(vs) > index else alt
-        return self
+        return self.fold(lambda vs: vs[index] if len(vs) > index else alt)
 
-    @S.factory
+    @S.builder
     def head(self, alt=None):
         """
         Set an aggregator which picks up the first element.
@@ -202,11 +233,10 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        self.aggregator = lambda vs: vs[0] if len(vs) > 0 else alt
-        return self
+        return self.at(0, alt)
 
-    @S.factory
-    def tail(self, alt=None):
+    @S.builder
+    def last(self, alt=None):
         """
         Set an aggregator which picks up the last element.
 
@@ -220,10 +250,9 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        self.aggregator = lambda vs: vs[-1] if len(vs) > 0 else alt
-        return self
+        return self.fold(lambda vs: vs[-1] if len(vs) > 0 else alt)
 
-    @S.factory
+    @S.builder
     def fold(self, aggregator):
         """
         Set an aggregation function converting a list of values into a serializable value.
@@ -238,10 +267,16 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        self.aggregator = aggregator
-        return self
+        return self._set_aggregator(aggregator, True)
 
-    @S.factory
+    @S.builder
+    def select(self, aggregator):
+        return self._set_aggregator(aggregator, False)
+
+    #----------------------------------------------------------------
+    # Serizlization
+    #----------------------------------------------------------------
+    @S.builder
     def each(self, func):
         """
         Set a function converting a node entity into a serializable value.
@@ -268,25 +303,38 @@ class NodeSerializer:
         self._serializers.append(func)
         return self
 
-
-def _expand(v):
-    if isinstance(v, dict):
-        return v
-    elif isinstance(v, (list, tuple)) and len(v) > 0:
-        return v[0] if isinstance(v[0], dict) else {}
-    else:
-        return {}
+    @S.builder
+    def to(self, **settings):
+        def to_dict(c, n, b, v) -> dict:
+            vv = b(v)
+            return SerializationContext(settings, c.finder).execute(vv.view)
+        self._serializers.append(to_dict)
+        return self.head()
 
 
 class SerializationContext:
     """
     This class contains a set of `NodeSerializer`s and the interface to find serialization function registered in `GraphSpec`.
     """
-    def __init__(self, serializers, serializer_finder):
-        self.serializers = serializers
-        self.serializer_finder = serializer_finder
+    def __init__(self, settings, finder):
+        self.serializer_map = {n:self._to_serializer(s) for n, s in settings.items()}
+        self.finder = finder
 
-    def serialize_to(self, name, nodes, parent):
+    def _to_serializer(self, s):
+        if isinstance(s, NodeSerializer):
+            return s
+        else:
+            return S.of(*s)
+
+    def execute(self, graph):
+        result = {}
+
+        for n, c in filter(lambda nc: nc[1]().property.parent is None, graph):
+            self.serialize_to(c().name, c, result)
+
+        return result
+
+    def serialize_to(self, name, container, parent):
         """
         Convert nodes into serializable values and append them into the parent dictionary.
 
@@ -299,21 +347,35 @@ class SerializationContext:
         parent: dict
             A parent dictionary the converted values are appended to.
         """
-        s = self.serializers.get(name, None)
+        ns = self.serializer_map.get(name, None)
 
-        if s:
-            value = s._aggregation_of([self._serialize_node(s, n) for n in nodes])
+        if ns:
+            agg = ns.aggregator(container().nodes)
 
-            if s.be_merged:
-                parent.update({s._name_of(k): v for k, v in _expand(value).items()})
+            serializer = ns.serializer
+
+            if ns.be_singular:
+                # Alternative value given to aggregation function may be returned instead of node.
+                value = self.serialize_node(container().property, agg, serializer) if isinstance(agg, Node) else agg
+
+                if ns.be_merged:
+                    if not isinstance(value, dict):
+                        raise ValueError(f"Serialized value must be dict but {type(value)}.")
+
+                    parent.update({ns.namer(k):v for k, v in value.items()})
+                else:
+                    parent[ns.namer(name)] = value
             else:
-                parent[s._name_of(name)] = value
+                if ns.be_merged:
+                    raise ValueError(f"Merging to parent dict requires folding.")
 
-    def _serialize_node(self, serializer, node):
-        value = serializer._serialization_of(self.serializer_finder, node())
+                parent[ns.namer(name)] = [self.serialize_node(container().property, n, serializer) for n in agg]
+
+    def serialize_node(self, prop, node, serializer):
+        value = serializer(self, node, self.finder(prop.kind), node.entity)
 
         if isinstance(value, dict):
-            for n, c in node:
-                self.serialize_to(n, c, value)
+            for n, ch in node.children.items():
+                self.serialize_to(n, ch.view, value)
 
         return value

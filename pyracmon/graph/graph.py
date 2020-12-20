@@ -114,7 +114,7 @@ class Graph:
                     return graph
                 def __iter__(self):
                     """Iterates views of root containers."""
-                    return map(lambda c: c.view, filter(lambda c: c.property.parent is None, graph.containers.values()))
+                    return map(lambda c: (c.name, c.view), filter(lambda c: c.property.parent is None, graph.containers.values()))
                 def __getattr__(self, name):
                     """Returns a view of a container of the name."""
                     return graph.containers[name].view
@@ -283,9 +283,9 @@ class NodeContainer:
         def get_nodes(k):
             return [self.nodes[i] for i in self.keys.get(k, [])]
 
-        policy = self.property.identifier or neverPolicy()
+        policy = self.property.policy or neverPolicy()
 
-        key = self.property.identifier.identifier(entity) if self.property.identifier else None
+        key = policy.get_identifier(entity)
 
         parents, identicals = policy.identify(self.property, [self.nodes[i] for i in self.keys.get(key, [])], ancestors)
 
@@ -311,7 +311,7 @@ class GraphNodeContainer(NodeContainer):
         if not isinstance(entity, (dict, Graph)):
             raise ValueError(f"Node of graph only accepts dict or Graph object.")
 
-        policy = self.property.identifier or neverPolicy()
+        policy = self.property.policy or neverPolicy()
 
         parents, _ = policy.identify(self.property, [], ancestors)
 

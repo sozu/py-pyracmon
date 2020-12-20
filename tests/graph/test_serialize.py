@@ -1,244 +1,414 @@
 import pytest
-from pyracmon.graph.graph import Graph
-from pyracmon.graph.spec import GraphSpec
+from inspect import signature, Signature
+from pyracmon.graph.template import GraphTemplate
+from pyracmon.graph.graph import Graph, Node
+from pyracmon.graph.identify import HierarchicalPolicy
 from pyracmon.graph.serialize import *
 
-spec = GraphSpec()
 
-class TestSerialize:
-    def _graph(self):
-        t = spec.new_template(
-            a = (int, lambda x:x),
-            b = (int, lambda x:x),
-            c = (int, lambda x:x),
-            d = (),
-            e = ()
+class TestS:
+    def test_no_arg(self):
+        ns = S.of()
+        assert ns._namer is None
+        assert ns._aggregator is None
+        assert ns._serializers == []
+
+    def test_args(self):
+        namer = lambda n: n
+        agg = lambda vs: vs
+        ser1, ser2, ser3 = [(lambda x:x) for i in range(3)]
+
+        ns = S.of(namer, agg, ser1, ser2, ser3)
+
+        assert ns._namer is namer
+        assert ns._aggregator is agg
+        assert ns._serializers == [ser1, ser2, ser3]
+
+
+class TestNamer:
+    def test_no_namer(self):
+        ns = NodeSerializer()
+
+        assert ns.namer("a") == "a"
+        assert not ns.be_merged
+
+    def test_str_namer(self):
+        ns = NodeSerializer()
+        ns.name("abc")
+
+        assert ns.namer("a") == "abc"
+        assert not ns.be_merged
+
+    def test_callable_namer(self):
+        ns = NodeSerializer()
+        ns.merge(lambda n: f"__{n}__")
+
+        assert ns.namer("a") == "__a__"
+        assert ns.be_merged
+
+
+class TestAggregator:
+    def test_no_aggregator(self):
+        ns = NodeSerializer()
+        a = ns.aggregator
+        r = a([1, 2, 3])
+
+        assert not ns.be_singular
+        assert r == [1, 2, 3]
+
+    def test_nosig_fold(self):
+        ns = NodeSerializer()
+        def agg(vs):
+            return vs[2]
+        ns.fold(agg)
+        a = ns.aggregator
+        r = a([1, 2, 3])
+
+        assert ns.be_singular
+        assert r == 3
+
+    def test_nosig_select(self):
+        ns = NodeSerializer()
+        def agg(vs):
+            return vs[0:2]
+        ns.select(agg)
+        a = ns.aggregator
+        r = a([1, 2, 3])
+
+        assert not ns.be_singular
+        assert r == [1, 2]
+
+    def test_fold(self):
+        ns = NodeSerializer()
+        def agg(vs: [int]) -> int:
+            return vs[2]
+        ns.fold(agg)
+        a = ns.aggregator
+        r = a([1, 2, 3])
+
+        assert ns.be_singular
+        assert signature(a).return_annotation is int
+        assert r == 3
+
+    def test_select(self):
+        ns = NodeSerializer()
+        def agg(vs: [int]) -> [int]:
+            return vs[0:2]
+        ns.select(agg)
+        a = ns.aggregator
+        r = a([1, 2, 3])
+
+        assert not ns.be_singular
+        assert signature(a).return_annotation == [int]
+        assert r == [1, 2]
+
+    def test_invalid_fold(self):
+        ns = NodeSerializer()
+        def agg(vs: [int]) -> [int]:
+            return vs[0:2]
+
+        with pytest.raises(ValueError):
+            ns.fold(agg)
+
+    def test_invalid_select(self):
+        ns = NodeSerializer()
+        def agg(vs: [int]) -> int:
+            return vs[0:2]
+
+        with pytest.raises(ValueError):
+            ns.select(agg)
+
+    def test_at(self):
+        ns = NodeSerializer()
+        ns.at(1, 100)
+        a = ns.aggregator
+
+        assert ns.be_singular
+        assert a([1, 2, 3]) == 2
+        assert a([1]) == 100
+
+    def test_head(self):
+        ns = NodeSerializer()
+        ns.head(100)
+        a = ns.aggregator
+
+        assert ns.be_singular
+        assert a([1, 2, 3]) == 1
+        assert a([]) == 100
+
+    def test_last(self):
+        ns = NodeSerializer()
+        ns.last(100)
+        a = ns.aggregator
+
+        assert ns.be_singular
+        assert a([1, 2, 3]) == 3
+        assert a([]) == 100
+
+
+class TestSerializer:
+    def _template(self):
+        return GraphTemplate([
+            ("a", int, None, None),
+        ])
+
+    def test_no_serializer(self):
+        t = self._template()
+        ns = NodeSerializer()
+        s = ns.serializer
+        r = s(None, Node(t.a, 5, 0, 0).view, None, 5)
+
+        assert signature(s).return_annotation is Signature.empty
+        assert r == 5
+
+    def test_serializer(self):
+        t = self._template()
+        ns = NodeSerializer()
+        ct = 0
+        def f1(v) -> int:
+            nonlocal ct
+            ct += 1
+            return v+1
+        def f2(b, v) -> float:
+            nonlocal ct
+            ct += 1
+            vv = b(v)
+            return vv*1.3
+        def f3(n, b, v) -> str:
+            nonlocal ct
+            ct += 1
+            vv = b(v)
+            return f"{n.entity + vv}"
+        s = ns.each(f1).each(f2).each(f3).serializer
+        r = s(None, Node(t.a, 5, 0, 0), None, 5)
+
+        assert signature(s).return_annotation is str
+        assert ct == 3
+        assert r == "12.8"
+
+    def test_partial_annotation(self):
+        t = self._template()
+        ns = NodeSerializer()
+        def f1(v):
+            return v+1
+        def f2(b, v) -> float:
+            vv = b(v)
+            return vv*1.3
+        def f3(n, b, v):
+            vv = b(v)
+            return f"{n.entity + vv}"
+        s = ns.each(f1).each(f2).each(f3).serializer
+        r = s(None, Node(t.a, 5, 0, 0), None, 5)
+
+        assert signature(s).return_annotation is float
+        assert r == "12.8"
+
+
+class TestSubGraph:
+    def _template(self):
+        t = GraphTemplate([
+            ("a", dict, None, None),
+            ("b", dict, None, None),
+            ("c", int, None, None),
+            ("d", int, None, None),
+        ])
+        t.a << [t.d >> t.b, t.c]
+        return t
+
+    def test_sub(self):
+        graph = Graph(self._template())
+
+        graph.append(a=dict(a0=0, a1=1), b=dict(b0=10, b1=11), c=20, d=30)
+        graph.append(a=dict(a0=2, a1=3), b=dict(b0=12, b1=13), c=21, d=31)
+
+        t = GraphTemplate([
+            ("a", int, None, None),
+            ("t", graph.template),
+        ])
+        ns = NodeSerializer()
+        s = ns.to(a=S.of(), b=S.of(), c=S.of(), d=S.of()).serializer
+        r = s(
+            SerializationContext({}, lambda t:None),
+            Node(t.t, graph, None, 0),
+            None,
+            graph,
         )
-        t.a << t.b
-        t.b << [t.c, t.e]
-        t.a << t.d
 
-        graph = Graph(t)
-        graph.append(a = 1, b = 10, c = 100, d = "a", e = "A")
-        graph.append(a = 1, b = 11, c = 101, d = "b", e = "B")
-        graph.append(a = 2, b = 20, c = 200, d = "c", e = "C")
-        graph.append(a = 2, b = 21, c = 101, d = "d", e = "D")
-        graph.append(a = 2, b = 22, c = 202, d = "e", e = "E")
-        graph.append(a = 3, b = 30, c = 300, d = "f", e = "F")
-        graph.append(a = 3, b = 30, c = 301, d = "g", e = "G")
-        graph.append(a = 3, b = 30, c = 200, d = "h", e = "H")
+        assert ns.be_singular
+        assert signature(s).return_annotation is dict
+        assert r == {
+            "a": [
+                {
+                    "a0": 0, "a1": 1,
+                    "b": [
+                        {
+                            "b0": 10, "b1": 11,
+                            "d": [30],
+                        },
+                    ],
+                    "c": [20],
+                },
+                {
+                    "a0": 2, "a1": 3,
+                    "b": [
+                        {
+                            "b0": 12, "b1": 13,
+                            "d": [31],
+                        },
+                    ],
+                    "c": [21],
+                },
+            ]
+        }
+
+
+class TestContext:
+    def _template(self):
+        t = GraphTemplate([
+            ("a", int, HierarchicalPolicy(lambda x:x), None),
+            ("b", int, HierarchicalPolicy(lambda x:x), None),
+            ("c", int, HierarchicalPolicy(lambda x:x), None),
+            ("d", int, HierarchicalPolicy(lambda x:x), None),
+        ])
+        t.a << [t.d >> t.b, t.c]
+        return t
+
+    def _graph(self):
+        graph = Graph(self._template())
+
+        graph.append(a=0, b=10, c=20, d=30)
+        graph.append(a=0, b=10, c=21, d=31)
+        graph.append(a=1, b=11, c=20, d=30)
+        graph.append(a=1, b=12, c=20, d=30)
+        graph.append(a=2, b=10, c=20, d=30)
+        graph.append(a=2, b=11, c=21, d=30)
 
         return graph.view
 
     def test_no_serializer(self):
-        assert spec.to_dict(self._graph()) == {}
+        ser_map = dict()
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
 
-    def test_default_serialize(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (),
-        ) == {"a": [1, 2, 3]}
-
-    def test_change_name(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = ("__a__", ),
-        ) == {"__a__": [1, 2, 3]}
-
-    def test_aggregate(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (None, head),
-        ) == {"a": 1}
-
-    def test_aggregate_index(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (None, 1),
-        ) == {"a": 2}
-
-    def test_aggregate_none(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (None, 10),
-        ) == {"a": None}
-
-    def test_serialize(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (None, None, lambda s, x:x*2),
-        ) == {"a": [2, 4, 6]}
-
-    def test_ignore_child(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (),
-            b = (),
-        ) == {"a": [1, 2, 3]}
-
-    def test_include_child(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (None, None, lambda s, x: {"value": x}),
-            b = (),
-        ) == {"a": [{"value": 1, "b": [10, 11]}, {"value": 2, "b": [20, 21, 22]}, {"value": 3, "b": [30]}]}
-
-    def test_merge_child(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (None, None, lambda s, x: {"value": x}),
-            b = (lambda x: f"b_{x}", head, lambda s, x: {"value": x, "value2": x*2}),
-        ) == {"a": [{"value": 1, "b_value": 10, "b_value2": 20}, {"value": 2, "b_value": 20, "b_value2": 40}, {"value": 3, "b_value": 30, "b_value2": 60}]}
-
-    def test_multi_parents(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = (None, None, lambda s, x: {"va": x}),
-            b = (None, None, lambda s, x: {"vb": x}),
-            c = (),
-            d = (None, lambda x: ''.join(x)),
-            e = ("__e__",),
-        ) == {
-            "a": [
-                {"va": 1, "d": "ab", "b": [
-                    {"vb": 10, "c": [100], "__e__":["A"]},
-                    {"vb": 11, "c": [101], "__e__":["B"]},
-                ]},
-                {"va": 2, "d": "cde", "b": [
-                    {"vb": 20, "c": [200], "__e__":["C"]},
-                    {"vb": 21, "c": [101], "__e__":["D"]},
-                    {"vb": 22, "c": [202], "__e__":["E"]},
-                ]},
-                {"va": 3, "d": "fgh", "b": [
-                    {"vb": 30, "c": [300, 301, 200], "__e__":["F","G","H"]}
-                ]},
-            ],
-        }
-
-
-class TestNodeSerializer:
-    def _graph(self):
-        t = spec.new_template(
-            a = int,
-        )
-
-        graph = Graph(t)
-        graph.append(a = 1)
-        graph.append(a = 2)
-        graph.append(a = 3)
-
-        return graph.view
+        assert r == {}
 
     def test_default(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of(),
-        ) == {"a": [1,2,3]}
+        ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
 
-    def test_spec_serializer(self):
-        spec = GraphSpec()
-        spec.add_serializer(int, lambda s, x: x*2)
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of(),
-        ) == {"a": [2,4,6]}
+        assert r == {"a": [0, 1, 2]}
 
-    def test_name(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of().name("A"),
-        ) == {"A": [1,2,3]}
-
-    def test_merge(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of().merge(lambda n: f"__{n}__"),
-        ) == {}
-
-    def test_head(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of().head(),
-        ) == {"a": 1}
-
-    def test_tail(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of().tail(),
-        ) == {"a": 3}
-
-    def test_fold(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of().fold(sum),
-        ) == {"a": 6}
-
-    def test_each(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of().each(lambda s,x: x*3),
-        ) == {"a": [3,6,9]}
-
-    def test_propagate(self):
-        def old(s, v):
-            return v*2
-        assert spec.to_dict(
-            self._graph(),
-            a = S.of().each(old).each(lambda s,x: s(x)*3),
-        ) == {"a": [6,12,18]}
-        
-
-class TestFactory:
-    def _graph(self):
-        t = spec.new_template(
-            a = int,
+    def test_put_child(self):
+        ser_map = dict(
+            a = S.each(lambda v: {"A": v}),
+            b = S.each(lambda v: {"B": v}),
+            d = S.of(),
         )
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
 
-        graph = Graph(t)
-        graph.append(a = 1)
-        graph.append(a = 2)
-        graph.append(a = 3)
+        assert r == {"a": [
+            {"A": 0, "b": [
+                {"B": 10, "d": [30, 31]},
+            ]},
+            {"A": 1, "b": [
+                {"B": 11, "d": [30]}, {"B": 12, "d": [30]},
+            ]},
+            {"A": 2, "b": [
+                {"B": 10, "d": [30]}, {"B": 11, "d": [30]},
+            ]},
+        ]}
 
-        return graph.view
+    def test_ignore_child(self):
+        ser_map = dict(
+            a = S.each(lambda v: {"A": v}),
+            d = S.of(),
+        )
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {"a": [
+            {"A": 0}, {"A": 1}, {"A": 2},
+        ]}
 
     def test_name(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.name("A")
-        ) == {"A": [1,2,3]}
+        ser_map = dict(a = S.name("A"))
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
 
-    def test_merge(self):
-        assert spec.to_dict(
-            self._graph(),
-            b = S.merge(lambda n: f"__{n}__")
-        ) == {}
-
-    def test_at(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.at(1)
-        ) == {"a": 2}
-
-    def test_head(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.head()
-        ) == {"a": 1}
-
-    def test_tail(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.tail()
-        ) == {"a": 3}
+        assert r == {"A": [0, 1, 2]}
 
     def test_fold(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.fold(sum)
-        ) == {"a": 6}
+        ser_map = dict(a = S.head())
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
 
-    def test_each(self):
-        assert spec.to_dict(
-            self._graph(),
-            a = S.each(lambda s,x: x*2)
-        ) == {"a": [2,4,6]}
+        assert r == {"a": 0}
+
+    def test_merge(self):
+        ser_map = dict(
+            a = S.each(lambda v: {"A": v}),
+            b = S.head().each(lambda v: {"B": v}).merge(lambda n:f"__{n}__"),
+        )
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {"a": [
+            {"A": 0, "__B__": 10},
+            {"A": 1, "__B__": 11},
+            {"A": 2, "__B__": 10},
+        ]}
+
+    def test_all(self):
+        def f1(v):
+            return v+1
+        def f2(b, v) -> float:
+            vv = b(v)
+            return vv*2.0
+        def f3(n, b, v):
+            vv = b(v)
+            return f"{n.entity + vv}"
+
+        ser_map = dict(
+            a = S.each(lambda v: {"A": v}),
+            b = S.name("x").each(lambda v: {"B": v}),
+            c = S.each(f1).each(f2).each(f3),
+            d = S.last().merge(lambda n:f"__{n}__").each(lambda v: {"D": v}),
+        )
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {"a": [
+            {
+                "A": 0,
+                "x": [
+                    {"B": 10, "__D__": 31},
+                ],
+                "c": ["62.0", "65.0"],
+            },
+            {
+                "A": 1,
+                "x": [
+                    {"B": 11, "__D__": 30},
+                    {"B": 12, "__D__": 30},
+                ],
+                "c": ["62.0"],
+            },
+            {
+                "A": 2,
+                "x": [
+                    {"B": 10, "__D__": 30},
+                    {"B": 11, "__D__": 30},
+                ],
+                "c": ["62.0", "65.0"],
+            },
+        ]}

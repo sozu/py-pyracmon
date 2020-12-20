@@ -390,7 +390,7 @@ class TestGraphView:
         v = graph.view
 
         assert v() == graph
-        assert list(v) == [graph.containers["a"].view]
+        assert list(v) == [("a", graph.containers["a"].view)]
         assert v.a == graph.containers["a"].view
         assert v.b == graph.containers["b"].view
         assert v.c == graph.containers["c"].view
@@ -594,7 +594,7 @@ class TestGraphAdd:
         t = self._template(policy)
 
         u = t + GraphTemplate([
-            ("e", int, t.a.identifier, None),
+            ("e", int, t.a.policy, None),
         ])
         u.e >> u.c
 
@@ -634,7 +634,7 @@ class TestGraphAdd:
         t = self._template(policy)
 
         u = GraphTemplate([
-            ("e", int, t.a.identifier, None),
+            ("e", int, t.a.policy, None),
             ("f", t.b),
         ])
         u.f >> u.e
@@ -672,7 +672,7 @@ class TestGraphAdd:
         t = self._template(policy)
 
         u = GraphTemplate([
-            ("e", int, t.a.identifier, None),
+            ("e", int, t.a.policy, None),
             ("f", t),
         ])
         u.f >> u.e

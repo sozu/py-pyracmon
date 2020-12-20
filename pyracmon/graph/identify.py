@@ -2,6 +2,9 @@ class IdentifyPolicy:
     def __init__(self, identifier):
         self.identifier = identifier
 
+    def get_identifier(self, value):
+        return self.identifier(value) if self.identifier else None
+
     def identify(self, prop, candidates, ancestors):
         """
         Select parent nodes and identical nodes of a new entity.
@@ -28,8 +31,6 @@ class IdentifyPolicy:
 
 class HierarchicalPolicy(IdentifyPolicy):
     def identify(self, prop, candidates, ancestors):
-        #candidates = get_nodes(self.identifier(entity))
-
         if prop.parent and prop.parent.name in ancestors:
             # This entity has parent in this session.
             parents = ancestors[prop.parent.name]
@@ -64,8 +65,6 @@ def neverPolicy(instance=NeverPolicy(None)):
 
 class AlwaysPolicy(IdentifyPolicy):
     def identify(self, prop, candidates, ancestors):
-        #candidates = get_nodes(self.identifier(entity))
-
         if prop.parent and prop.parent.name in ancestors:
             parents = ancestors[prop.parent.name]
 

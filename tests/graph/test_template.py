@@ -11,20 +11,20 @@ class TestCreateGraphTemplate:
         assert t._relations == []
 
     def test_create(self):
-        ident = IdentifyPolicy(lambda x:x)
+        policy = IdentifyPolicy(lambda x:x)
         ef = lambda x:True
 
         t = GraphTemplate([
-            ("a", int, ident, ef),
-            ("b", str, ident, ef),
+            ("a", int, policy, ef),
+            ("b", str, policy, ef),
         ])
 
         assert isinstance(t.a, GraphTemplate.Property)
-        assert (t.a.template, t.a.name, t.a.kind, t.a.identifier, t.a.entity_filter) \
-            == (t, "a", int, ident, ef)
+        assert (t.a.template, t.a.name, t.a.kind, t.a.policy, t.a.entity_filter) \
+            == (t, "a", int, policy, ef)
         assert isinstance(t.b, GraphTemplate.Property)
-        assert (t.b.template, t.b.name, t.b.kind, t.b.identifier, t.b.entity_filter) \
-            == (t, "b", str, ident, ef)
+        assert (t.b.template, t.b.name, t.b.kind, t.b.policy, t.b.entity_filter) \
+            == (t, "b", str, policy, ef)
 
     def test_fail_name_duplicate(self):
         with pytest.raises(ValueError):

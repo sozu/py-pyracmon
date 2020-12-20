@@ -1,6 +1,6 @@
 from itertools import zip_longest
-from functools import reduce
-from pyracmon.graph.identify import IdentifyPolicy
+from functools import reduce, partial
+from pyracmon.graph.identify import IdentifyPolicy, HierarchicalPolicy, neverPolicy
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.serialize import S, SerializationContext, NodeSerializer
 
@@ -34,14 +34,19 @@ class GraphSpec:
         self.entity_filters = entity_filters or []
         self.serializers = serializers or []
 
+    def _get_inherited(self, holder, t):
+        if not isinstance(t, type):
+            return None
+        return next(map(lambda x:x[1], filter(lambda x:issubclass(t, x[0]), holder)), None)
+
     def get_identifier(self, t):
-        return next(filter(lambda x: issubclass(t, x[0]), self.identifiers), (None, None))[1]
+        return self._get_inherited(self.identifiers, t)
 
     def get_entity_filter(self, t):
-        return next(filter(lambda x: issubclass(t, x[0]), self.entity_filters), (None, None))[1]
+        return self._get_inherited(self.entity_filters, t)
 
     def get_serializer(self, t):
-        return next(filter(lambda x: issubclass(t, x[0]), self.serializers), (None, None))[1]
+        return self._get_inherited(self.serializers, t)
 
     def add_identifier(self, c, f):
         """
@@ -57,6 +62,7 @@ class GraphSpec:
             A function which extracts identifying key value from the entity.
         """
         self.identifiers[0:0] = [(c, f)]
+        return self
 
     def add_entity_filter(self, c, f):
         """
@@ -72,6 +78,7 @@ class GraphSpec:
             A function which determines whether to append the entity into the graph.
         """
         self.entity_filters[0:0] = [(c, f)]
+        return self
 
     def add_serializer(self, c, f):
         """
@@ -85,24 +92,29 @@ class GraphSpec:
             A function which converts the entity into a serializable value.
         """
         self.serializers[0:0] = [(c, f)]
+        return self
 
-    def make_identifier(f):
+    def make_policy(self, t, f):
+        f = f or self.get_identifier(t)
+
         if isinstance(f, IdentifyPolicy):
             return f
         elif callable(f):
-            return IdentifyPolicy.hierarchical(f)
+            return HierarchicalPolicy(f)
         else:
-            return IdentifyPolicy.never()
+            return neverPolicy()
 
-    def get_property_definition(d):
+    def get_property_definition(self, d):
         if d is None or isinstance(d, tuple):
             d = iter(d or ())
             kind = next(d, None)
-            ident = self.make_identifier(next(d, kind))
+            ident = self.make_policy(kind, next(d, None))
             ef = next(d, self.get_entity_filter(kind))
             return kind, ident, ef
         elif isinstance(d, type):
-            return d, self.make_identifier(self.get_identifier(d)), self.get_entity_filter(d)
+            return d, self.make_policy(d, None), self.get_entity_filter(d)
+        elif isinstance(d, GraphTemplate):
+            return d, neverPolicy(), None
         else:
             raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
 
@@ -134,67 +146,11 @@ class GraphSpec:
         GraphTemplate
             Created graph template.
         """
-        def make_identifier(f):
-            if isinstance(f, IdentifyPolicy):
-                return f
-            elif callable(f):
-                return IdentifyPolicy.hierarchical(f)
-            else:
-                return IdentifyPolicy.never()
-        def definition(d):
-            if d is None or d == ():
-                return None, make_identifier(None), None
-            elif isinstance(d, P):
-                return d.kind, make_identifier(d.identifier), d.entity_filter
-            elif isinstance(d, tuple):
-                kind = d[0] if len(d) >= 1 else None
-                ident = make_identifier(d[1] if len(d) >= 2 else self.get_identifier(kind))
-                ef = d[2] if len(d) >= 3 else self.get_entity_filter(kind)
-                return kind, ident, ef
-            elif isinstance(d, type):
-                return d, make_identifier(self.get_identifier(d)), self.get_entity_filter(d)
-            else:
-                raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
+        base = sum(bases, GraphTemplate([]))
 
-        def classify(acc, d):
-            if isinstance(d[1], GraphTemplate):
-                acc[2].append(d)
-            elif isinstance(d[1], GraphTemplate.Property):
-                acc[1].append(d)
-            else:
-                acc[0].append(d)
-            return acc
+        return base + GraphTemplate([(n, *self.get_property_definition(d)) for n, d in template.items()])
 
-        new_props, other_props, other_templates = reduce(classify, template.items(), ([], [], []))
-
-        template = GraphTemplate([(n, *definition(d)) for n, d in new_props])
-
-        def assign(n, p):
-            if hasattr(template, n):
-                raise ValueError(f"Template property '{n}' conflicts.")
-            template._properties.append(p)
-            setattr(template, n, p)
-
-        for n, p in other_props:
-            assign(n, p.move_template(template, n))
-
-        for n, t in other_templates:
-            prop = GraphTemplate.Property(template, n, None, None, None)
-            assign(n, prop)
-            for p in filter(lambda p: p.parent is None, t._properties):
-                assign(p.name, p.move_template(template))
-                prop << p
-
-        for t in bases:
-            for p in t._properties:
-                prop = GraphTemplate.Property(template, p.name, p.kind, p.identifier, p.entity_filter, origin=p)
-                assign(p.name, prop)
-            for f, t in t._relations:
-                getattr(template, f.name) >> getattr(template, t.name)
-
-        return template
-
-    def to_dict(self, graph, **serializers):
+    def to_dict(self, graph, **settings):
         """
         Generates a dictionary representing structured values of a graph.
 
@@ -212,18 +168,4 @@ class GraphSpec:
         Dict[str, object]
             A dictionary representing the graph.
         """
-        def to_serializer(s):
-            if isinstance(s, NodeSerializer):
-                return s
-            else:
-                settings = [(p[0] or p[1]) for p in zip_longest(s, (None, None, None), fillvalue=None)]
-                return S.of(*settings)
-
-        context = SerializationContext(dict([(n, to_serializer(s)) for n, s in serializers.items()]), self.get_serializer)
-
-        result = {}
-
-        for c in filter(lambda c: c().property.parent is None, graph):
-            context.serialize_to(c().name, c, result)
-
-        return result
+        return SerializationContext(settings, self.get_serializer).execute(graph)
