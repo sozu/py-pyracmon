@@ -358,6 +358,54 @@ class TestNodeContainer:
             assert anc == {"a":[nas[0], nas[2]], "b": [cb.nodes[7], cb.nodes[8]]}
 
 
+class TestNodeContainerReplace:
+    def _template(self):
+        t = GraphTemplate([
+            ("a", int, HierarchicalPolicy(lambda x:x%3), None),
+            ("b", int, HierarchicalPolicy(lambda x:x%4), None),
+        ])
+        t.a << t.b
+        return t
+
+    def test_replace_root(self):
+        c = NodeContainer(self._template().a)
+
+        c.append(1, {}, False)
+        c.append(2, {}, False)
+        c.append(3, {}, False)
+
+        assert [n.entity for n in c.nodes] == [1, 2, 3]
+
+        c.append(4, {}, True)
+        c.append(6, {}, True)
+
+        assert [n.entity for n in c.nodes] == [4, 2, 6]
+
+    def test_child_root(self):
+        t = self._template()
+        ca = NodeContainer(t.a)
+        cb = NodeContainer(t.b)
+
+        ca.append(1, {}, False)
+        ca.append(2, {}, False)
+        ca.append(3, {}, False)
+
+        cb.append(0, {"a": [ca.nodes[0]]}, False)
+        cb.append(1, {"a": [ca.nodes[0]]}, False)
+        cb.append(2, {"a": [ca.nodes[0]]}, False)
+        cb.append(3, {"a": [ca.nodes[0]]}, False)
+        cb.append(3, {"a": [ca.nodes[1]]}, False)
+        cb.append(3, {"a": [ca.nodes[2]]}, False)
+
+        assert [n.entity for n in cb.nodes] == [0, 1, 2, 3, 3, 3]
+
+        cb.append(4, {"a": [ca.nodes[0], ca.nodes[1]]}, True)
+        cb.append(7, {"a": [ca.nodes[0], ca.nodes[2]]}, True)
+
+        assert [(n.entity, next(iter(n.parents))) for n in cb.nodes] \
+            == [(4, ca.nodes[0]), (1, ca.nodes[0]), (2, ca.nodes[0]), (7, ca.nodes[0]), (3, ca.nodes[1]), (7, ca.nodes[2]), (4, ca.nodes[1])]
+
+
 class TestGraphView:
     def _template(self, policy="hierarchy"):
         if policy == 'hierarchy':
@@ -529,6 +577,36 @@ class TestGraph:
         assert [n() for n in v.d] == [1, 1]
         assert [[m() for m in n.b] for n in v.a] == [[0, 1], [1], [2]]
         assert [[[l() for l in m.d] for m in n.b] for n in v.a] == [[[], [1]], [[1]], [[]]]
+
+
+class TestGraphReplace:
+    def _template(self):
+        t = GraphTemplate([
+            ("a", int, HierarchicalPolicy(lambda x:x%3), None),
+            ("b", int, HierarchicalPolicy(lambda x:x%4), None),
+        ])
+        t.a << t.b
+        return t
+
+    def test_replace_root(self):
+        graph = Graph(self._template())
+        graph.append(a=1).append(a=2).append(a=3)
+
+        assert [n() for n in graph.view.a] == [1, 2, 3]
+
+        graph.replace(a=4).replace(a=6)
+
+        assert [n() for n in graph.view.a] == [4, 2, 6]
+
+    def test_child_root(self):
+        graph = Graph(self._template())
+        graph.append(a=1, b=0).append(a=1, b=1).append(a=1, b=2).append(a=1, b=3).append(a=2, b=3).append(a=3, b=3)
+
+        assert [[nb() for nb in na.b] for na in graph.view.a] == [[0, 1, 2, 3], [3], [3]]
+
+        graph.replace(a=1, b=4).replace(a=2, b=4).replace(a=1, b=7).replace(a=3, b=7)
+
+        assert [[nb() for nb in na.b] for na in graph.view.a] == [[4, 1, 2, 7], [3, 4], [7]]
 
 
 class TestGraphAdd:

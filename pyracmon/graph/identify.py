@@ -1,8 +1,24 @@
 class IdentifyPolicy:
+    """
+    Provides functionalities to handle identical entities in appending sessions of a graph.
+    """
     def __init__(self, identifier):
         self.identifier = identifier
 
     def get_identifier(self, value):
+        """
+        Returns identification key from an entity value.
+
+        Parameters
+        ----------
+        value: object
+            An entity value.
+
+        Returns
+        -------
+        object
+            Identification key of the entity value.
+        """
         return self.identifier(value) if self.identifier else None
 
     def identify(self, prop, candidates, ancestors):
@@ -13,8 +29,8 @@ class IdentifyPolicy:
         ----------
         prop: GraphTemplate.Property
             Template property for new entity.
-        candidate: [Node]
-            Nodes having the same identifier.
+        candidates: [Node]
+            Nodes having the same identification key.
         ancestors: {str: [Node]}
             Mappings from property name to identical node set which appeared in current appending session.
 
@@ -30,6 +46,12 @@ class IdentifyPolicy:
 
 
 class HierarchicalPolicy(IdentifyPolicy):
+    """
+    Default policy for template properties having identifier.
+
+    This policy identifies nodes whose entity has the same identification key as one of appending entity
+    and whose parent is also identical to the parent of the entity.
+    """
     def identify(self, prop, candidates, ancestors):
         if prop.parent and prop.parent.name in ancestors:
             # This entity has parent in this session.

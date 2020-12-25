@@ -2,14 +2,12 @@ class GraphTemplate:
     """
     This class specifies the structure of a graph.
 
-    Use `GraphSpec.new_template()` to construct the instance of this class.
-
     Each instance is composed of template properties each of which corresponds to a node container of a graph.
     Applying shift operator to properties creates the parent-child relationship between them and it corresponds to an edge of a graph.
 
     For example, next code creates a template composed of 4 properties in which `d` is a child of `c`, and `b` and `c` are children of `a`.
 
-    >>> template = spec.new_template(a = int, b = str, c = int, d = float)
+    >>> template = GraphSpec().new_template(a=int, b=str, c=int, d=float)
     >>> template.a << [template.b, template.c]
     >>> template.c << template.d
     """
@@ -39,10 +37,26 @@ class GraphTemplate:
 
         @property
         def parent(self):
+            """
+            Returns parent property.
+
+            Returns
+            -------
+            GraphTemplate.Property
+                Parent property if exists, otherwise `None`.
+            """
             return next(filter(lambda r: r[0] == self, self.template._relations), (None, None))[1]
 
         @property
         def children(self):
+            """
+            Returns child properties.
+
+            Returns
+            -------
+            [GraphTemplate.Property]
+                Child properties.
+            """
             return [r[0] for r in self.template._relations if r[1] == self]
 
         @property
@@ -64,13 +78,13 @@ class GraphTemplate:
                 prop << cc
             return prop
 
-        def __lt__(self, other):
-            p = self.parent
-            while p is not None:
-                if p == other:
-                    return True
-                p = p.parent
-            return True if self.parent is not None and other.parent is None else False
+        #def __lt__(self, other):
+        #    p = self.parent
+        #    while p is not None:
+        #        if p == other:
+        #            return True
+        #        p = p.parent
+        #    return False
             
         def __lshift__(self, children):
             """
@@ -78,12 +92,12 @@ class GraphTemplate:
 
             Parameters
             ----------
-            children: [Graph.Property] | Graph.Property
+            children: [GraphTemplate.Property] | GraphTemplate.Property
                 Properties to be children of this property.
 
             Returns
             -------
-            [Graph.Property] | Graph.Property
+            [GraphTemplate.Property] | GraphTemplate.Property
                 Child properties given in the argument.
             """
             targets = [children] if isinstance(children, GraphTemplate.Property) else children
@@ -98,12 +112,12 @@ class GraphTemplate:
 
             Parameters
             ----------
-            parent: Graph.Property
+            parent: GraphTemplate.Property
                 A Property to be a parent of this property.
 
             Returns
             -------
-            Graph.Property
+            GraphTemplate.Property
                 A parent property given in `parent` argument.
             """
             parent._assert_canbe_parent(self)
@@ -111,6 +125,19 @@ class GraphTemplate:
             return parent
 
         def __rrshift__(self, children):
+            """
+            Reversed version of `__lshift__()` prepared to locate a list of properties on the left side.
+
+            Parameters
+            ----------
+            children: [GraphTemplate.Property] | GraphTemplate.Property
+                Properties to be children of this property.
+
+            Returns
+            -------
+            GraphTemplate.Property
+                This property.
+            """
             self.__lshift__(children)
             return self
 
@@ -139,11 +166,29 @@ class GraphTemplate:
                 _set_template_property(self, GraphTemplate.Property(self, name, kind, ident, ef))
 
     def __iter__(self):
+        """
+        Iterate properties in parent-to-child order.
+
+        Returns
+        -------
+        Iterator[GraphTemplate.Property]
+            Property iterator.
+        """
         return sort_properties(self._properties)
 
     def __iadd__(self, another):
         """
-        Merge this template and another template.
+        Add another template to this template.
+
+        Parameters
+        ----------
+        another: GraphTemplate
+            Another template.
+
+        Returns
+        -------
+        GraphTemplate
+            This instance.
         """
         for p in another._properties:
             prop = GraphTemplate.Property(self, p.name, p.kind, p.policy, p.entity_filter, origin=p)
@@ -155,6 +200,19 @@ class GraphTemplate:
         return self
 
     def __add__(self, another):
+        """
+        Create new template by adding this template and another one.
+
+        Parameters
+        ----------
+        another: GraphTemplate
+            Another template.
+
+        Returns
+        -------
+        GraphTemplate
+            New template.
+        """
         template = GraphTemplate([])
         template += self
         template += another

@@ -121,6 +121,21 @@ class Graph:
             self._view = GraphView()
         return self._view
 
+    def _append(self, to_replace, entities):
+        props = [p for p in self.template if p.name in entities]
+
+        filtered = set()
+        for p in props:
+            if (p.parent is None) or (p.parent.name not in entities) or (p.parent.name in filtered):
+                if p.entity_filter is None or p.entity_filter(entities[p.name]):
+                    filtered.add(p.name)
+
+        ancestors = {}
+        for k in [p.name for p in props if p.name in filtered]:
+            self.containers[k].append(entities[k], ancestors, to_replace)
+
+        return self
+
     def append(self, **entities):
         """
         Append entity values with associated property names.
@@ -135,19 +150,21 @@ class Graph:
         Graph
             This graph.
         """
-        props = [p for p in self.template if p.name in entities]
+        return self._append(False, entities)
 
-        filtered = set()
-        for p in props:
-            if (p.parent is None) or (p.parent.name not in entities) or (p.parent.name in filtered):
-                if p.entity_filter is None or p.entity_filter(entities[p.name]):
-                    filtered.add(p.name)
+    def replace(self, **entities):
+        """
+        Parameters
+        ----------
+        entities: {str: object}
+            Dictionary where the key indicates the property name and the value is the entity value.
 
-        ancestors = {}
-        for k in [p.name for p in props if p.name in filtered]:
-            self.containers[k].append(entities[k], ancestors)
-
-        return self
+        Returns
+        -------
+        Graph
+            This graph.
+        """
+        return self._append(True, entities)
 
 
 class _EmptyNodeView:
@@ -262,7 +279,7 @@ class NodeContainer:
             self._view = ContainerView()
         return self._view
 
-    def append(self, entity, ancestors):
+    def append(self, entity, ancestors, to_replace=False):
         """
         Add an entity to nodes if the identical node does not exists yet.
 
@@ -303,11 +320,15 @@ class NodeContainer:
             if p is not None:
                 p.add_child(node)
 
+        if to_replace:
+            for n in identicals:
+                n.entity = entity
+
         ancestors[self.property.name] = new_nodes
 
 
 class GraphNodeContainer(NodeContainer):
-    def append(self, entity, ancestors):
+    def append(self, entity, ancestors, to_replace):
         if not isinstance(entity, (dict, Graph)):
             raise ValueError(f"Node of graph only accepts dict or Graph object.")
 

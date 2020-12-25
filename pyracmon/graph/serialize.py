@@ -5,14 +5,6 @@ from .template import GraphTemplate
 from .graph import Node
 
 
-def as_is(x):
-    return x
-
-
-def head(vs, alt=None):
-    return vs[0] if len(vs) > 0 else alt
-
-
 T = TypeVar('T')
 
 
@@ -379,3 +371,7 @@ class SerializationContext:
                 self.serialize_to(n, ch.view, value)
 
         return value
+
+
+def as_is(x):
+    return x
