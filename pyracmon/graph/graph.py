@@ -12,8 +12,8 @@ def new_graph(template, *bases):
     ----------
     template: GraphTemplate
         A template of a graph.
-    base: Graph | GraphView
-        Another graph whose nodes and edges are copied into new graph.
+    bases: [Graph | GraphView]
+        Other graphs whose nodes are appended to created graph.
 
     Returns
     -------
@@ -32,18 +32,36 @@ class Graph:
     """
     The instance of this class contains nodes according to the structure defined by the template.
 
-    All entities are appended via `append()` and this method does many things to construct relationships between nodes.
+    All entities should be appended via `append()` or `replace()` and these methods not only store nodes but also construct relationships between them.
 
-    - Applies entity filters if any and discards ones which does not fulfill the condition.
-    - Searches the identical entity from existing nodes, then, if exists, drops new entity and takes the found one for edge creation.
-    - Identification is not only by the entity value but the identicalness of the parent entity in accordance `IdentifyPolicy`.
-    - Creates edges between selected nodes according to the relationships of template properties.
+    Entity set given on an appending session is arranged according to the structure of graph template.
+    Relationships between properties are brought into the graph in the form of parent-child relationships between nodes.
 
-    By default, the identification policy is simple, which consider entities are identical only when:
+    Additionally, each entity value is compared to entities of existing nodes by identification function set on template property,
+    and when some entities of nodes are *identical* to given entity, the graph does not create new node
+    and will create relationships between those identical nodes and nodes for child entities.
 
-    - Identifier for the template property is found.
-    - Values returned by the identitier are equal.
-    - They have the same parent nodes.
+    For example, following template defines that each entity for property `a` are identified by its value and `a` is the parent of `b`.
+
+    >>> template = GraphSpac().new_template(
+    >>>     a = (int, lambda x:x),
+    >>>     b = str,
+    >>> )
+    >>> template.a << template.b
+
+    Invocation of `append()` creates nodes and relationships between them.
+    Next code shows that each node of `b` becomes a child of node of `a` created in the same invocation.
+
+    >>> graph = new_graph(template)
+    >>> graph.append(a=1, b="a").append(a=2, b="b")
+    >>>
+    >>> assert [(na(), [nb() for nb in na.b]) for na in graph.view.a] == [(1, ["a"]), (2, ["b"])]
+
+    Meanwhile, when an *identical* entity is given to `a`, node of `a` is not created and existing one is used as the parent of node `b`.
+
+    >>> graph.append(a=1, b="c").append(a=1, b="d")
+    >>>
+    >>> assert [(na(), [nb() for nb in na.b]) for na in graph.view.a] == [(1, ["a", "c", "d"]), (2, ["b"])]
     """
     def __init__(self, template):
         self.template = template
@@ -63,6 +81,22 @@ class Graph:
         return cands[0] if cands else None
 
     def __add__(self, another):
+        """
+        Create new graph by adding this graph and another graph.
+
+        New graph has the same template as this graph'S.
+        On the other hand, because this method depends on `__iadd__()`, another graph must not have the same template.
+
+        Parameters
+        ----------
+        another: Graph | GraphView
+            Graph or its view.
+
+        Returns
+        -------
+        Graph
+            Created graph.
+        """
         graph = Graph(self.template)
 
         graph += self
@@ -71,6 +105,22 @@ class Graph:
         return graph
 
     def __iadd__(self, another):
+        """
+        Append nodes from another graph.
+
+        Templates of this graph and another graph must not be the same.
+        Nodes of another graph are traversed from its root and appended to compatible containers each other.
+
+        Parameters
+        ----------
+        another: Graph | GraphView
+            Graph or its view.
+
+        Returns
+        -------
+        Graph
+            This graph.
+        """
         another = another if isinstance(another, Graph) else another()
 
         roots_ = filter(lambda c: c.property.parent is None, another.containers.values())
@@ -140,6 +190,8 @@ class Graph:
         """
         Append entity values with associated property names.
 
+        Each key in keyword arguments indicates a property and the paired value is an entity value stored in this graph.
+
         Parameters
         ----------
         entities: {str: object}
@@ -154,6 +206,8 @@ class Graph:
 
     def replace(self, **entities):
         """
+        Behaves like `append()` but replace the entities of identiccal nodes.
+
         Parameters
         ----------
         entities: {str: object}
@@ -228,6 +282,9 @@ class NodeContainer:
 
     @property
     def name(self):
+        """
+        Returns a name of the template property.
+        """
         return self.property.name
 
     @property
@@ -237,9 +294,9 @@ class NodeContainer:
 
         Returning object provides intuitive ways to access internal nodes:
 
-        - Direct invocation returns the `NodeContainer` instance.
         - Iteration access iterates over internal node views.
         - Index access and `len()` works as if it is a list of node views.
+        - Attribute access by the property name returns the view of corresponding child node container under the first node.
 
         See the documentation of `view` property of `Node`, `Node.Children` for further information.
 
@@ -281,21 +338,16 @@ class NodeContainer:
 
     def append(self, entity, ancestors, to_replace=False):
         """
-        Add an entity to nodes if the identical node does not exists yet.
+        Add an entity to this container.
 
         Parameters
         ----------
         entity: object
             An entity to be stored in the node.
-        new_nodes: {str: Node}
+        ancestors: {str: [Node]}
             Dictionary which maps property names to nodes appended to ancestor containers.
-
-        Returns
-        -------
-        [Node]
-            Appended nodes.
-        [(Node, Node)]
-            Edges.
+        to_replace: bool
+            If `True`, entities of identical nodes are replaced with given entity.
         """
         def get_nodes(k):
             return [self.nodes[i] for i in self.keys.get(k, [])]

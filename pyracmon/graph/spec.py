@@ -7,27 +7,30 @@ from pyracmon.graph.serialize import S, SerializationContext, NodeSerializer
 
 class GraphSpec:
     """
-    This class contains the specifications of graph which determine various behaviors in the lifecycle of graphs.
+    This class contains the specifications of graph which control various behaviors in the lifecycles of graphs.
 
-    Behaviors controlled by this specification is:
+    Each instance contains 3 kind of functions; *identifier*, *entity filter* and *serializer*.
 
-    - Identification of node entity when it is appended to a graph.
-    - Filtering of node entity which filters entities to append into a graph.
-    - Serialization of node entity.
+    *Identifier* is a function to get a value used for the identification of graph entity. See `Graph` to know how this works.
 
-    Every attribute is in the form of a list of pairs composed of a type and a function.
-    The type determines whether to apply the function to the entity value by its type, that is,
-    the function is applied to the value only when its type is a sub-class of the type.
-    If multiple items fulfill the condition, only the latest registered one is used.
+    *Entity fliter* is a function returning `bool` to determine whether the entity should be appended to a graph or not.
+    If `False` is returned for an entity, it is just ignored.
+
+    *Serializer* is a function which converts an entity value into a serializable object.
+    This is used in `to_dict()` to put entities into returning `dict`.
+    Registered *serializer* is first applied to an entity value and other serialization functions in `NodeSerializer` are applied in order.
+
+    They are registered in the specification via `add_xxx()` methods of this class with its bound `type`.
+    The first function whose bound `type` is the subclass of the `kind` of the template property is choosed and applied.
 
     Attributes
     ----------
     identifiers: [(type, T -> ID)]
-        A list of pairs of type and function which extracts identifying key value from the entity.
+        A list of pairs of type and *identifier*.
     entity_filters: [(type, T -> bool)]
-        A list of pairs of type and function which determines whether to append the entity into the graph.
+        A list of pairs of type and *entity filter*.
     serializers: [(type, T -> U)]
-        A list of pairs of type and function which converts the entity into a serializable value.
+        A list of pairs of type and *serializer*.
     """
     def __init__(self, identifiers=None, entity_filters=None, serializers=None):
         self.identifiers = identifiers or []
@@ -50,51 +53,47 @@ class GraphSpec:
 
     def add_identifier(self, c, f):
         """
-        Register a function which extracts identifying key value from the entity.
-
-        The identification is based on declared type in the definition of graph template, not on an actual type of the entity.
+        Register an *identifier* with the bound type.
 
         Parameters
         ----------
         c: type
-            Super type of the entity to apply the function.
+            A type bound for the *identifier*.
         f: T -> ID
-            A function which extracts identifying key value from the entity.
+            An *identifier* function.
         """
         self.identifiers[0:0] = [(c, f)]
         return self
 
     def add_entity_filter(self, c, f):
         """
-        Register a function which determines whether to append the entity into the graph.
-
-        The filtering is based on declared type in the definition of graph template, not on an actual type of the entity.
+        Register an *entity filter* with the bound type.
 
         Parameters
         ----------
         c: type
-            Super type of the entity to apply the function.
+            A type bound for the *entity filter*.
         f: T -> bool
-            A function which determines whether to append the entity into the graph.
+            An *entity filter* function.
         """
         self.entity_filters[0:0] = [(c, f)]
         return self
 
     def add_serializer(self, c, f):
         """
-        Register a function which converts the entity into a serializable value.
+        Register a *serializer* with the bound type.
 
         Parameters
         ----------
         c: type
-            Super type of the entity to apply the function.
+            A type bound for the *serializer*.
         f: T -> U
-            A function which converts the entity into a serializable value.
+            An *serializer* function.
         """
         self.serializers[0:0] = [(c, f)]
         return self
 
-    def make_policy(self, t, f):
+    def _make_policy(self, t, f):
         f = f or self.get_identifier(t)
 
         if isinstance(f, IdentifyPolicy):
@@ -104,15 +103,15 @@ class GraphSpec:
         else:
             return neverPolicy()
 
-    def get_property_definition(self, d):
+    def _get_property_definition(self, d):
         if d is None or isinstance(d, tuple):
             d = iter(d or ())
             kind = next(d, None)
-            ident = self.make_policy(kind, next(d, None))
+            ident = self._make_policy(kind, next(d, None))
             ef = next(d, self.get_entity_filter(kind))
             return kind, ident, ef
         elif isinstance(d, type):
-            return d, self.make_policy(d, None), self.get_entity_filter(d)
+            return d, self._make_policy(d, None), self.get_entity_filter(d)
         elif isinstance(d, GraphTemplate):
             return d, neverPolicy(), None
         else:
@@ -122,23 +121,20 @@ class GraphSpec:
         """
         Creates a graph template with given definitions for template properties.
 
-        Each template property definition can be given as a tuple contains at most 3 values:
+        Each keyword argument corresponds to a template property where the key is proprety name and value is property definition.
 
-        - The type of entity value.
-        - A function which extracts an identifying key value from the entity.
-        - A function which determines whether to append the entity into the graph.
+        Property definition can be given as a single value or a tuple of at most 3 values.
+        The values are interpreted to property attributes in the following order.
 
-        The first item is used to get identifier and entity filter from the specification, 
-        and they can be overrided by second and third items respectively.
-
-        Every value can be omitted, thereby minimus definition is `None` or `()`.
-        When just an item whose type is `type` is given, it is supposed to be a tuple containing just the first item.
+        - The kind of entity value which must be a `type` object.
+        - *Identifier* of the property.
+        - *Entity filter* of the property.
 
         Parameters
         ----------
         bases: [GraphTemplate]
             Base templates whose properties and relations are merged into new template.
-        template: {str: (type, T -> ID, T -> bool) | type | None}
+        template: {str: (type | Tuple[type, T -> ID, T -> bool])}
             Definitions of template properties.
 
         Returns
@@ -148,20 +144,22 @@ class GraphSpec:
         """
         base = sum(bases, GraphTemplate([]))
 
-        return base + GraphTemplate([(n, *self.get_property_definition(d)) for n, d in template.items()])
+        return base + GraphTemplate([(n, *self._get_property_definition(d)) for n, d in template.items()])
 
     def to_dict(self, graph, **settings):
         """
-        Generates a dictionary representing structured values of a graph.
+        Generates a dictionary representing structured entity values of a graph.
 
-        Only nodes whose names appear in keys of `serializers` are used.
+        Only nodes whose names appear in keys of `settings` are contained int the result.
+
+        `NodeSerializer` object of each value in `settings` keyword arguments can be built by builder methods of `S`.
 
         Parameters
         ----------
-        graph: Graph.View
+        graph: GraphView
             A view of the graph.
-        serializers: {str: NodeSerializer | (str | str -> str, [T] -> T | int, T -> U)}
-            Mapping from property name to `NodeSerializer` s or their equivalents.
+        settings: {str: NodeSerializer}
+            Mapping from property name to `NodeSerializer` s.
 
         Returns
         -------

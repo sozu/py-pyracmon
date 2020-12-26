@@ -10,21 +10,21 @@ T = TypeVar('T')
 
 class S:
     """
-    An utility class to construct `NodeSerializer`.
+    An utility class to build `NodeSerializer`.
     """
     @classmethod
     def of(cls, namer=None, aggregator=None, *serializers):
         """
-        Create an instance of `NodeSerializer` with arguments.
+        Create an instance of `NodeSerializer`.
 
         Parameters
         ----------
         namer: str | str -> str
-            A key string or naming function. `None` specifies that the property name is used as it is.
+            A string or naming function.
         aggregator: [T] -> T | int
             An aggregation function or an index at which the value is selected from converted values in aggregation phase.
         serializer: T -> U
-            An function converting node entity into a serializable value. If `None`, the first matching serializer in `GraphSpec` is used.
+            A list of *serializer*s.
 
         Returns
         -------
@@ -35,6 +35,25 @@ class S:
 
     @classmethod
     def builder(cls, builder):
+        """
+        This method is used as decorator to put decorating target to `S` builder methods.
+
+        >>> @S.builder
+        >>> def some_func():
+        >>>     ...
+        >>>
+        >>> S.some_func()
+
+        Parameters
+        ----------
+        builder: callable
+            Decorating target.
+
+        Returns
+        -------
+        callable
+            Decorated builder.
+        """
         def f(*args, **kwargs):
             return builder(S.of(), *args, **kwargs)
         setattr(S, builder.__name__, f)
@@ -45,29 +64,28 @@ class NodeSerializer:
     """
     The instance of this class contains the configurations to convert a `NodeContainer` into a serializable value.
 
-    This class is designed to be used in the keyword argument of `GraphSpec.to_dict()` with the name of corresponding node property name.
-    For simplicity, there are two ways to create the instance, with tuple and with `S`.
+    The conversion is composed of 3 phases.
 
-    >>> template = spec.new_template(a = dict, b = dict)
-    >>> graph = new_graph(template)
-    >>> graph.append(a = dict(a1=1, a2=2), b = dict(b1=3, b2=4))
-    >>> spec.to_dict(graph, a = S.of(), b = ())
-    {"a":[{"a1":1, "a2":2, "b":[{"b1":3, "b2":4}]}]}
+    1. If `aggregator` is set, aggregate the list of nodes into a node or shrinked list of nodes.
+    2. Convert the entity of each node into a serializable value by *serializer*.
+    3. Put the converted value(s) into the dictionary converted from the parent node with a key determined by `namer`.
 
-    The conversion is composed to 3 phases.
+    These phases are applied from the roots of graph to their descendants as long as the entity is converted to `dict`.
+    Children of the entity which is not converted to `dict` are simply ignored.
 
-    1. Convert the entity of each node in the container into a serializable value with `serializer` function.
-    2. If `aggregator` is set, aggregate the list of converted values into a value with it.
-    3. Put the converted value(s) into the dictionary which is the converted result of parent node with a key determined by `namer`.
+    When `namer` is a callable, the result updates parent dictionary with its items instead of just being put to it.
 
-    Using callable as `namer` causes a tricky behavior which merges values into parent dictionary.
-
-    >>> graph.append(a = dict(a1=1, a2=2), b = dict(b1=3, b2=4))
-    >>> spec.to_dict(graph, a = S.of(), b = (lambda x: f"__x__",))
+    >>> graph.append(a=dict(a1=1, a2=2), b=dict(b1=3, b2=4))
+    >>> GraphSpec().to_dict(
+    >>>     graph.view,
+    >>>     a = S.of(),
+    >>>     b = S.merge(lambda n: f"__{n}__"),
+    >>> )
     {"a": [{"a1":1, "a2":2, "__b1__":3, "__b2__":4}]}
 
-    In this case, the property name `b` is ignored and converted values are forcibly aggregated even when no `aggregator` is set.
-    Also, (each) converted value must be a `dict`, otherwise, all values are discarded.
+    In this case, the property name `b` is ignored and `head()` aggregation is implicitly applied to the property if no aggregator is set.
+    As shown in the example, the converted value on `b` must be a `dict` in order to being expanded to key-value pairs.
+    Exception raises when the value of another type is obtained.
     """
     def __init__(self, namer=None, aggregator=None, *serializers):
         self._namer = namer
@@ -76,6 +94,14 @@ class NodeSerializer:
 
     @property
     def namer(self):
+        """
+        Naming function.
+
+        Returns
+        -------
+        str -> str
+            A function which determines the key of the property even when `namer` is set to a string.
+        """
         if not self._namer:
             return lambda n: n
         elif isinstance(self._namer, str):
@@ -85,6 +111,14 @@ class NodeSerializer:
 
     @property
     def aggregator(self):
+        """
+        Aggregation function.
+
+        Returns
+        -------
+        [Node] -> Node | [Node]
+            A function to aggregate a list of nodes to a node or another list of nodes.
+        """
         if self._aggregator is None:
             def agg(values: [T]) -> [T]:
                 return values
@@ -98,6 +132,14 @@ class NodeSerializer:
 
     @property
     def serializer(self):
+        """
+        Serialization function.
+
+        Returns
+        -------
+        (SerializationContext, Node, object -> object, object) -> object
+            A function to convert an entity value into a serializable value.
+        """
         def wrap(f):
             try:
                 sig = signature(f)
@@ -120,10 +162,29 @@ class NodeSerializer:
 
     @property
     def be_merged(self):
+        """
+        Returns whether the converted value will be merged into parent.
+
+        Returns
+        -------
+        bool
+            `True` if converted value will be merged into parent.
+        """
         return callable(self._namer)
 
     @property
     def be_singular(self):
+        """
+        Returns whether the converted value will be a singular object, not a list.
+
+        This is estimated by annotation of aggregation function. If its returning type is not annotated, this property always returns `False`.
+        `S` builder methods adds appropriate annotation to given function when it does not have the annotation.
+
+        Returns
+        -------
+        bool
+            `True` if converted value will be a singular object. `False` means that it will be a list.
+        """
         return not isinstance(signature(self.aggregator).return_annotation, list)
 
     def _set_aggregator(self, aggregator, folds):
@@ -169,9 +230,9 @@ class NodeSerializer:
     @S.builder
     def merge(self, namer=None):
         """
-        Set a naming function taking a property name and returning a key in parent dictionary.
+        Set a naming function taking a property name and returning a key in parent `dict`.
 
-        By using callable as `namer`, key-value pairs of the converted result are merged into parent dictionary.
+        `NodeSerializer` built with this methods merges the converted `dict` into parent `dict` and its `be_merged` property becomes `True`.
 
         Parameters
         ----------
@@ -194,7 +255,7 @@ class NodeSerializer:
     @S.builder
     def at(self, index, alt=None):
         """
-        Set an aggregator which picks up the element at the index.
+        Set an aggregator which picks up the node at the index.
 
         Parameters
         ----------
@@ -213,7 +274,7 @@ class NodeSerializer:
     @S.builder
     def head(self, alt=None):
         """
-        Set an aggregator which picks up the first element.
+        Set an aggregator which picks up the first node.
 
         Parameters
         ----------
@@ -230,7 +291,7 @@ class NodeSerializer:
     @S.builder
     def last(self, alt=None):
         """
-        Set an aggregator which picks up the last element.
+        Set an aggregator which picks up the last node.
 
         Parameters
         ----------
@@ -247,11 +308,11 @@ class NodeSerializer:
     @S.builder
     def fold(self, aggregator):
         """
-        Set an aggregation function converting a list of values into a serializable value.
+        Set an aggregation function converting a list of nodes into a single node.
 
         Parameters
         ----------
-        aggregator: [T] -> T
+        aggregator: [Node] -> Node
             An aggregation function.
 
         Returns
@@ -263,6 +324,19 @@ class NodeSerializer:
 
     @S.builder
     def select(self, aggregator):
+        """
+        Set an aggregation function chooding a list of nodes from all nodes in `NodeContainer`.
+
+        Parameters
+        ----------
+        aggregator: [Node] -> [Node]
+            An aggregation function.
+
+        Returns
+        -------
+        NodeSerializer
+            This instance.
+        """
         return self._set_aggregator(aggregator, False)
 
     #----------------------------------------------------------------
@@ -273,19 +347,22 @@ class NodeSerializer:
         """
         Set a function converting a node entity into a serializable value.
 
-        To collect child nodes into the result of `to_dict()`, serialization function MUST returns a `dict`.
+        In order to progress serialization to child nodes, the function MUST returns a `dict`.
 
-        The function should takes 2 arguments, where the first one is default serializer and the second one is a target value.
-        The default serializer is one of followings.
+        The function will be invoked with 0 to 4 arguments listed below.
 
-        - The last registered converting function if any.
-        - Serializer registered in `GraphSpec` for the value type if any.
-        - Identity function which returns the argument as it is.
+        - `SerializationContext` of the serialization.
+        - `Node` to serialize.
+        - A function which takes the entity value and returns converted value by applying all serialization functions added beforehand.
+        - An entity value to convert.
+
+        When the number of arguments in signature of the function is less than 4, former arguments is the list are omitted.
+        For example, `def func(c, n, b, v):` is invoked with all arguments, while `def func(b, v):` is invoked with only 3rd and 4th arguments.
 
         Parameters
         ----------
-        func: (S -> T), T -> U
-            A function converting a node entity (`T`) into a serializable value (`U`).
+        func: (SerializationContext, Node, object -> object, object)
+            A function converting a node entity into a serializable value.
 
         Returns
         -------
@@ -297,6 +374,22 @@ class NodeSerializer:
 
     @S.builder
     def to(self, **settings):
+        """
+        Set serialization settings to serializer sub graph.
+
+        This method is used for the property whose kind is `GraphTemplate`.
+        `settings` keyword arguments should be the same form of the keyword arguments of `to_dict()` of `GraphSpec`.
+
+        Parameters
+        ----------
+        settings: {str: NodeSerializer}
+            Serialization settings used to serialize sub graph.
+
+        Returns
+        -------
+        NodeSerializer
+            This instance.
+        """
         def to_dict(c, n, b, v) -> dict:
             vv = b(v)
             return SerializationContext(settings, c.finder).execute(vv.view)
@@ -306,7 +399,7 @@ class NodeSerializer:
 
 class SerializationContext:
     """
-    This class contains a set of `NodeSerializer`s and the interface to find serialization function registered in `GraphSpec`.
+    This class provides a functionality to serialize a graph by using containing `NodeSerializer` s.
     """
     def __init__(self, settings, finder):
         self.serializer_map = {n:self._to_serializer(s) for n, s in settings.items()}
@@ -319,6 +412,19 @@ class SerializationContext:
             return S.of(*s)
 
     def execute(self, graph):
+        """
+        Serializes a graph.
+
+        Parameters
+        ----------
+        graph: GraphView
+            The view of graph to serialize.
+
+        Returns
+        -------
+        dict
+            Serialization result.
+        """
         result = {}
 
         for n, c in filter(lambda nc: nc[1]().property.parent is None, graph):
@@ -334,8 +440,8 @@ class SerializationContext:
         ----------
         name: str
             A property name for the nodes.
-        nodes: [Node]
-            A list of nodes. 
+        container: NodeContainer | Node.Children
+            Container of nodes. 
         parent: dict
             A parent dictionary the converted values are appended to.
         """
@@ -348,7 +454,7 @@ class SerializationContext:
 
             if ns.be_singular:
                 # Alternative value given to aggregation function may be returned instead of node.
-                value = self.serialize_node(container().property, agg, serializer) if isinstance(agg, Node) else agg
+                value = self._serialize_node(container().property, agg, serializer) if isinstance(agg, Node) else agg
 
                 if ns.be_merged:
                     if not isinstance(value, dict):
@@ -361,9 +467,9 @@ class SerializationContext:
                 if ns.be_merged:
                     raise ValueError(f"Merging to parent dict requires folding.")
 
-                parent[ns.namer(name)] = [self.serialize_node(container().property, n, serializer) for n in agg]
+                parent[ns.namer(name)] = [self._serialize_node(container().property, n, serializer) for n in agg]
 
-    def serialize_node(self, prop, node, serializer):
+    def _serialize_node(self, prop, node, serializer):
         value = serializer(self, node, self.finder(prop.kind), node.entity)
 
         if isinstance(value, dict):

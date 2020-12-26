@@ -78,14 +78,6 @@ class GraphTemplate:
                 prop << cc
             return prop
 
-        #def __lt__(self, other):
-        #    p = self.parent
-        #    while p is not None:
-        #        if p == other:
-        #            return True
-        #        p = p.parent
-        #    return False
-            
         def __lshift__(self, children):
             """
             Makes this property as a parent of child properties.
