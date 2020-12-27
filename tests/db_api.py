@@ -14,7 +14,7 @@ class PseudoAPI:
 
 class PseudoConnection(Connection):
     def __init__(self, api):
-        super().__init__(api, None)
+        super().__init__(api, None, None)
         self.query_list = []
         self.params_list = []
         self.rows_list = []

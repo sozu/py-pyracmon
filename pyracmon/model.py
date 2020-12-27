@@ -2,25 +2,27 @@ from collections import OrderedDict
 
 
 class Column:
-    def __init__(self, name, ptype, type_info, pk, fk, incremental, comment=""):
-        """
-        Create a column schema.
+    """
+    This class represents a schema of a column.
 
-        Parametes
-        ---------
-        name: str
-            Column name.
-        ptype: type
-            Data type in python.
-        type_info: str
-            Type informations obtained from DB.
-        pk: bool
-            Is this column a PK?
-        fk: object
-            An informative object if this column is a foreign key, otherwise None.
-        incremental: object
-            If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
-        """
+    Attributes
+    ----------
+    name: str
+        Column name.
+    ptype: type
+        Data type in python.
+    type_info: str
+        Type informations obtained from DB.
+    pk: bool
+        Is this column a PK?
+    fk: object
+        An informative object if this column is a foreign key, otherwise None.
+    incremental: object
+        If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
+    comment: str
+        Comment of the column.
+    """
+    def __init__(self, name, ptype, type_info, pk, fk, incremental, comment=""):
         self.name = name
         self.ptype = ptype
         self.type_info = type_info
@@ -31,7 +33,19 @@ class Column:
 
 
 class Table:
-    def __init__(self, name, columns):
+    """
+    This class represents a schema of a table.
+
+    Attributes
+    ----------
+    name: str
+        Table name.
+    columns: [Column]
+        Columns in the table.
+    comment: str
+        Comment of the table.
+    """
+    def __init__(self, name, columns, comment=""):
         self.name = name
         self.columns = columns
         self.comment = ""
@@ -41,7 +55,39 @@ def define_model(table_, mixins=[]):
     """
     Create a model type representing the table.
 
-    When the same attribute is defined in multiple mixin types, the former one has a priority.
+    Types in `mixins` argument are base types which created type inherits.
+    When the same attribute is defined in multiple mixin types, the former overwrites the latter.
+
+    Model type always has following attributes.
+
+    - name: str
+        Name of the table.
+    - table: Table
+        Table schema.
+    - columns: [Column]
+        The list of column schemas.
+    - *column name in the table*
+        Column schema.
+
+    Model instances are created by passing column name and its value as keyword arguments to the constructor.
+    They are plain python objects representing a DB record by holding the subset of its columns as attributes.
+
+    >>> # CREATE TABLE t1 (col1 int, col2 text, col3 text);
+    >>> table = define_model("t1")
+    >>> model = table(col1=1, col2="a")
+
+    Attributes are also assignable by normal setter. In any case, attribute name must be a one of column names, otherwise `TypeError` raises.
+
+    >>> model.col3 = "b"
+
+    Model instance supports iteration which yields pairs of assigned column schema and its value.
+
+    >>> for c, v in model:
+    >>>     print(f"{c.name} = {v}")
+    >>>
+    col1 = 1
+    col2 = a
+    col3 = b
 
     Parameters
     ----------

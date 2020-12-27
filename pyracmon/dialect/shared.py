@@ -1,12 +1,14 @@
-from functools import reduce
-from pyracmon.util import key_to_index
+from ..query import values
+from ..model import *
+from ..util import key_to_index
+
 
 class MultiInsertMixin:
     """
     This class provides methods to execute queries which is not standard SQL but common to some RDBMS.
     """
     @classmethod
-    def inserts(cls, db, rows, qualifier = {}, rows_per_insert = 1000):
+    def inserts(cls, db, rows, qualifier={}, rows_per_insert=1000):
         """
         Insert multiple records.
 
@@ -14,10 +16,10 @@ class MultiInsertMixin:
         ----------
         db: Connection
             DB connection.
-        values: [{str: object}] | [model]
-            Rows to insert. Each item should be a dictionary of columns and values or model object.
+        values: [model] | [{str: object}]
+            Rows to insert. Each item should be a model object or dictionary of columns and values.
         qualifier: {str: str -> str}
-            A mapping from column name to a function converting holder marker into another SQL expression.
+            Functions converting place holders.
         rows_per_insert: int
             Maximum number of rows to insert in one query execution.
 
@@ -31,32 +33,37 @@ class MultiInsertMixin:
 
         dict_rows = [model_values(cls, r) for r in rows]
 
-        col_names = list(cls._check_columns(dict_rows[0]))
-        qualifier = key_to_index(qualifier, col_names)
+        for v in dict_rows:
+            check_columns(cls, v)
 
-        c = db.cursor()
-        remainders = dict_rows
+        cols = list(dict_rows[0].keys())
+        qualifier = key_to_index(qualifier, cols)
 
         offset = 0
-        sql_full = f"INSERT INTO {cls.name} ({', '.join(col_names)}) VALUES {db.helper.values(len(col_names), rows_per_insert, qualifier)}"
+        remainders = dict_rows
 
-        def insert(cursor, targets, index):
+        sql_full = f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), rows_per_insert, qualifier)}"
+
+        def insert(targets, index):
             num = len(targets)
-            values = sum([[r[c] for c in col_names] for r in targets], [])
+            vals = sum([list(t.values()) for t in targets], [])
+
             sql = sql_full if num == rows_per_insert else \
-                f"INSERT INTO {cls.name} ({', '.join(col_names)}) VALUES {db.helper.values(len(col_names), num, qualifier)}"
-            cursor.execute(sql, values)
+                f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), num, qualifier)}"
+
+            db.stmt().execute(sql, *vals)
+
             for c, v in cls.last_sequences(db, num):
                 for i, r in enumerate(rows[index:index+num]):
                     if isinstance(r, cls):
                         setattr(r, c.name, v - (num - i - 1))
 
         while len(remainders) >= rows_per_insert:
-            insert(c, remainders[0:rows_per_insert], offset)
+            insert(remainders[0:rows_per_insert], offset)
             remainders = remainders[rows_per_insert:]
             offset += rows_per_insert
 
         if len(remainders) > 0:
-            insert(c, remainders, offset)
+            insert(remainders, offset)
 
         return len(rows)

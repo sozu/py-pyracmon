@@ -3,6 +3,26 @@ from functools import wraps
 
 
 class PyracmonConfiguration:
+    """
+    Configurations for various modules.
+
+    Attributes
+    ----------
+    name: str
+        Name of this configuration. This value has no effect on any behavior of modules.
+    logger: str | logging.Logger
+        Logger or the name of logger used for internal logs such as query logging.
+    log_level: int
+        Logging level of internal logs.
+    sql_log_length: int
+        Maximum length for query log. Queries longer than this value are output with being trimmed.
+    parameter_log: bool
+        Flag to log query parameters also.
+    paramstyle: str
+        Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module.
+    type_mapping: str -> type
+        Function estimating python type from the name of type in database.
+    """
     def __init__(
         self,
         name = None,
@@ -56,6 +76,16 @@ def default_config(config=PyracmonConfiguration(
 
 
 def pyracmon(**kwargs):
+    """
+    Generates an object which starts `with` context, where global configuration can be changed.
+
+    An object obtained by `as` keyword in `with` clause is an instance of `PyracmonConfiguration`,
+    and changes to it done in the `with` context are copied into global configuration at the end of the context if no exception raises.
+
+    >>> with pyracmon() as cfg:
+    >>>     cfg.name = "my_config"
+    >>>     ...
+    """
     class Configurable:
         def __init__(self):
             self.config = PyracmonConfiguration()

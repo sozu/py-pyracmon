@@ -4,6 +4,11 @@ from .config import default_config
 
 
 class ConnectionContext:
+    """
+    This class represents a context where DB operation is done on the configuration it has.
+
+    By default, each instance has the local copy of global configuration which can be changed via `configure()` 
+    """
     _local = threading.local()
 
     @classmethod
@@ -25,9 +30,40 @@ class ConnectionContext:
         self.config = default_config().derive(**configurations)
 
     def configure(self, **configurations):
+        """
+        Change the configuration of this context.
+
+        Parameters
+        ----------
+        configurations: {str: object}
+            Pairs of configuration name and its value.
+
+        Returns
+        -------
+        ConnectionContext
+            This instance.
+        """
         self.config.set(**configurations)
+        return self
 
     def execute(self, cursor, sql, params):
+        """
+        Executes a query on a cursor.
+
+        Parameters
+        ----------
+        cursor: Cursor
+            Cursor object.
+        sql: str
+            Query string.
+        params: [object]
+            Query parameters.
+
+        Returns
+        -------
+        Cursor
+            Given cursor object. Internal state may be changed by the execution of the query.
+        """
         logger = _logger(self.config)
 
         if logger:

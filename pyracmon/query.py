@@ -9,45 +9,45 @@ class Q:
 
     Each parameter passed by the constructor becomes an instance method of created instance,
     which takes a condition clause including placeholders which will accept the parameter in query execution.
+    `$_` in the clause will be replaced with correct placeholder marker in query execution by `Statement`.
 
-    >>> q = Q(a = 1)
-    >>> q.a("a = %s")
-    Condition: 'a = %s' -- (1,)
+    >>> q = Q(a=1)
+    >>> q.a("a = $_")
+    Condition: 'a = $_' -- [1]
 
     Method whose name is not passed by the constructor returns empty condition which has no effect on the query.
 
-    >>> q.b("b = %s")
-    Condition: '' -- ()
+    >>> q.b("b = $_")
+    Condition: '' -- []
 
-    Those features simplifies a query construction in case some parameters can be absent.
-    A function taking Q instance and constructing a query by using it enables caller to control conditions at runtime.
+    This feature simplifies a query construction in case some parameters can be absent.
 
     >>> def search(db, q):
-    >>>     w, params = where(q.a("a = %s") & q.b("b = %s"))
-    >>>     db.cursor().execute(f"SELECT * FROM table {w}", params)
+    >>>     w, params = where(q.a("a = $_") & q.b("b = $_"))
+    >>>     db.stmt().execute(f"SELECT * FROM table {w}", *params)
     >>> 
-    >>> search(Q(a = 1))        # SELECT * FROM table WHERE a = 1
-    >>> search(Q(a = 1, b = 2)) # SELECT * FROM table WHERE a = 1 AND b = 2
-    >>> search(Q())             # SELECT * FROM table
+    >>> search(db, Q(a=1))        # SELECT * FROM table WHERE a = 1
+    >>> search(db, Q(a=1, b=2)) # SELECT * FROM table WHERE a = 1 AND b = 2
+    >>> search(db, Q())             # SELECT * FROM table
 
-    Additionally, this class provides utility `classmethod` s creating condition or condition generation function directly.
+    Additionally, this class provides utility class methods creating conditions.
 
     Using `of()` is the most simple way to create a condition clause.
 
-    >>> Q.of("a = %s", 1)
-    Condition: 'a = %s' -- (1,)
+    >>> Q.of("a = $_", 1)
+    Condition: 'a = $_' -- [1]
 
     Other utility methods correspond to basic operators defined in SQL.
-    They create condition clause by applying the operator to pairs of column and some value(s) obtained from optional keyword arguments.
+    They takes keyword arguments and create conditions by applying operator to each item respectively.
 
-    >>> Q.eq(a = 1)
-    Condition: 'a = %s' -- (1,)
-    >>> Q.eq(a = 1, b = 2)
-    Condition: 'a = %s AND b = %s' -- (1, 2)
-    >>> Q.in_(a = [1, 2, 3])
-    Condition: 'a IN (%s, %s, %s)' -- (1, 2, 3)
-    >>> Q.like(a = "abc")
-    Condition: 'a LIKE %s' -- ("%abc%",)
+    >>> Q.eq(a=1)
+    Condition: 'a = %s' -- [1]
+    >>> Q.eq(a=1, b=2)
+    Condition: 'a = %s AND b = %s' -- [1, 2]
+    >>> Q.in_(a=[1, 2, 3])
+    Condition: 'a IN (%s, %s, %s)' -- [1, 2, 3]
+    >>> Q.like(a="abc")
+    Condition: 'a LIKE %s' -- ["%abc%"]
     """
     class Attribute:
         def __init__(self, value):
@@ -68,7 +68,7 @@ class Q:
             Returns
             -------
             Conditional
-                Conditional object.
+                Condition.
             """
             expression = expression if isinstance(expression, str) else expression(self.value)
             params = convert(self.value) if convert else [self.value]
@@ -135,7 +135,7 @@ class Q:
     @classmethod
     def of(cls, expression="", params=[]):
         """
-        Utility method to create condition object directly from where expression and the parameters.
+        Creates a condition directly from an expression and parameters.
 
         Parameters
         ----------
@@ -147,7 +147,7 @@ class Q:
         Returns
         -------
         Conditional
-            Conditional object.
+            Condition.
         """
         if isinstance(params, list):
             pass
@@ -160,21 +160,21 @@ class Q:
     @classmethod
     def eq(cls, __alias=None, __and=True, **kwargs):
         """
-        Creates a function which generates a condition checking a column value equals to a value.
+        Creates a condition applying '=' operator to columns.
 
         Parameters
         ----------
         __alias: str
             Alias prepended to the column.
         __and: bool
-            If `True`, conditions are concatenated by `&`, otherwise `|`.
+            If `True`, conditions are concatenated by `AND`, otherwise `OR`.
         kwargs: {str:object}
             Mapping from columns to values.
 
         Returns
         -------
         Conditional
-            Conditional object.
+            Condition.
         """
         def is_null(col, val):
             if val is None:
@@ -185,7 +185,7 @@ class Q:
     @classmethod
     def neq(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value does NOT equal to a value.
+        Works like `eq`, but applies `!=`.
         """
         def is_null(col, val):
             if val is None:
@@ -196,7 +196,9 @@ class Q:
     @classmethod
     def in_(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is one of list items using `IN` operator.
+        Works like `eq`, but applies `IN`.
+
+        If parameters are empty, this method returns a condition being never satisfied.
         """
         def in_list(col, val):
             if len(val) == 0:
@@ -209,7 +211,9 @@ class Q:
     @classmethod
     def not_in(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is one of list items using `NOT IN` operator.
+        Works like `eq`, but applies `NOT IN`.
+
+        If parameters are empty, this method returns a condition being always satisfied.
         """
         def in_list(col, val):
             if len(val) == 0:
@@ -222,56 +226,56 @@ class Q:
     @classmethod
     def match(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value matches a string escaped for `LIKE` operator.
+        Works like `eq`, but applies 'LIKE'. Parameter is passed to query without being modified.
         """
         return _conditional("LIKE", __and, kwargs, None, __alias)
 
     @classmethod
     def like(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is a sub-string of a value using `LIKE` operator.
+        Works like `eq`, but applies 'LIKE'. Parameter is escaped and enclosed with wildcards (%) to execute partial match.
         """
         return _conditional("LIKE", __and, {k: f"%{escape_like(v)}%" for k, v in kwargs.items()}, None, __alias)
 
     @classmethod
     def startswith(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is a prefix of a value using `LIKE` operator.
+        Works like `eq`, but applies 'LIKE'. Parameter is escaped and appended with wildcards (%) to execute prefix match.
         """
         return _conditional("LIKE", __and, {k: f"{escape_like(v)}%" for k, v in kwargs.items()}, None, __alias)
 
     @classmethod
     def endswith(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is a postfix of a value using `LIKE` operator.
+        Works like `eq`, but applies 'LIKE'. Parameter is escaped and prepended with wildcards (%) to execute backward match.
         """
         return _conditional("LIKE", __and, {k: f"%{escape_like(v)}" for k, v in kwargs.items()}, None, __alias)
 
     @classmethod
     def lt(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is less than a value using `<` operator.
+        Works like `eq`, but applies '<'.
         """
         return _conditional("<", __and, kwargs, None, __alias)
 
     @classmethod
     def le(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is less than or equal to a value using `<=` operator.
+        Works like `eq`, but applies '<='.
         """
         return _conditional("<=", __and, kwargs, None, __alias)
 
     @classmethod
     def gt(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is greater than a value using `>` operator.
+        Works like `eq`, but applies '>'.
         """
         return _conditional(">", __and, kwargs, None, __alias)
 
     @classmethod
     def ge(cls, __alias=None, __and=True, **kwargs):
         """
-        Works like `eq`, but checks a column value is greater than or equal to a value using `>=` operator.
+        Works like `eq`, but applies '>='.
         """
         return _conditional(">=", __and, kwargs, None, __alias)
 
@@ -308,10 +312,19 @@ class Expression:
 
 class Conditional(Expression):
     """
-    Represents a single condition composed of a expression and parameters used for place holders in the expression.
+    Represents a single condition composed of an expression and parameters used for placeholders in the expression.
 
-    Parameters must be a list where the index of each parameter matches the index of place holder for it.
-    The expression accepts only the automatic numbering template parameter, that is `$_`.
+    Parameters must be a list where the index of each parameter matches the index of placeholder for it.
+    The expression accepts only the automatic numbering template parameter `$_`.
+
+    Logical operators such as `&`, `|` and `~` is available to generate new condition.
+
+    >>> c1 = Q.of("a = $_", 0)
+    >>> c2 = Q.of("b < $_", 1)
+    >>> c3 = Q.of("c > $_", 2)
+    >>> c = ~(c1 & c2 | c3)
+    >>> c
+    Condition: NOT (((a = $_) AND (b < $_)) OR (c > $_)) -- [0, 1, 2]
     """
     @classmethod
     def all(cls, conditionals):
@@ -321,7 +334,7 @@ class Conditional(Expression):
         Parameters
         ----------
         conditionals: [Conditional]
-            Conditional objects.
+            Condition.
 
         Returns
         -------
@@ -338,7 +351,7 @@ class Conditional(Expression):
         Parameters
         ----------
         conditionals: [Conditional]
-            Conditional objects.
+            Condition.
 
         Returns
         -------
@@ -424,14 +437,14 @@ def where(condition):
     Parameters
     ----------
     condition: Conditional
-        Conditional object.
+        Condition.
 
     Returns
     -------
     str
         A where clause starting from `WHERE` or empty string if the condition is empty.
     [object]
-        Parameters for place holders in where clause.
+        Parameters for placeholders in where clause.
     """
     return ('', []) if condition.expression == '' else (f'WHERE {condition.expression}', condition.params)
 
@@ -471,7 +484,7 @@ def ranged_by(limit=None, offset=None):
     str
         LIMIT and OFFSET clause.
     [object]
-        Parameters for place holders in LIMIT and OFFSET clause.
+        Parameters for placeholders in LIMIT and OFFSET clause.
     """
     clause, params = [], []
 
@@ -488,14 +501,14 @@ def ranged_by(limit=None, offset=None):
 
 def holders(length_or_keys, qualifier=None):
     """
-    Generates partial query string containing place holders separated by comma.
+    Generates partial query string containing placeholders separated by comma.
 
     Parameters
     ----------
     length_or_keys: int | [str]
-        The number of place holders or keys assigned to them.
+        The number of placeholders or keys assigned to them.
     qualifier: {int: str -> str}
-        Mapping from indexes to functions. Each function converts place holder string at paired index.
+        Mapping from indexes to functions. Each function converts placeholder string at paired index.
 
     Returns
     -------
@@ -527,11 +540,11 @@ def values(length_or_key_gen, rows, qualifier=None):
     Parameters
     ----------
     length_or_key_gen: int | [int -> str]
-        The number of place holders or functions which takes a row index and returns a key.
+        The number of placeholders or functions which takes a row index and returns a key.
     rows: int
         The number of rows to insert.
     qualifier: {int: str -> str}
-        Mapping from indexes to functions. Each function converts place holder string at paired index.
+        Mapping from indexes to functions. Each function converts placeholder string at paired index.
 
     Returns
     -------
@@ -548,9 +561,7 @@ def values(length_or_key_gen, rows, qualifier=None):
 
 class QueryHelper:
     """
-    This class provides methods helping query construction.
-
-    The instance can be obtained via `helper` attribute in `pyracmon.connection.Connection`.
+    Deprecated.
     """
     def __init__(self, api, config):
         self.api = api

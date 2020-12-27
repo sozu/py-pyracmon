@@ -48,17 +48,23 @@ class Selection:
 
 class FieldExpressions:
     """
-    The instance of this class works as the composition of `Selection`s which provides attributes to access each `Selection`.
+    The instance of this class works as the composition of `Selection` s which provides attributes to access each `Selection`.
 
-    The main purpose of this class is avoiding a flood of occurrence of `Selection` variables. 
-    Just applying + operator to them creates an instance of `FieldExpressions`, by which all `Selection` are available via attributes of their names.
+    `+` operation on `Selection` s creates an instance of `FieldExpressions`. Each `Selection` is available via attributes of its name.
 
-    >>> exp = table1.select("t1", includes = ["col11", "col12"]) + table2.select("t2")
-    >>> c.execute(f"SELECT {exp.t1}, {exp.t2} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
+    >>> exp = table1.select("t1", includes=["col11", "col12"]) + table2.select("t2")
+    >>> c.execute(f"SELECT {exp} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
     >>> for row in c.fetchall():
     >>>     r = read_row(row, *exp)
     >>>     assert isinstance(r.t1, table1)
     >>>     assert isinstance(r.t2, table2)
+
+    Empty tuple and string are available in addition to `Selection` object.
+    They are replaced with index arguments and keywords arguments each other on the direct invocation of the instance.
+
+    >>> exp = table1.select("t1", includes=["col11", "col12"]) + () + "a" + () + "b"
+    >>> f"{exp("t2.col21", "t2.col23", a="t2.col22", b="t2.col24")}"
+    t1.col11, t1.col12, t2.col21, t2.col22, t2.col23, t2.col24
     """
     def __init__(self):
         self.__selections = []
@@ -120,13 +126,22 @@ class RowValues:
     """
     This class provides attribute access for each row in query result.
 
-    Values converted by `read_row()` can be accessed as if this instance is the list of them by using index or iteration.
-    They can also be accessed via the attribute whose name is the alias (if exists) or the table name.
+    Each instance behaves as if it is a list of values created by `Selection` s.
+    Index access returns the value at the index and iteration yields values in order.
 
-    >>> sels = table1.select("t1"), table2.select()
-    >>> v = read_row(row, *sels)
-    >>> v.t1
-    >>> v.table2
+    >>> exp = table1.select("t1"), table2.select()
+    >>> r = read_row(row, *exp)
+    >>> r[0]
+    ...
+    >>> [v for v in r]
+    ...
+
+    It also exposes attributes whose name is the alias (if exists) or the table name.
+
+    >>> r.t1
+    ...
+    >>> r.table2
+    ...
     """
     def __init__(self, selections):
         self.key_map = dict([(s, i) for i, s in enumerate(map(self._key_of, selections)) if s is not None])
@@ -159,7 +174,7 @@ class RowValues:
         self.values.append(value)
 
 
-def read_row(row, *selections, allow_redundancy = False):
+def read_row(row, *selections, allow_redundancy=False):
     """
     Read values in a row according to `selections`.
 
@@ -207,7 +222,7 @@ def read_row(row, *selections, allow_redundancy = False):
 
 class SelectMixin:
     @classmethod
-    def select(cls, alias = "", includes = [], excludes = []):
+    def select(cls, alias="", includes=[], excludes=[]):
         """
         Select columns to use in a query with an alias of this table.
 
