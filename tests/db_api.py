@@ -1,3 +1,4 @@
+import logging
 from pyracmon.query import QueryHelper
 from pyracmon.connection import Connection
 
@@ -13,11 +14,16 @@ class PseudoAPI:
 
 
 class PseudoConnection(Connection):
-    def __init__(self, api):
-        super().__init__(api, None, None)
+    class Inner:
+        def close(self):
+            pass
+
+    def __init__(self, api, **kwargs):
+        super().__init__(api, PseudoConnection.Inner(), **kwargs)
         self.query_list = []
         self.params_list = []
         self.rows_list = []
+        self.closed = False
 
     def reserve(self, rows):
         if not isinstance(rows, list):
@@ -33,6 +39,10 @@ class PseudoConnection(Connection):
 
     def cursor(self):
         return PseudoCursor(self)
+
+    def close(self):
+        self.closed = True
+        super(PseudoConnection, self).close()
 
 
 class PseudoCursor:
@@ -53,3 +63,13 @@ class PseudoCursor:
     @property
     def rowcount(self):
         return -1
+
+
+class PseudoLogger(logging.Logger):
+    def __init__(self, name):
+        super().__init__(name)
+        self.messages = []
+
+    def log(self, level, msg, *args, **kwargs):
+        if self.isEnabledFor(level):
+            self.messages.append(msg)

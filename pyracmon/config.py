@@ -1,5 +1,7 @@
 import logging
 from functools import wraps
+from .model_graph import ConfigurableSpec
+from .util import Configurable
 
 
 class PyracmonConfiguration:
@@ -32,6 +34,7 @@ class PyracmonConfiguration:
         parameter_log = None,
         paramstyle = None,
         type_mapping = None,
+        graph_spec = None,
     ):
         self.name = name
         self.logger = logger
@@ -40,9 +43,15 @@ class PyracmonConfiguration:
         self.parameter_log = parameter_log
         self.paramstyle = paramstyle
         self.type_mapping = type_mapping
+        self.graph_spec = graph_spec or ConfigurableSpec.create()
 
     def derive(self, **kwargs):
-        return DerivingConfiguration(self, **kwargs)
+        def attr(k):
+            v = getattr(self, k)
+            return v.clone() if isinstance(v, Configurable) else None
+        attrs = {k:attr(k) for k in vars(self) if attr(k) is not None}
+        attrs.update(kwargs)
+        return DerivingConfiguration(self, **attrs)
 
 
 class DerivingConfiguration(PyracmonConfiguration):
@@ -71,6 +80,7 @@ def default_config(config=PyracmonConfiguration(
     parameter_log = False,
     paramstyle = None,
     type_mapping = None,
+    graph_spec = None,
 )):
     return config
 
@@ -88,7 +98,7 @@ def pyracmon(**kwargs):
     """
     class Configurable:
         def __init__(self):
-            self.config = PyracmonConfiguration()
+            self.config = default_config().derive()
 
         def __enter__(self):
             return self.config
@@ -99,7 +109,9 @@ def pyracmon(**kwargs):
 
                 for k in vars(target):
                     v = getattr(self.config, k)
-                    if v is not None:
+                    if isinstance(v, Configurable):
+                        getattr(target, k).replace(v)
+                    elif v is not None:
                         setattr(target, k, v)
             return False
 

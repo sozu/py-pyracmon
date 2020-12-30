@@ -16,7 +16,7 @@ class Column:
     pk: bool
         Is this column a PK?
     fk: object
-        An informative object if this column is a foreign key, otherwise None.
+        An informative object if this column is a foreign key, otherwise `None`.
     incremental: object
         If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
     comment: str

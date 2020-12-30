@@ -3,6 +3,7 @@ from functools import reduce, partial
 from pyracmon.graph.identify import IdentifyPolicy, HierarchicalPolicy, neverPolicy
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.serialize import S, SerializationContext, NodeSerializer
+from pyracmon.util import Configurable
 
 
 class GraphSpec:
@@ -61,6 +62,11 @@ class GraphSpec:
             A type bound for the *identifier*.
         f: T -> ID
             An *identifier* function.
+
+        Returns
+        -------
+        GraphSpec
+            This instance.
         """
         self.identifiers[0:0] = [(c, f)]
         return self
@@ -75,6 +81,11 @@ class GraphSpec:
             A type bound for the *entity filter*.
         f: T -> bool
             An *entity filter* function.
+
+        Returns
+        -------
+        GraphSpec
+            This instance.
         """
         self.entity_filters[0:0] = [(c, f)]
         return self
@@ -89,6 +100,11 @@ class GraphSpec:
             A type bound for the *serializer*.
         f: T -> U
             An *serializer* function.
+
+        Returns
+        -------
+        GraphSpec
+            This instance.
         """
         self.serializers[0:0] = [(c, f)]
         return self

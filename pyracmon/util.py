@@ -1,3 +1,14 @@
+class Configurable:
+    """
+    Interface for classes of configuration objects.
+    """
+    def clone(self):
+        raise NotImplementedError()
+
+    def replace(self, another):
+        raise NotImplementedError()
+
+
 def key_to_index(values, ordered_keys):
     """
     Generates a dictionary whose values are same as given dictionary but each key is an index of original key in the ordered key list.

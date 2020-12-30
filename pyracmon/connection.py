@@ -1,4 +1,6 @@
-from uuid import uuid4
+import string
+import threading
+from datetime import datetime
 from .query import QueryHelper
 from .sql import Sql
 from .marker import Marker
@@ -30,11 +32,14 @@ class Connection:
 
     Every instance works as the proxy object to original connection, therefore any attribute in it is still available.
     """
-    def __init__(self, api, conn, context_factory):
-        self.identifier = uuid4()
+    _characters = string.ascii_letters + string.digits + ".="
+
+    def __init__(self, api, conn, context_factory=None):
+        self.identifier = self._gen_identifier()
         self.api = api
         self.conn = conn
         self.context_factory = context_factory
+        self._context = None
 
     def __getattr__(self, name):
         return getattr(self.conn, name)
@@ -54,8 +59,17 @@ class Connection:
                 self.conn.commit()
             self.conn.close()
 
-    def __del__(self):
-        ConnectionContext.reset(self.identifier)
+    def _gen_identifier(self):
+        t = int(datetime.now().timestamp() * 1000)
+
+        def gen(x):
+            base = len(Connection._characters)
+            while x >= base:
+                x, r = divmod(x, base)
+                yield Connection._characters[r]
+            yield Connection._characters[x]
+
+        return threading.current_thread().name + "-" + ''.join(gen(t))[::-1]
 
     @property
     def helper(self):
@@ -74,16 +88,19 @@ class Connection:
         ConnectionContext
             `ConnectionContext` used for this connection.
         """
-        return ConnectionContext.get(self.identifier, self.context_factory)
+        if not self._context:
+            self._context = (self.context_factory or ConnectionContext)()
+            self._context.identifier = self.identifier
+        return self._context
 
     def use(self, factory):
         """
-        Set the factory function of `ConnectionContext`.
+        Set factory function of `ConnectionContext`.
 
         Parameters
         ----------
         factory: () -> ConnectionContext
-            A factory function of `ConnectionContext`.
+            A factory function.
 
         Returns
         -------
@@ -135,7 +152,7 @@ class Statement:
         -------
         str
             Prepared SQL statement.
-        [object]
+        [object] | {str:object}
             Paremeters for created statement.
         """
         paramstyle = self.context.config.paramstyle or self.conn.api.paramstyle

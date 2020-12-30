@@ -1,5 +1,4 @@
 import logging
-import threading
 from .config import default_config
 
 
@@ -9,25 +8,12 @@ class ConnectionContext:
 
     By default, each instance has the local copy of global configuration which can be changed via `configure()` 
     """
-    _local = threading.local()
-
-    @classmethod
-    def get(cls, identifier, factory=None):
-        if not hasattr(cls._local, "stack"):
-            cls._local.stack = {}
-
-        if identifier not in cls._local.stack:
-            cls._local.stack[identifier] = (factory or ConnectionContext)()
-
-        return cls._local.stack[identifier]
-
-    @classmethod
-    def reset(cls, identifier):
-        if identifier in getattr(cls._local, "stack", {}):
-            del cls._local.stack[identifier]
-
-    def __init__(self, **configurations):
+    def __init__(self, identifier=None, **configurations):
+        self.identifier = identifier
         self.config = default_config().derive(**configurations)
+
+    def _message(self, message):
+        return f"({self.identifier}) {message}" if self.identifier else message
 
     def configure(self, **configurations):
         """
@@ -69,10 +55,10 @@ class ConnectionContext:
         if logger:
             sql_log = sql if len(sql) <= self.config.sql_log_length else f"{sql[0:self.config.sql_log_length]}..."
 
-            logger.log(self.config.log_level, sql_log)
+            logger.log(self.config.log_level, self._message(sql_log))
 
             if self.config.parameter_log:
-                logger.log(self.config.log_level, f"Parameters: {params}")
+                logger.log(self.config.log_level, self._message(f"Parameters: {params}"))
 
         cursor.execute(sql, params)
 
