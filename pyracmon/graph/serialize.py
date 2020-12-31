@@ -91,6 +91,7 @@ class NodeSerializer:
         self._namer = namer
         self._aggregator = aggregator
         self._serializers = list(serializers)
+        self._doc = ""
 
     @property
     def namer(self):
@@ -202,6 +203,14 @@ class NodeSerializer:
         else:
             self._aggregator = aggregator
 
+        return self
+
+    #----------------------------------------------------------------
+    # Documentation
+    #----------------------------------------------------------------
+    @S.builder
+    def doc(self, document):
+        self._doc = document
         return self
 
     #----------------------------------------------------------------

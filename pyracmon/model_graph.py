@@ -1,5 +1,9 @@
+from typing import TypeVar
+import inspect
 from .util import Configurable
 from .graph.spec import GraphSpec
+from .graph.schema import TypedDict, DynamicType, Shrink, issubgeneric
+from .graph.serialize import T
 
 
 class GraphEntityMixin:
@@ -45,6 +49,26 @@ class GraphEntityMixin:
         return all([getattr(model, c.name, None) is None for c in cls.columns])
 
 
+class ModelSchema(DynamicType[T]):
+    @classmethod
+    def resolve(cls, bound):
+        class Schema(TypedDict):
+            pass
+        setattr(Schema, '__annotations__', {c.name:c.ptype for c in bound.columns})
+        return Schema
+
+
+class ExcludeFK(Shrink[T]):
+    @classmethod
+    def resolve(cls, td, bound):
+        class Schema(TypedDict):
+            pass
+        excludes = {c.name for c in bound.columns if c.fk}
+        column_schema = getattr(td, '__annotations__', {})
+        setattr(Schema, '__annotations__', {n:t for n, t in column_schema.items() if n not in excludes})
+        return Schema
+
+
 class ConfigurableSpec(GraphSpec, Configurable):
     """
     Extension of `GraphSpec` prepared to integrate model types into graph specification.
@@ -57,7 +81,10 @@ class ConfigurableSpec(GraphSpec, Configurable):
 
         spec.add_identifier(GraphEntityMixin, lambda m: type(m).identity(m))
         spec.add_entity_filter(GraphEntityMixin, lambda m: m and not type(m).is_null(m))
-        spec.add_serializer(GraphEntityMixin, lambda m: {c.name:v for c, v in m})
+
+        def serialize(model:T) -> ModelSchema[T]:
+            return {c.name:v for c, v in model}
+        spec.add_serializer(GraphEntityMixin, serialize)
 
         return spec
 
@@ -82,8 +109,22 @@ class ConfigurableSpec(GraphSpec, Configurable):
         self.include_fk = another.include_fk
 
     def _model_serializer(self, base):
+        """
+        Generate configured serializer for model type.
+
+        Parameters
+        ----------
+        base: Model -> object
+            Serialization function.
+        """
         if not self.include_fk:
-            def serialize(model) -> dict:
+            # Use return annotation of base serializer if exists.
+            rt = inspect.signature(base).return_annotation
+
+            if issubgeneric(rt, ModelSchema):
+                rt = ExcludeFK[rt]
+
+            def serialize(model:T) -> rt:
                 d = {c.name:v for c, v in model if not c.fk}
                 return base(type(model)(**d)) if base else d
             return serialize

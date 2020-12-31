@@ -3,6 +3,7 @@ from functools import reduce, partial
 from pyracmon.graph.identify import IdentifyPolicy, HierarchicalPolicy, neverPolicy
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.serialize import S, SerializationContext, NodeSerializer
+from pyracmon.graph.schema import GraphSchema
 from pyracmon.util import Configurable
 
 
@@ -183,3 +184,21 @@ class GraphSpec:
             A dictionary representing the graph.
         """
         return SerializationContext(settings, self.get_serializer).execute(graph)
+
+    def to_schema(self, template, **settings):
+        """
+        Creates `GraphSchema` under this specifications.
+
+        Parameters
+        ----------
+        template: GraphTemplate
+            A template of serializing graph.
+        settings: {str: NodeSerializer}
+            Mapping from property name to `NodeSerializer` s.
+
+        Returns
+        -------
+        GraphSchema
+            An object having schema information of serialized dictionary.
+        """
+        return GraphSchema(self, template, **settings)

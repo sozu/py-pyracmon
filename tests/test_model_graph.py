@@ -1,6 +1,8 @@
 import pytest
+import inspect
 from pyracmon.model import Table, Column, define_model
 from pyracmon.model_graph import *
+from pyracmon.graph.schema import walk_dict
 
 
 table1 = Table("t1", [
@@ -145,3 +147,28 @@ class TestFK:
         spec.include_fk = True
 
         assert spec.get_serializer(type(v))(v) == {"c1": 1, "c2": 2, "c3": 3}
+
+
+class TestSchema:
+    def test_schema(self):
+        m = define_model(table1, [GraphEntityMixin])
+
+        spec = ConfigurableSpec.create()
+
+        s = spec.get_serializer(m)
+
+        rt = inspect.signature(s).return_annotation
+
+        assert walk_dict(rt.schema_of(rt, m)) == {"c1": int, "c3": int}
+
+    def test_include_fk(self):
+        m = define_model(table1, [GraphEntityMixin])
+
+        spec = ConfigurableSpec.create()
+        spec.include_fk = True
+
+        s = spec.get_serializer(m)
+
+        rt = inspect.signature(s).return_annotation
+
+        assert walk_dict(rt.schema_of(rt, m)) == {"c1": int, "c2": int, "c3": int}

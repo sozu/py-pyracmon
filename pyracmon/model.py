@@ -108,6 +108,11 @@ def define_model(table_, mixins=[]):
         table = table_
         columns = table_.columns
 
+        @classmethod
+        def shrink(cls, excludes, includes=None):
+            cols = [c for c in cls.columns if (not includes or c.name in includes) and c.name not in excludes]
+            return define_model(Table(cls.name, cols, cls.table.comment), mixins)
+
     for c in table_.columns:
         setattr(Meta, c.name, c)
 

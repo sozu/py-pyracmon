@@ -95,3 +95,22 @@ def graph_dict(graph, **settings):
         A dictionary representing the graph.
     """
     return default_config().graph_spec.to_dict(graph, **settings)
+
+
+def graph_schema(template, **settings):
+    """
+    Creates `GraphSchema` under the default specifications.
+
+    Parameters
+    ----------
+    template: GraphTemplate
+        A template of serializing graph.
+    settings: {str: NodeSerializer}
+        Mapping from property name to `NodeSerializer` s.
+
+    Returns
+    -------
+    GraphSchema
+        An object having schema information of serialized dictionary.
+    """
+    return default_config().graph_spec.to_schema(template, **settings)

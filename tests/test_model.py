@@ -60,6 +60,36 @@ class TestDefineModel:
         assert m.m3() == "B3"
 
 
+class TestShrink:
+    def test_shrink(self):
+        m = define_model(table1, [A, B])
+
+        n = m.shrink(["c2"])
+
+        assert n.name == "t1"
+        assert [c.name for c in n.columns] == ["c1", "c3"]
+        assert n.m1() == "A1"
+        assert n.m2() == "A2"
+        assert n.m3() == "B3"
+
+        with pytest.raises(TypeError):
+            n(c2=1)
+
+    def test_includes(self):
+        m = define_model(table1, [A, B])
+
+        n = m.shrink(["c2"], ["c1"])
+
+        assert n.name == "t1"
+        assert [c.name for c in n.columns] == ["c1"]
+        assert n.m1() == "A1"
+        assert n.m2() == "A2"
+        assert n.m3() == "B3"
+
+        with pytest.raises(TypeError):
+            n(c3=1)
+
+
 class TestModelInstance:
     def test_create(self):
         m = define_model(table1)
