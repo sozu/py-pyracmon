@@ -3,7 +3,6 @@ import psycopg2
 import pytest
 from tests import models as m
 from pyracmon import *
-from pyracmon.graph.schema import *
 from pyracmon.dialect import postgresql
 
 

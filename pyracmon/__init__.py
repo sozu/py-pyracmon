@@ -9,6 +9,7 @@ from pyracmon.model import define_model, Table, Column
 from pyracmon.model_graph import GraphEntityMixin
 from pyracmon.query import Q, Conditional, where
 from pyracmon.graph import new_graph, GraphSpec, S
+from pyracmon.graph.schema import TypedDict, document_type, Typeable, walk_schema, GraphSchema
 
 
 __all__ = [
@@ -26,11 +27,18 @@ __all__ = [
     "where",
     "new_graph",
     "S",
+    "document_type",
+    "Typeable",
+    "walk_schema",
+    "GraphSchema",
     "declare_models",
     "graph_template",
     "graph_dict",
     "graph_schema",
 ]
+
+if sys.version_info[0:2] < (3, 8):
+    __all__ += ["TypedDict"]
 
 
 def declare_models(dialect, db, module=__name__, mixins=[], excludes=None, includes=None):
