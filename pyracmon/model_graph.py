@@ -2,7 +2,7 @@ from typing import TypeVar
 import inspect
 from .util import Configurable
 from .graph.spec import GraphSpec
-from .graph.schema import TypedDict, DynamicType, Shrink, issubgeneric
+from .graph.schema import TypedDict, DynamicType, Shrink, issubgeneric, document_type
 from .graph.serialize import T
 
 
@@ -51,22 +51,17 @@ class GraphEntityMixin:
 
 class ModelSchema(DynamicType[T]):
     @classmethod
-    def resolve(cls, bound):
+    def fix(cls, bound, arg):
         class Schema(TypedDict):
             pass
-        setattr(Schema, '__annotations__', {c.name:c.ptype for c in bound.columns})
+        setattr(Schema, '__annotations__', {c.name:document_type(c.ptype, c.comment) for c in bound.columns})
         return Schema
 
 
 class ExcludeFK(Shrink[T]):
     @classmethod
-    def resolve(cls, td, bound):
-        class Schema(TypedDict):
-            pass
-        excludes = {c.name for c in bound.columns if c.fk}
-        column_schema = getattr(td, '__annotations__', {})
-        setattr(Schema, '__annotations__', {n:t for n, t in column_schema.items() if n not in excludes})
-        return Schema
+    def select(cls, bound, arg):
+        return {c.name for c in arg.columns if c.fk}, None
 
 
 class ConfigurableSpec(GraphSpec, Configurable):

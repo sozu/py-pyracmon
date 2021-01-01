@@ -110,6 +110,21 @@ def define_model(table_, mixins=[]):
 
         @classmethod
         def shrink(cls, excludes, includes=None):
+            """
+            Creates new model type containing subset of columns.
+
+            Parameters
+            ----------
+            excludes: [str]
+                Column names to exclude.
+            includes: [str]
+                Column names to include.
+
+            Returns
+            -------
+            type
+                Created model type.
+            """
             cols = [c for c in cls.columns if (not includes or c.name in includes) and c.name not in excludes]
             return define_model(Table(cls.name, cols, cls.table.comment), mixins)
 

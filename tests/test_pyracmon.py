@@ -3,6 +3,7 @@ import psycopg2
 import pytest
 from tests import models as m
 from pyracmon import *
+from pyracmon.graph.schema import *
 from pyracmon.dialect import postgresql
 
 
@@ -119,13 +120,15 @@ class TestModelGraph:
                 ),
             ]
 
-        assert graph_dict(
+        r = graph_dict(
             view,
             t1 = S.of(),
             t2 = S.of(),
             t3 = S.of(),
             num = S.of(),
-        ) == {
+        )
+
+        assert r == {
             "t1": [
                 {
                     "c11": 1, "c12": 11,
@@ -138,4 +141,32 @@ class TestModelGraph:
                     "t3": [{"c32": None}],
                 }
             ]
+        }
+
+        gs = graph_schema(
+            template,
+            t1 = S.doc("T1"),
+            t2 = S.of(),
+            t3 = S.of(),
+            num = S.doc("Num"),
+        )
+
+        assert r == gs.serialize(view)
+        assert walk_schema(gs.schema, True) == {
+            "t1": ([
+                {
+                    "c11": (int, "comment of c11"), "c12": (int, "comment of c12"), "c13": (str, "comment of c13"),
+                    "t2": ([
+                        {
+                            "c21": (int, ""), "c22": (int, ""), "c23": (str, ""),
+                            "num": ([int], "Num"),
+                        },
+                    ], ""),
+                    "t3": ([
+                        {
+                            "c32": (int, ""), "c33": (str, ""),
+                        }
+                    ], ""),
+                },
+            ], "T1"),
         }

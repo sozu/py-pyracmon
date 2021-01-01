@@ -29,6 +29,7 @@ __all__ = [
     "declare_models",
     "graph_template",
     "graph_dict",
+    "graph_schema",
 ]
 
 

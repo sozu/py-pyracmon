@@ -1,4 +1,5 @@
 import pytest
+from typing import Generic, TypeVar
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
@@ -203,6 +204,24 @@ class TestSerializer:
         assert signature(s).return_annotation is float
         assert r == "12.8"
 
+    def test_generic(self):
+        T = TypeVar("T")
+        class G(Generic[T]):
+            pass
+        t = self._template()
+        ns = NodeSerializer()
+        def f0(v):
+            return v
+        def f1(v) -> int:
+            return v
+        def f2(b, v) -> G[T]:
+            return v
+        def f3(n, b, v) -> G[T]:
+            return v
+        s = ns.each(f0).each(f1).each(f2).each(f3).serializer
+
+        assert signature(s).return_annotation == G[G[int]]
+
 
 class TestSubGraph:
     def _template(self):
@@ -373,6 +392,42 @@ class TestContext:
             {"A": 0, "__B__": 10},
             {"A": 1, "__B__": 11},
             {"A": 2, "__B__": 10},
+        ]}
+
+    def test_fix_extend(self):
+        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).fix(lambda x: {"D": x*3}))
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {"a": [
+            {"A": 0, "B": 1, "C": 2, "D": 0},
+            {"A": 1, "B": 2, "C": 3, "D": 3},
+            {"A": 2, "B": 3, "C": 4, "D": 6},
+        ]}
+
+    def test_fix_shrink(self):
+        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).fix(excludes=["B"]))
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {"a": [
+            {"A": 0, "C": 2},
+            {"A": 1, "C": 3},
+            {"A": 2, "C": 4},
+        ]}
+
+    def test_fix_includes(self):
+        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).fix(excludes=["B"], includes={"A"}))
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {"a": [
+            {"A": 0},
+            {"A": 1},
+            {"A": 2},
         ]}
 
     def test_all(self):

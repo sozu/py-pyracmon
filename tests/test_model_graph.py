@@ -2,13 +2,13 @@ import pytest
 import inspect
 from pyracmon.model import Table, Column, define_model
 from pyracmon.model_graph import *
-from pyracmon.graph.schema import walk_dict
+from pyracmon.graph.schema import walk_schema, Typeable
 
 
 table1 = Table("t1", [
-    Column("c1", int, None, True, False, "seq"),
-    Column("c2", int, None, False, True, None),
-    Column("c3", int, None, False, False, None),
+    Column("c1", int, None, True, False, "seq", "c1 in t1"),
+    Column("c2", int, None, False, True, None, "c2 in t1"),
+    Column("c3", int, None, False, False, None, "c3 in t1"),
 ])
 
 
@@ -159,7 +159,8 @@ class TestSchema:
 
         rt = inspect.signature(s).return_annotation
 
-        assert walk_dict(rt.schema_of(rt, m)) == {"c1": int, "c3": int}
+        assert walk_schema(Typeable.resolve(rt, m)) == {"c1": int, "c3": int}
+        assert walk_schema(Typeable.resolve(rt, m), True) == {"c1": (int, "c1 in t1"), "c3": (int, "c3 in t1")}
 
     def test_include_fk(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -171,4 +172,5 @@ class TestSchema:
 
         rt = inspect.signature(s).return_annotation
 
-        assert walk_dict(rt.schema_of(rt, m)) == {"c1": int, "c2": int, "c3": int}
+        assert walk_schema(Typeable.resolve(rt, m)) == {"c1": int, "c2": int, "c3": int}
+        assert walk_schema(Typeable.resolve(rt, m), True) == {"c1": (int, "c1 in t1"), "c2": (int, "c2 in t1"), "c3": (int, "c3 in t1")}

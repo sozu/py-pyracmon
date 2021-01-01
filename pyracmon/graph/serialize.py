@@ -1,11 +1,9 @@
 from functools import partial, reduce
 from inspect import signature, Signature
-from typing import TypeVar
+from typing import TypeVar, get_type_hints
 from .template import GraphTemplate
 from .graph import Node
-
-
-T = TypeVar('T')
+from .schema import Shrink, Extend, T, TypedDict
 
 
 class S:
@@ -141,20 +139,23 @@ class NodeSerializer:
         (SerializationContext, Node, object -> object, object) -> object
             A function to convert an entity value into a serializable value.
         """
-        def wrap(f):
-            try:
-                sig = signature(f)
-                def g(cxt, node, base, value) -> sig.return_annotation:
-                    ba = sig.bind(*(value, base, node, cxt)[len(sig.parameters)-1::-1])
-                    return f(*ba.args)
-                return g
-            except:
-                def g(cxt, node, base, value):
-                    return f(value)
-                return g
+        def merge(fs):
+            rt = Signature.empty
+            for f in fs[::-1]:
+                t = signature(f).return_annotation
+                if t != Signature.empty:
+                    try:
+                        t[T]
+                        rt = t if rt == Signature.empty else rt[t]
+                    except TypeError:
+                        try:
+                            return rt[t]
+                        except TypeError:
+                            return t
+            return rt
 
-        funcs = [wrap(s) for s in self._serializers]
-        rt = next(filter(lambda rt: rt != Signature.empty, map(lambda f: signature(f).return_annotation, funcs[::-1])), Signature.empty)
+        funcs = [self._wrap(s) for s in self._serializers]
+        rt = merge(funcs)
 
         def composed(cxt, node, base, value) -> rt:
             return reduce(lambda acc,f: partial(f, cxt, node, acc), [base or as_is] + funcs)(value)
@@ -188,6 +189,18 @@ class NodeSerializer:
         """
         return not isinstance(signature(self.aggregator).return_annotation, list)
 
+    def _wrap(self, f):
+        try:
+            sig = signature(f)
+            def g(cxt, node, base, value) -> sig.return_annotation:
+                ba = sig.bind(*(value, base, node, cxt)[len(sig.parameters)-1::-1])
+                return f(*ba.args)
+            return g
+        except:
+            def g(cxt, node, base, value):
+                return f(value)
+            return g
+
     def _set_aggregator(self, aggregator, folds):
         try:
             rt = signature(aggregator).return_annotation
@@ -210,6 +223,19 @@ class NodeSerializer:
     #----------------------------------------------------------------
     @S.builder
     def doc(self, document):
+        """
+        Set the documentation for this node.
+
+        Parameters
+        ----------
+        document: str
+            A documentation string.
+
+        Returns
+        -------
+        NodeSerializer
+            This instance.
+        """
         self._doc = document
         return self
 
@@ -370,7 +396,7 @@ class NodeSerializer:
 
         Parameters
         ----------
-        func: (SerializationContext, Node, object -> object, object)
+        func: (SerializationContext, Node, object -> object, object) -> object
             A function converting a node entity into a serializable value.
 
         Returns
@@ -404,6 +430,46 @@ class NodeSerializer:
             return SerializationContext(settings, c.finder).execute(vv.view)
         self._serializers.append(to_dict)
         return self.head()
+
+    @S.builder
+    def fix(self, generator=None, excludes=None, includes=None):
+        """
+        Extends and shrinks the dictionary.
+
+        Parameters
+        ----------
+        generator: (SerializationContext, Node, object -> object, object) -> {str: object}
+            A function generating dictionary
+        excludes: Iterable[str]
+            Keys to exclude from the dictionary.
+        includes: Iterable[str]
+            Keys to keep in the dictionary.
+
+        Returns
+        -------
+        NodeSerializer
+            This instance.
+        """
+        excludes = excludes or []
+
+        class EachExtend(Extend[T]):
+            @classmethod
+            def schema(cls, bound, arg):
+                return signature(generator).return_annotation if generator else Signature.empty
+
+        class EachShrink(Shrink[T]):
+            @classmethod
+            def select(cls, td, bound):
+                return excludes, includes
+
+        def convert(c, n, b, v) -> EachShrink[EachExtend[T]]:
+            ext = self._wrap(generator)(c, n, b, v) if generator else {}
+            vv = b(v)
+            vv.update(**ext)
+            return {k:v for k, v in vv.items() if (not includes or k in includes) and k not in excludes}
+
+        self._serializers.append(convert)
+        return self
 
 
 class SerializationContext:
