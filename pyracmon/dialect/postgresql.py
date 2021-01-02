@@ -214,5 +214,9 @@ class PostgreSQLMixin(MultiInsertMixin):
         else:
             return []
 
+    @classmethod
+    def truncate(cls, db):
+        db.cursor().execute(f"TRUNCATE {cls.name} RESTART IDENTITY CASCADE")
+
 
 mixins = [PostgreSQLMixin]

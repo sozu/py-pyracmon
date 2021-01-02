@@ -24,6 +24,14 @@ class PyracmonConfiguration:
         Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module.
     type_mapping: str -> type
         Function estimating python type from the name of type in database.
+    graph_spec: ConfigurableSpec
+        Graph specification used as default.
+    fixture_mapping: (Table, Column, int) -> object
+        Function generating fixture value for a column and an index.
+    fixture_tz_aware: bool
+        Flag to make fixture datetime being aware of timezone.
+    timedelta_unit: dict
+        Default keyword arguments to pass `timedelta()` to compare actual `date`/`datetime` with expected one in `near` matcher.
     """
     def __init__(
         self,
@@ -35,6 +43,9 @@ class PyracmonConfiguration:
         paramstyle = None,
         type_mapping = None,
         graph_spec = None,
+        fixture_mapping = None,
+        fixture_tz_aware = None,
+        timedelta_unit = None,
     ):
         self.name = name
         self.logger = logger
@@ -44,6 +55,9 @@ class PyracmonConfiguration:
         self.paramstyle = paramstyle
         self.type_mapping = type_mapping
         self.graph_spec = graph_spec or ConfigurableSpec.create()
+        self.fixture_mapping = fixture_mapping
+        self.fixture_tz_aware = fixture_tz_aware
+        self.timedelta_unit = timedelta_unit
 
     def derive(self, **kwargs):
         def attr(k):
@@ -81,6 +95,9 @@ def default_config(config=PyracmonConfiguration(
     paramstyle = None,
     type_mapping = None,
     graph_spec = None,
+    fixture_mapping = None,
+    fixture_tz_aware = True,
+    timedelta_unit = dict(seconds=1),
 )):
     return config
 
