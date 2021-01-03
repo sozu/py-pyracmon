@@ -159,8 +159,8 @@ class TestSchema:
 
         rt = inspect.signature(s).return_annotation
 
-        assert walk_schema(Typeable.resolve(rt, m)) == {"c1": int, "c3": int}
-        assert walk_schema(Typeable.resolve(rt, m), True) == {"c1": (int, "c1 in t1"), "c3": (int, "c3 in t1")}
+        assert walk_schema(Typeable.resolve(rt, m, spec)) == {"c1": int, "c3": int}
+        assert walk_schema(Typeable.resolve(rt, m, spec), True) == {"c1": (int, "c1 in t1"), "c3": (int, "c3 in t1")}
 
     def test_include_fk(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -172,5 +172,5 @@ class TestSchema:
 
         rt = inspect.signature(s).return_annotation
 
-        assert walk_schema(Typeable.resolve(rt, m)) == {"c1": int, "c2": int, "c3": int}
-        assert walk_schema(Typeable.resolve(rt, m), True) == {"c1": (int, "c1 in t1"), "c2": (int, "c2 in t1"), "c3": (int, "c3 in t1")}
+        assert walk_schema(Typeable.resolve(rt, m, spec)) == {"c1": int, "c2": int, "c3": int}
+        assert walk_schema(Typeable.resolve(rt, m, spec), True) == {"c1": (int, "c1 in t1"), "c2": (int, "c2 in t1"), "c3": (int, "c3 in t1")}

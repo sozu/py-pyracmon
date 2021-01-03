@@ -1,6 +1,7 @@
 import sys
 from typing import get_type_hints, Generic, TypeVar, List
 from inspect import signature, Signature
+from .template import GraphTemplate
 
 
 T = TypeVar('T')
@@ -92,15 +93,15 @@ class Typeable(Generic[T]):
     """
     An interface for generic type which is resolved into a concrete type by a type parameter.
 
-    Inherit this class and declare static method whose signature is `resolve(me, bound, arg)`.
+    Inherit this class and declare static method whose signature is `resolve(me, bound, arg, spec)`.
 
     >>> class A(Typeable[T]):
     >>>     @staticmethod
-    >>>     def resolve(me, bound, arg):
+    >>>     def resolve(me, bound, arg, spec):
     >>>         ...
     >>>         return some_type
     >>>
-    >>> Typeable.resolve(A[T], int)
+    >>> Typeable.resolve(A[T], int, spec)
 
     Type resolution should start from the invocation of `Typeable.resolve()`.
     It subsequently invokes the static method with arguments below.
@@ -108,9 +109,10 @@ class Typeable(Generic[T]):
     - Typeable type to resolve whose type parameter is replaced with concrete type or another resolved Typeable type.
     - Resolved type for the type parameter.
     - A type passed by the invocation of `Typeable.resolve()`.
+    - `GraphSpec` used for schema generation.
     """
     @staticmethod
-    def resolve(typeable, arg):
+    def resolve(typeable, arg, spec):
         """
         Resolve a `Typeable` type by a type.
 
@@ -120,6 +122,8 @@ class Typeable(Generic[T]):
             `Typeable` type having a generic type parameter.
         arg: type
             Type to replace a type variable.
+        spec: GraphSpec
+            `GraphSpec` used for schema generation.
 
         Returns
         -------
@@ -132,12 +136,12 @@ class Typeable(Generic[T]):
         bound = get_args(typeable)[0]
 
         if isinstance(bound, TypeVar):
-            return Typeable.resolve(typeable[arg], arg)
+            return Typeable.resolve(typeable[arg], arg, spec)
         elif issubgeneric(bound, Typeable):
-            bound = Typeable.resolve(bound, arg)
-            return typeable.resolve(typeable, bound, arg)
+            bound = Typeable.resolve(bound, arg, spec)
+            return typeable.resolve(typeable, bound, arg, spec)
         else:
-            return typeable.resolve(typeable, bound, arg)
+            return typeable.resolve(typeable, bound, arg, spec)
 
     @staticmethod
     def is_resolved(typeable):
@@ -165,7 +169,7 @@ class Typeable(Generic[T]):
 
 class DynamicType(Typeable[T]):
     @staticmethod
-    def resolve(dynamic, bound, arg):
+    def resolve(dynamic, bound, arg, spec):
         return dynamic.fix(bound, arg)
 
     @classmethod
@@ -175,7 +179,7 @@ class DynamicType(Typeable[T]):
 
 class Shrink(Typeable[T]):
     @staticmethod
-    def resolve(shrink, bound, arg):
+    def resolve(shrink, bound, arg, spec):
         if bound == Signature.empty:
             return TypedDict
         if not issubclass(bound, TypedDict):
@@ -195,7 +199,7 @@ class Shrink(Typeable[T]):
 
 class Extend(Typeable[T]):
     @staticmethod
-    def resolve(extend, bound, arg):
+    def resolve(extend, bound, arg, spec):
         if bound == Signature.empty:
             return TypedDict
         if not issubclass(bound, TypedDict):
@@ -254,6 +258,12 @@ def walk_schema(td, with_doc=False):
     return result
 
 
+def templateType(t):
+    class Template:
+        template = t
+    return Template
+
+
 class GraphSchema:
     """
     This class provides property to get the schema of serialization result of a graph as well as serialization method.
@@ -266,26 +276,31 @@ class GraphSchema:
     def _return_from(self, prop):
         ns = self.serializers[prop.name]
 
+        arg = prop.kind
+        arg = templateType(prop.kind) if isinstance(prop.kind, GraphTemplate) else arg
+
         # Return type of serializers set to NodeSerializer.
         rt = signature(ns.serializer).return_annotation
 
         # Return type of base serializer obtained from GraphSpec.
-        base = self.spec.get_serializer(prop.kind)
+        base = self.spec.get_serializer(arg)
 
         bt = signature(base).return_annotation if base else Signature.empty
-        bt = prop.kind if bt == Signature.empty else bt
+        bt = arg if bt == Signature.empty else bt
 
         if rt == Signature.empty:
             rt = bt
-            bt = prop.kind
+            bt = arg
 
         if issubgeneric(bt, Typeable):
-            bt = bt if Typeable.is_resolved(bt) else bt[prop.kind]
+            bt = bt if Typeable.is_resolved(bt) else bt[arg]
 
         if issubgeneric(rt, Typeable):
             if not Typeable.is_resolved(rt):
+                print(rt)
+                print(bt)
                 rt = rt[bt]
-            rt = Typeable.resolve(rt, prop.kind)
+            rt = Typeable.resolve(rt, arg, self.spec)
 
         return rt
 

@@ -280,7 +280,7 @@ class TestToDict:
         assert spec.to_dict(
             graph.view,
             a = S.of(),
-            b = S.to(
+            b = S.sub(
                 a = S.of(),
                 b = S.of(),
                 c = S.head(100),

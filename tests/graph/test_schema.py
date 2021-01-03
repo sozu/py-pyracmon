@@ -31,33 +31,33 @@ class TestTypeable:
     def test_resolve(self):
         class A(Typeable[T]):
             @staticmethod
-            def resolve(a, bound, arg):
+            def resolve(a, bound, arg, spec):
                 return (bound,)
 
-        assert Typeable.resolve(A[T], int) == (int,)
+        assert Typeable.resolve(A[T], int, GraphSpec()) == (int,)
 
     def test_fixed(self):
         class A(Typeable[T]):
             @staticmethod
-            def resolve(a, bound, arg):
+            def resolve(a, bound, arg, spec):
                 return (bound,)
 
-        assert Typeable.resolve(A[str], int) == (str,)
+        assert Typeable.resolve(A[str], int, GraphSpec()) == (str,)
 
     def test_nest(self):
         class A(Typeable[T]):
             @staticmethod
-            def resolve(a, bound, arg):
+            def resolve(a, bound, arg, spec):
                 return (bound,)
         class B(Typeable[T]):
             @staticmethod
-            def resolve(b, bound, arg):
+            def resolve(b, bound, arg, spec):
                 return (bound,arg)
 
-        assert Typeable.resolve(B[A[T]], int) == ((int,),int)
+        assert Typeable.resolve(B[A[T]], int, GraphSpec()) == ((int,),int)
 
 
-class TestFix:
+class TestAlter:
     def test_shrink(self):
         spec = GraphSpec()
 
@@ -70,7 +70,7 @@ class TestFix:
 
         gs = GraphSchema(
             spec, t,
-            a = S.fix(None, ["v2"]),
+            a = S.alter(None, ["v2"]),
         )
 
         assert walk_schema(gs.schema) == {"a": [{"v1": int, "v3": float}]}
@@ -92,7 +92,7 @@ class TestFix:
 
         gs = GraphSchema(
             spec, t,
-            a = S.fix(ext),
+            a = S.alter(ext),
         )
 
         assert walk_schema(gs.schema) == {"a": [{"v1": int, "v2": str, "v3": float, "v4": int, "v5": str}]}
@@ -118,10 +118,59 @@ class TestFix:
 
         gs = GraphSchema(
             spec, t,
-            a = S.fix(ext1, ["v2"]).fix(ext2, ["v3"]),
+            a = S.alter(ext1, ["v2"]).alter(ext2, ["v3"]),
         )
 
         assert walk_schema(gs.schema) == {"a": [{"v1": int, "v4": int, "v5": float}]}
+
+
+class TestSubGraph:
+    def test_sub(self):
+        spec = GraphSpec()
+
+        class Base(TypedDict):
+            v1: int
+            v2: str
+            v3: float
+        class Sub(TypedDict):
+            v4: int
+            v5: str
+
+        sub = spec.new_template(
+            c = Sub,
+            d = int,
+        )
+        sub.c << sub.d
+
+        base = spec.new_template(
+            a = Base,
+            b = sub,
+        )
+        base.a << base.b
+
+        gs = GraphSchema(
+            spec, base,
+            a = S.head(),
+            b = S.sub(
+                c = S.head(),
+                d = S.of()
+            )
+        )
+
+        assert walk_schema(gs.schema) == {
+            "a": {
+                "v1": int,
+                "v2": str,
+                "v3": float,
+                "b": {
+                    "c": {
+                        "v4": int,
+                        "v5": str,
+                        "d": [int],
+                    },
+                },
+            },
+        }
 
 
 class TestGraphSchema:
@@ -232,7 +281,7 @@ class TestSerializer:
             v: int
         class TD2(Typeable[T]):
             @staticmethod
-            def resolve(td2, bound, arg):
+            def resolve(td2, bound, arg, spec):
                 t = bound.__annotations__["v"]
                 class Schema(TypedDict):
                     u: document_type(t, "U")
@@ -283,7 +332,7 @@ class TestSerializer:
             v: int
         class TD2(Typeable[T]):
             @staticmethod
-            def resolve(td2, bound, arg):
+            def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
                     u: document_type(bound, "U")
                 return Schema
@@ -311,7 +360,7 @@ class TestSerializer:
             v: int
         class TD2(Typeable[T]):
             @staticmethod
-            def resolve(td2, bound, arg):
+            def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
                     u: document_type(bound, "U")
                 return Schema
@@ -370,7 +419,7 @@ class TestSerializer:
             v: int
         class TD2(Typeable[T]):
             @staticmethod
-            def resolve(td2, bound, arg):
+            def resolve(td2, bound, arg, spec):
                 t = bound.__annotations__["v"]
                 class Schema(TypedDict):
                     u: document_type(t, "U")
@@ -392,7 +441,7 @@ class TestSerializer:
             v: int
         class TD3(Typeable[T]):
             @staticmethod
-            def resolve(td2, bound, arg):
+            def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
                     u: document_type(bound, "U")
                 return Schema
@@ -420,7 +469,7 @@ class TestSerializer:
             w: str
         class TD3(Typeable[T]):
             @staticmethod
-            def resolve(td3, bound, arg):
+            def resolve(td3, bound, arg, spec):
                 t = bound.__annotations__["w"]
                 class Schema(TypedDict):
                     u: document_type(t, "U")
@@ -448,14 +497,14 @@ class TestSerializer:
             v: int
         class TD2(Typeable[T]):
             @staticmethod
-            def resolve(td2, bound, arg):
+            def resolve(td2, bound, arg, spec):
                 t = bound.__annotations__["v"]
                 class Schema(TypedDict):
                     w: document_type(t, "W")
                 return Schema
         class TD3(Typeable[T]):
             @staticmethod
-            def resolve(td3, bound, arg):
+            def resolve(td3, bound, arg, spec):
                 t = bound.__annotations__["w"]
                 class Schema(TypedDict):
                     u: document_type(t, "U")

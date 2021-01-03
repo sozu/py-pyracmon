@@ -3,7 +3,7 @@ from inspect import signature, Signature
 from typing import TypeVar, get_type_hints
 from .template import GraphTemplate
 from .graph import Node
-from .schema import Shrink, Extend, T, TypedDict
+from .schema import Shrink, Extend, T, TypedDict, Typeable, GraphSchema
 
 
 class S:
@@ -408,7 +408,7 @@ class NodeSerializer:
         return self
 
     @S.builder
-    def to(self, **settings):
+    def sub(self, **settings):
         """
         Set serialization settings to serializer sub graph.
 
@@ -425,14 +425,21 @@ class NodeSerializer:
         NodeSerializer
             This instance.
         """
-        def to_dict(c, n, b, v) -> dict:
+        class SubGraph(Typeable[T]):
+            serializers = settings.copy()
+
+            @staticmethod
+            def resolve(sub_graph, bound, arg, spec):
+                return GraphSchema(spec, arg.template, **sub_graph.serializers).schema
+
+        def to_dict(c, n, b, v) -> SubGraph[T]:
             vv = b(v)
             return SerializationContext(settings, c.finder).execute(vv.view)
         self._serializers.append(to_dict)
         return self.head()
 
     @S.builder
-    def fix(self, generator=None, excludes=None, includes=None):
+    def alter(self, generator=None, excludes=None, includes=None):
         """
         Extends and shrinks the dictionary.
 

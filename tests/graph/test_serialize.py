@@ -5,6 +5,7 @@ from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
 from pyracmon.graph.identify import HierarchicalPolicy
 from pyracmon.graph.serialize import *
+from pyracmon.graph.schema import Typeable, issubgeneric
 
 
 class TestS:
@@ -245,7 +246,7 @@ class TestSubGraph:
             ("t", graph.template),
         ])
         ns = NodeSerializer()
-        s = ns.to(a=S.of(), b=S.of(), c=S.of(), d=S.of()).serializer
+        s = ns.sub(a=S.of(), b=S.of(), c=S.of(), d=S.of()).serializer
         r = s(
             SerializationContext({}, lambda t:None),
             Node(t.t, graph, None, 0),
@@ -254,7 +255,7 @@ class TestSubGraph:
         )
 
         assert ns.be_singular
-        assert signature(s).return_annotation is dict
+        assert issubgeneric(signature(s).return_annotation, Typeable)
         assert r == {
             "a": [
                 {
@@ -394,8 +395,8 @@ class TestContext:
             {"A": 2, "__B__": 10},
         ]}
 
-    def test_fix_extend(self):
-        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).fix(lambda x: {"D": x*3}))
+    def test_alter_extend(self):
+        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(lambda x: {"D": x*3}))
         r = {}
         cxt = SerializationContext(ser_map, lambda x:None)
         cxt.serialize_to("a", self._graph().a, r)
@@ -406,8 +407,8 @@ class TestContext:
             {"A": 2, "B": 3, "C": 4, "D": 6},
         ]}
 
-    def test_fix_shrink(self):
-        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).fix(excludes=["B"]))
+    def test_alter_shrink(self):
+        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(excludes=["B"]))
         r = {}
         cxt = SerializationContext(ser_map, lambda x:None)
         cxt.serialize_to("a", self._graph().a, r)
@@ -418,8 +419,8 @@ class TestContext:
             {"A": 2, "C": 4},
         ]}
 
-    def test_fix_includes(self):
-        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).fix(excludes=["B"], includes={"A"}))
+    def test_alter_includes(self):
+        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(excludes=["B"], includes={"A"}))
         r = {}
         cxt = SerializationContext(ser_map, lambda x:None)
         cxt.serialize_to("a", self._graph().a, r)
