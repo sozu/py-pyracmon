@@ -50,7 +50,7 @@ Experimental, TBD.
 ## Installation
 
 ```
-$ pip install pyracmon==1.0-a1
+$ pip install pyracmon==1.0.dev1
 ```
 
 ## Grance of functionalities
