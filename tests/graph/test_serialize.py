@@ -395,6 +395,19 @@ class TestContext:
             {"A": 2, "__B__": 10},
         ]}
 
+    def test_merge_root(self):
+        ser_map = dict(
+            a = S.merge().each(lambda v: {"a1": v, "a2": v+1}),
+            b = S.head().each(lambda v: {"B": v}).merge(lambda n:f"__{n}__"),
+        )
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {
+            "a1": 0, "a2": 1, "__B__": 10,
+        }
+
     def test_alter_extend(self):
         ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(lambda x: {"D": x*3}))
         r = {}

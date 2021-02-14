@@ -231,6 +231,45 @@ class TestGraphSchema:
             ], "A"),
         }
 
+    def test_merge_root(self):
+        class TDA(TypedDict):
+            a1: int
+            a2: document_type(str, "A2")
+        class TDC(TypedDict):
+            c1: document_type(int, "C1")
+            c2: str
+        class TDD(TypedDict):
+            d1: int
+
+        spec = GraphSpec()
+
+        t = spec.new_template(
+            a = TDA,
+            b = str,
+            c = TDC,
+            d = TDD,
+        )
+        t.a << [t.b, t.d >> t.c]
+
+        schema = GraphSchema(
+            spec, t,
+            a = S.doc("A").merge(),
+            b = S.doc("B").head(),
+            c = S.doc("C").name("__c__"),
+            d = S.doc("D").merge(lambda n:f"__{n}__"),
+        )
+
+        assert walk_schema(schema.schema) == {
+            "a1": int, "a2": str,
+            "b": str,
+            "__c__": [
+                {
+                    "c1": int, "c2": str,
+                    "__d1__": int,
+                }
+            ],
+        }
+
 
 class TestSerializer:
     def test_empty(self):

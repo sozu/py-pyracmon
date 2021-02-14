@@ -297,8 +297,6 @@ class GraphSchema:
 
         if issubgeneric(rt, Typeable):
             if not Typeable.is_resolved(rt):
-                print(rt)
-                print(bt)
                 rt = rt[bt]
             rt = Typeable.resolve(rt, arg, self.spec)
 
@@ -360,17 +358,29 @@ class GraphSchema:
         class Schema(TypedDict):
             pass
 
-        def root_schema_of(p):
+        anns = {}
+
+        def put_root_schema(p):
+            nonlocal anns
+
+            ns = self.serializers[p.name]
             dt = self.schema_of(p)
-            if self.serializers[p.name].be_singular:
-                return dt
+
+            if ns.be_merged:
+                t, d = DocumentedType.unpack(dt)
+                anns.update(**{ns.namer(k):t_ for k, t_ in get_type_hints(t).items()})
+            elif ns.be_singular:
+                anns[ns.namer(p.name)] = dt
             else:
                 t, d = DocumentedType.unpack(dt)
-                return document_type(List[t], d)
+                anns[ns.namer(p.name)] = document_type(List[t], d)
 
         roots = filter(lambda p: p.parent is None and p.name in self.serializers, self.template._properties)
 
-        setattr(Schema, '__annotations__', {self.serializers[p.name].namer(p.name):root_schema_of(p) for p in roots})
+        for p in roots:
+            put_root_schema(p)
+
+        setattr(Schema, '__annotations__', anns)
 
         return Schema
 

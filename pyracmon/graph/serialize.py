@@ -269,6 +269,9 @@ class NodeSerializer:
 
         `NodeSerializer` built with this methods merges the converted `dict` into parent `dict` and its `be_merged` property becomes `True`.
 
+        Because merging needs folding, this method overrides the aggregation function by invoking `head()` internally
+        if this serializer is not configured to fold nodes into a single node.
+
         Parameters
         ----------
         namer: str -> str
@@ -282,6 +285,8 @@ class NodeSerializer:
         if namer and not callable(namer):
             raise ValueError(f"The method merging a node into its parent node must be callable or None.")
         self._namer = namer or (lambda x:x)
+        if not self.be_singular:
+            self.head()
         return self
 
     #----------------------------------------------------------------
