@@ -154,11 +154,12 @@ class NodeSerializer:
                             return t
             return rt
 
-        funcs = [self._wrap(s) for s in self._serializers]
+        funcs = [wrap_serializer(s) for s in self._serializers]
         rt = merge(funcs)
 
         def composed(cxt, node, base, value) -> rt:
-            return reduce(lambda acc,f: partial(f, cxt, node, acc), [base or as_is] + funcs)(value)
+            base = [as_is, wrap_serializer(base)] if base else [as_is]
+            return reduce(lambda acc,f: partial(f, cxt, node, acc), base + funcs)(value)
 
         return composed
 
@@ -188,18 +189,6 @@ class NodeSerializer:
             `True` if converted value will be a singular object. `False` means that it will be a list.
         """
         return not isinstance(signature(self.aggregator).return_annotation, list)
-
-    def _wrap(self, f):
-        try:
-            sig = signature(f)
-            def g(cxt, node, base, value) -> sig.return_annotation:
-                ba = sig.bind(*(value, base, node, cxt)[len(sig.parameters)-1::-1])
-                return f(*ba.args)
-            return g
-        except:
-            def g(cxt, node, base, value):
-                return f(value)
-            return g
 
     def _set_aggregator(self, aggregator, folds):
         try:
@@ -475,7 +464,7 @@ class NodeSerializer:
                 return excludes, includes
 
         def convert(c, n, b, v) -> EachShrink[EachExtend[T]]:
-            ext = self._wrap(generator)(c, n, b, v) if generator else {}
+            ext = wrap_serializer(generator)(c, n, b, v) if generator else {}
             vv = b(v)
             vv.update(**ext)
             return {k:v for k, v in vv.items() if (not includes or k in includes) and k not in excludes}
@@ -568,3 +557,16 @@ class SerializationContext:
 
 def as_is(x):
     return x
+
+
+def wrap_serializer(f):
+    try:
+        sig = signature(f)
+        def g(cxt, node, base, value) -> sig.return_annotation:
+            ba = sig.bind(*(value, base, node, cxt)[len(sig.parameters)-1::-1])
+            return f(*ba.args)
+        return g
+    except:
+        def g(cxt, node, base, value):
+            return f(value)
+        return g

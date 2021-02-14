@@ -3,6 +3,7 @@ import inspect
 from pyracmon.model import Table, Column, define_model
 from pyracmon.model_graph import *
 from pyracmon.graph.schema import walk_schema, Typeable
+from pyracmon.graph.serialize import wrap_serializer
 
 
 table1 = Table("t1", [
@@ -136,7 +137,7 @@ class TestFK:
 
         spec = ConfigurableSpec.create()
 
-        assert spec.get_serializer(type(v))(v) == {"c1": 1, "c3": 3}
+        assert wrap_serializer(spec.get_serializer(type(v)))(None, None, None, v) == {"c1": 1, "c3": 3}
 
     def test_includes(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -146,7 +147,7 @@ class TestFK:
         spec = ConfigurableSpec.create()
         spec.include_fk = True
 
-        assert spec.get_serializer(type(v))(v) == {"c1": 1, "c2": 2, "c3": 3}
+        assert wrap_serializer(spec.get_serializer(type(v)))(None, None, None, v) == {"c1": 1, "c2": 2, "c3": 3}
 
 
 class TestSchema:

@@ -3,7 +3,7 @@ import inspect
 from .util import Configurable
 from .graph.spec import GraphSpec
 from .graph.schema import TypedDict, DynamicType, Shrink, issubgeneric, document_type
-from .graph.serialize import T
+from .graph.serialize import T, wrap_serializer
 
 
 class GraphEntityMixin:
@@ -119,9 +119,9 @@ class ConfigurableSpec(GraphSpec, Configurable):
             if issubgeneric(rt, ModelSchema):
                 rt = ExcludeFK[rt]
 
-            def serialize(model:T) -> rt:
+            def serialize(c, n, b, model:T) -> rt:
                 d = {c.name:v for c, v in model if not c.fk}
-                return base(type(model)(**d)) if base else d
+                return wrap_serializer(base)(c, n, b, type(model)(**d)) if base else d
             return serialize
         else:
             return base

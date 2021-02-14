@@ -111,6 +111,16 @@ class TestSerializer:
 
         assert spec.get_serializer(int) is ser2
 
+    def test_node_serializer(self):
+        spec = GraphSpec()
+        spec.add_serializer(dict, S.alter(lambda x: {"x": 1}, ["a", "b"]))
+
+        f = spec.get_serializer(dict)
+        assert f is not None
+
+        r = f(None, None, None, dict(a=1, b=2, c=3))
+        assert r == {"x": 1, "c": 3}
+
 
 class TestNewTemplate:
     def test_new(self):

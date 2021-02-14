@@ -107,6 +107,8 @@ class GraphSpec:
         GraphSpec
             This instance.
         """
+        if isinstance(f, NodeSerializer):
+            f = f.serializer
         self.serializers[0:0] = [(c, f)]
         return self
 

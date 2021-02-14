@@ -329,6 +329,14 @@ class TestContext:
 
         assert r == {"a": [0, 2, 4]}
 
+    def test_full_arguments_serializer(self):
+        ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
+        r = {}
+        cxt = SerializationContext(ser_map, lambda x:(lambda c,n,b,v:v*2))
+        cxt.serialize_to("a", self._graph().a, r)
+
+        assert r == {"a": [0, 2, 4]}
+
     def test_put_child(self):
         ser_map = dict(
             a = S.each(lambda v: {"A": v}),
