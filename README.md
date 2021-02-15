@@ -50,7 +50,7 @@ Experimental, TBD.
 ## Installation
 
 ```
-$ pip install pyracmon==1.0.dev1
+$ pip install pyracmon==1.0.dev2
 ```
 
 ## Grance of functionalities
@@ -216,7 +216,7 @@ c = db.stmt().execute(f"""
         INNER JOIN post AS p ON b.id = p.blog_id
     {w}
     LIMIT $_ OFFSET $_
-    """, params + [limit, offset])
+    """, *params, *[limit, offset])
 
 # 4. Model objects obtained from each row.
 for row in c.fetchall():
