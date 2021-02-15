@@ -59,7 +59,10 @@ def read_schema(db, excludes=None, includes=None):
         ORDER BY c.table_name ASC, c.ordinal_position ASC
         """, *params)
 
-    map_types = db.context.config.type_mapping or _map_types
+    def map_types(t):
+        base = db.context.config.type_mapping
+        ptype = base and base(t)
+        return ptype or _map_types(t)
 
     def column_of(n, t, udt, et, eudt, constraint, default, pos):
         m = SequencePattern.match(default or "")

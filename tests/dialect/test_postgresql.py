@@ -112,6 +112,35 @@ class TestReadSchema:
         assert len(tables) == 2
         assert {t.name for t in tables} == {"t2", "t4"}
 
+    def test_type_mapping(self):
+        class C:
+            pass
+
+        db = _connect()
+        db.context.configure(type_mapping = lambda t: C if t in {"boolean", "date"} else None)
+
+        tables = sorted(read_schema(db), key = lambda t: t.name)
+
+        table_map = {t.name:t for t in tables}
+
+        _assert_schema(table_map["types"], "types", "", [
+            dict(name="bool_", type=C, udt="bool", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="double_", type=float, udt="float4", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="int_", type=int, udt="int4", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="string_", type=str, udt="text", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="bytes_", type=bytes, udt="bytea", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="date_", type=C, udt="date", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="datetime_", type=datetime, udt="timestamptz", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
+        ])
+
+
 
 def _assert_schema(actual, t, tcm, cs):
     assert t == actual.name

@@ -70,6 +70,23 @@ class TestReadSchema:
         assert len(tables) == 2
         assert {t.name for t in tables} == {"t2", "t4"}
 
+    def test_type_mapping(self):
+        class C:
+            pass
+
+        db = _connect()
+        db.context.configure(type_mapping = lambda t: C if t in {"int"} else None)
+
+        tables = read_schema(db)
+
+        table_map = {t.name:t for t in tables}
+
+        _assert_schema(table_map["t1"], "t1", "comment of t1", [
+            dict(name = "c11", type = C, pk = True, fk = False, incremental = True, comment = "comment of c11"),
+            dict(name = "c12", type = C, pk = False, fk = False, incremental = None, comment = "comment of c12"),
+            dict(name = "c13", type = str, pk = False, fk = False, incremental = None, comment = "comment of c13"),
+        ])
+
 
 def _assert_schema(actual, t, tcm, cs):
     assert t == actual.name
