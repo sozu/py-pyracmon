@@ -452,6 +452,46 @@ class TestContext:
             {"A": 2},
         ]}
 
+    def test_node_params(self):
+        def ser(cxt, n, b, v):
+            return v * cxt[n].v
+
+        ser_map = dict(a = S.each(ser).each(lambda b, v: {"A": b(v)}), c = S.each(ser))
+        cxt = SerializationContext(ser_map, lambda x:[], dict(
+            a = dict(v = 2),
+            b = dict(v = 10),
+            c = dict(v = 3),
+        ))
+        r = cxt.execute(self._graph())
+
+        assert r == {
+            "a": [
+                {"A": 0, "c": [60, 63]},
+                {"A": 2, "c": [60]},
+                {"A": 4, "c": [60, 63]},
+            ]
+        }
+
+    def test_node_params_name(self):
+        def ser(cxt, n, b, v):
+            return v * cxt["b"].v
+
+        ser_map = dict(a = S.each(ser).each(lambda b, v: {"A": b(v)}), c = S.each(ser))
+        cxt = SerializationContext(ser_map, lambda x:[], dict(
+            a = dict(v = 2),
+            b = dict(v = 10),
+            c = dict(v = 3),
+        ))
+        r = cxt.execute(self._graph())
+
+        assert r == {
+            "a": [
+                {"A": 0, "c": [200, 210]},
+                {"A": 10, "c": [200]},
+                {"A": 20, "c": [200, 210]},
+            ]
+        }
+
     def test_all(self):
         def f1(v):
             return v+1

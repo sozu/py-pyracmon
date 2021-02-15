@@ -167,7 +167,7 @@ class GraphSpec:
 
         return base + GraphTemplate([(n, *self._get_property_definition(d)) for n, d in template.items()])
 
-    def to_dict(self, graph, **settings):
+    def to_dict(self, graph, __params={}, **settings):
         """
         Generates a dictionary representing structured entity values of a graph.
 
@@ -179,6 +179,8 @@ class GraphSpec:
         ----------
         graph: GraphView
             A view of the graph.
+        __params: {str: {str: object}}
+            Parameters keyed by node names.
         settings: {str: NodeSerializer}
             Mapping from property name to `NodeSerializer` s.
 
@@ -187,7 +189,7 @@ class GraphSpec:
         Dict[str, object]
             A dictionary representing the graph.
         """
-        return SerializationContext(settings, self.find_serializers).execute(graph)
+        return SerializationContext(settings, self.find_serializers, __params).execute(graph)
 
     def to_schema(self, template, **settings):
         """

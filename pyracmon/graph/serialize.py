@@ -455,9 +455,33 @@ class SerializationContext:
     """
     This class provides a functionality to serialize a graph by using containing `NodeSerializer` s.
     """
-    def __init__(self, settings, finder):
+    def __init__(self, settings, finder, node_params=None):
         self.serializer_map = {n:self._to_serializer(s) for n, s in settings.items()}
         self.finder = finder
+        self.node_params = node_params or {}
+
+    def __getitem__(self, node):
+        """
+        Returns an accessor to parameters for given node.
+
+        Parameters
+        ----------
+        node: Node | str
+            Node or node name.
+
+        Returns
+        -------
+        Accessor
+            An object exposing parameters via its attributes of their names.
+        """
+        name = node.name if isinstance(node, Node) else node
+        params = self.node_params.get(name, {})
+
+        class Accessor:
+            def __getattr__(self, key):
+                return params.get(key, None)
+
+        return Accessor()
 
     def _to_serializer(self, s):
         if isinstance(s, NodeSerializer):

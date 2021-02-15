@@ -1,6 +1,7 @@
 import pytest
 from typing import Generic, TypeVar
 from pyracmon.graph.spec import GraphSpec
+from pyracmon.graph.graph import new_graph
 from pyracmon.graph.serialize import S
 from pyracmon.graph.schema import *
 
@@ -566,3 +567,37 @@ class TestSerializer:
         assert walk_schema(spec.to_schema(t, a=S.doc("A").each(ser0).each(ser1)).schema, True) == {"a": ([{"u": (int, "U")}], "A")}
 
 
+class TestSerialize:
+    def test_serialize(self):
+        spec = GraphSpec().add_identifier(int, lambda x:x)
+
+        t = spec.new_template(a = int, b = int, c = int, d = int)
+        t.a << [t.d >> t.b, t.c]
+
+        graph = new_graph(t)
+
+        graph.append(a=0, b=10, c=20, d=30)
+        graph.append(a=0, b=10, c=21, d=31)
+        graph.append(a=1, b=11, c=20, d=30)
+        graph.append(a=1, b=12, c=20, d=30)
+        graph.append(a=2, b=10, c=20, d=30)
+        graph.append(a=2, b=11, c=21, d=30)
+
+        def ser(cxt, n, b, v):
+            return v * cxt[n].v
+
+        gs = GraphSchema(
+            spec, t,
+            a = S.each(ser).each(lambda b, v: {"A": b(v)}),
+            c = S.each(ser),
+        )
+
+        r = gs.serialize(graph.view, a = dict(v = 2), b = dict(v = 10), c = dict(v = 3))
+
+        assert r == {
+            "a": [
+                {"A": 0, "c": [60, 63]},
+                {"A": 2, "c": [60]},
+                {"A": 4, "c": [60, 63]},
+            ]
+        }

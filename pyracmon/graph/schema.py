@@ -382,7 +382,7 @@ class GraphSchema:
 
         return Schema
 
-    def serialize(self, graph):
+    def serialize(self, graph, **node_params):
         """
         Serialize graph into a dictionary.
 
@@ -390,10 +390,12 @@ class GraphSchema:
         ----------
         graph: GraphView
             A graph.
+        node_params: {str: {str: object}}
+            Parameters keyed by node names.
 
         Returns
         -------
         dict
             Serialized representation of the graph.
         """
-        return self.spec.to_dict(graph, **self.serializers)
+        return self.spec.to_dict(graph, node_params, **self.serializers)
