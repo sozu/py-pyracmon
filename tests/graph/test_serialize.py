@@ -248,7 +248,7 @@ class TestSubGraph:
         ns = NodeSerializer()
         s = ns.sub(a=S.of(), b=S.of(), c=S.of(), d=S.of()).serializer
         r = s(
-            SerializationContext({}, lambda t:None),
+            SerializationContext({}, lambda t:[]),
             Node(t.t, graph, None, 0),
             None,
             graph,
@@ -308,7 +308,7 @@ class TestContext:
     def test_no_serializer(self):
         ser_map = dict()
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {}
@@ -316,7 +316,7 @@ class TestContext:
     def test_default(self):
         ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [0, 1, 2]}
@@ -324,7 +324,7 @@ class TestContext:
     def test_finder(self):
         ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:(lambda v:v*2))
+        cxt = SerializationContext(ser_map, lambda x:[lambda v:v*2])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [0, 2, 4]}
@@ -332,7 +332,7 @@ class TestContext:
     def test_full_arguments_serializer(self):
         ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:(lambda c,n,b,v:v*2))
+        cxt = SerializationContext(ser_map, lambda x:[lambda c,n,b,v:v*2])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [0, 2, 4]}
@@ -344,7 +344,7 @@ class TestContext:
             d = S.of(),
         )
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [
@@ -365,7 +365,7 @@ class TestContext:
             d = S.of(),
         )
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [
@@ -375,7 +375,7 @@ class TestContext:
     def test_name(self):
         ser_map = dict(a = S.name("A"))
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"A": [0, 1, 2]}
@@ -383,7 +383,7 @@ class TestContext:
     def test_fold(self):
         ser_map = dict(a = S.head())
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": 0}
@@ -394,7 +394,7 @@ class TestContext:
             b = S.head().each(lambda v: {"B": v}).merge(lambda n:f"__{n}__"),
         )
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [
@@ -409,7 +409,7 @@ class TestContext:
             b = S.head().each(lambda v: {"B": v}).merge(lambda n:f"__{n}__"),
         )
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {
@@ -419,7 +419,7 @@ class TestContext:
     def test_alter_extend(self):
         ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(lambda x: {"D": x*3}))
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [
@@ -431,7 +431,7 @@ class TestContext:
     def test_alter_shrink(self):
         ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(excludes=["B"]))
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [
@@ -443,7 +443,7 @@ class TestContext:
     def test_alter_includes(self):
         ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(excludes=["B"], includes={"A"}))
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [
@@ -469,7 +469,7 @@ class TestContext:
             d = S.last().merge(lambda n:f"__{n}__").each(lambda v: {"D": v}),
         )
         r = {}
-        cxt = SerializationContext(ser_map, lambda x:None)
+        cxt = SerializationContext(ser_map, lambda x:[])
         cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [

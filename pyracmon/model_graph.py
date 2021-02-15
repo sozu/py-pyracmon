@@ -3,7 +3,8 @@ import inspect
 from .util import Configurable
 from .graph.spec import GraphSpec
 from .graph.schema import TypedDict, DynamicType, Shrink, issubgeneric, document_type
-from .graph.serialize import T, wrap_serializer
+from .graph.serialize import T
+from .graph.util import chain_serializers
 
 
 class GraphEntityMixin:
@@ -103,34 +104,36 @@ class ConfigurableSpec(GraphSpec, Configurable):
         self.serializers[:] = another.serializers
         self.include_fk = another.include_fk
 
-    def _model_serializer(self, base):
+    def _model_serializer(self, bases):
         """
         Generate configured serializer for model type.
 
         Parameters
         ----------
-        base: Model -> object
-            Serialization function.
+        bases: [Model -> object]
+            Serialization functions.
         """
         if not self.include_fk:
             # Use return annotation of base serializer if exists.
-            rt = inspect.signature(base).return_annotation
+            s = chain_serializers(bases) if bases else None
+
+            rt = inspect.signature(s).return_annotation if s else inspect.Signature.empty
 
             if issubgeneric(rt, ModelSchema):
                 rt = ExcludeFK[rt]
 
             def serialize(c, n, b, model:T) -> rt:
                 d = {c.name:v for c, v in model if not c.fk}
-                return wrap_serializer(base)(c, n, b, type(model)(**d)) if base else d
-            return serialize
+                return s(c, n, b, type(model)(**d)) if s else d
+            return [serialize]
         else:
-            return base
+            return bases
 
-    def get_serializer(self, t):
-        base = super(ConfigurableSpec, self).get_serializer(t)
+    def find_serializers(self, t):
+        bases = super(ConfigurableSpec, self).find_serializers(t)
 
         if issubclass(t, GraphEntityMixin):
-            return self._model_serializer(base)
+            return self._model_serializer(bases)
         else:
-            return base
+            return bases
 

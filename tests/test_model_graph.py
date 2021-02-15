@@ -3,7 +3,7 @@ import inspect
 from pyracmon.model import Table, Column, define_model
 from pyracmon.model_graph import *
 from pyracmon.graph.schema import walk_schema, Typeable
-from pyracmon.graph.serialize import wrap_serializer
+from pyracmon.graph.serialize import chain_serializers
 
 
 table1 = Table("t1", [
@@ -33,7 +33,7 @@ class TestConfigurableSpec:
 
         assert spec.get_identifier(GraphEntityMixin) is not None
         assert spec.get_entity_filter(GraphEntityMixin) is not None
-        assert spec.get_serializer(GraphEntityMixin) is not None
+        assert len(spec.find_serializers(GraphEntityMixin)) == 1
 
     def test_clone(self):
         spec = ConfigurableSpec.create()
@@ -50,7 +50,7 @@ class TestConfigurableSpec:
 
         assert spec.get_identifier(int) is None
         assert spec.get_entity_filter(int) is None
-        assert spec.get_serializer(int) is None
+        assert len(spec.find_serializers(int)) == 0
         assert spec.include_fk is False
 
         spec.replace(clone)
@@ -58,7 +58,7 @@ class TestConfigurableSpec:
         assert (len(spec.identifiers), len(spec.entity_filters), len(spec.serializers)) == (2, 2, 2)
         assert spec.get_identifier(int) is not None
         assert spec.get_entity_filter(int) is not None
-        assert spec.get_serializer(int) is not None
+        assert len(spec.find_serializers(int)) == 1
         assert spec.include_fk is True
 
 
@@ -137,7 +137,7 @@ class TestFK:
 
         spec = ConfigurableSpec.create()
 
-        assert wrap_serializer(spec.get_serializer(type(v)))(None, None, None, v) == {"c1": 1, "c3": 3}
+        assert chain_serializers(spec.find_serializers(type(v)))(None, None, None, v) == {"c1": 1, "c3": 3}
 
     def test_includes(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -147,7 +147,7 @@ class TestFK:
         spec = ConfigurableSpec.create()
         spec.include_fk = True
 
-        assert wrap_serializer(spec.get_serializer(type(v)))(None, None, None, v) == {"c1": 1, "c2": 2, "c3": 3}
+        assert chain_serializers(spec.find_serializers(type(v)))(None, None, None, v) == {"c1": 1, "c2": 2, "c3": 3}
 
 
 class TestSchema:
@@ -156,7 +156,7 @@ class TestSchema:
 
         spec = ConfigurableSpec.create()
 
-        s = spec.get_serializer(m)
+        s = chain_serializers(spec.find_serializers(m))
 
         rt = inspect.signature(s).return_annotation
 
@@ -169,7 +169,7 @@ class TestSchema:
         spec = ConfigurableSpec.create()
         spec.include_fk = True
 
-        s = spec.get_serializer(m)
+        s = chain_serializers(spec.find_serializers(m))
 
         rt = inspect.signature(s).return_annotation
 

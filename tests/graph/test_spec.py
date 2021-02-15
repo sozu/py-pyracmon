@@ -85,9 +85,9 @@ class TestSerializer:
         spec.add_serializer(int, ser1)
         spec.add_serializer(str, ser2)
 
-        assert spec.get_serializer(int) is ser1
-        assert spec.get_serializer(str) is ser2
-        assert spec.get_serializer(float) is None
+        assert spec.find_serializers(int) == [ser1]
+        assert spec.find_serializers(str) == [ser2]
+        assert spec.find_serializers(float) == []
 
     def test_inherit(self):
         class A:
@@ -99,7 +99,22 @@ class TestSerializer:
         spec = GraphSpec()
         spec.add_serializer(A, ser)
 
-        assert spec.get_serializer(B) is ser
+        assert spec.find_serializers(B) == [ser]
+
+    def test_multiple(self):
+        class A:
+            pass
+        class B(A):
+            pass
+        ser1 = lambda x: x
+        ser2 = lambda x: x
+
+        spec = GraphSpec()
+        spec.add_serializer(A, ser1)
+        spec.add_serializer(B, ser2)
+
+        assert spec.find_serializers(B) == [ser2, ser1]
+        assert spec.find_serializers(A) == [ser1]
 
     def test_priority(self):
         ser1 = lambda x:x
@@ -109,13 +124,13 @@ class TestSerializer:
         spec.add_serializer(int, ser1)
         spec.add_serializer(int, ser2)
 
-        assert spec.get_serializer(int) is ser2
+        assert spec.find_serializers(int) == [ser2, ser1]
 
     def test_node_serializer(self):
         spec = GraphSpec()
         spec.add_serializer(dict, S.alter(lambda x: {"x": 1}, ["a", "b"]))
 
-        f = spec.get_serializer(dict)
+        f = spec.find_serializers(dict)[0]
         assert f is not None
 
         r = f(None, None, None, dict(a=1, b=2, c=3))

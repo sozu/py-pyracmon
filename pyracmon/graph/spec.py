@@ -50,8 +50,10 @@ class GraphSpec:
     def get_entity_filter(self, t):
         return self._get_inherited(self.entity_filters, t)
 
-    def get_serializer(self, t):
-        return self._get_inherited(self.serializers, t)
+    def find_serializers(self, t):
+        if not isinstance(t, type):
+            return []
+        return list(map(lambda x:x[1], filter(lambda x:issubclass(t, x[0]), self.serializers)))
 
     def add_identifier(self, c, f):
         """
@@ -185,7 +187,7 @@ class GraphSpec:
         Dict[str, object]
             A dictionary representing the graph.
         """
-        return SerializationContext(settings, self.get_serializer).execute(graph)
+        return SerializationContext(settings, self.find_serializers).execute(graph)
 
     def to_schema(self, template, **settings):
         """

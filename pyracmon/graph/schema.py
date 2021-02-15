@@ -2,9 +2,7 @@ import sys
 from typing import get_type_hints, Generic, TypeVar, List
 from inspect import signature, Signature
 from .template import GraphTemplate
-
-
-T = TypeVar('T')
+from .util import chain_serializers, T
 
 
 if sys.version_info[0:2] >= (3, 8):
@@ -283,7 +281,7 @@ class GraphSchema:
         rt = signature(ns.serializer).return_annotation
 
         # Return type of base serializer obtained from GraphSpec.
-        base = self.spec.get_serializer(arg)
+        base = chain_serializers(self.spec.find_serializers(arg))
 
         bt = signature(base).return_annotation if base else Signature.empty
         bt = arg if bt == Signature.empty else bt
