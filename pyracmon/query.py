@@ -179,6 +179,10 @@ class Q:
         def is_null(col, val):
             if val is None:
                 return f"{col} IS NULL", []
+            elif val is True:
+                return f"{col}", []
+            elif val is False:
+                return f"NOT {col}", []
             return None
         return _conditional("=", __and, kwargs, is_null, __alias)
 
@@ -190,6 +194,10 @@ class Q:
         def is_null(col, val):
             if val is None:
                 return f"{col} IS NOT NULL", []
+            elif val is True:
+                return f"NOT {col}", []
+            elif val is False:
+                return f"{col}", []
             return None
         return _conditional("!=", __and, kwargs, is_null, __alias)
 

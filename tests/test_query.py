@@ -181,6 +181,14 @@ class TestEq:
         c = Q.eq(a = None)
         assert (c.expression, c.params) == ("a IS NULL", [])
 
+    def test_true(self):
+        c = Q.eq(a = True)
+        assert (c.expression, c.params) == ("a", [])
+
+    def test_false(self):
+        c = Q.eq(a = False)
+        assert (c.expression, c.params) == ("NOT a", [])
+
 
 class TestNeq:
     def test_one(self):
@@ -202,6 +210,14 @@ class TestNeq:
     def test_null(self):
         c = Q.neq(a = None)
         assert (c.expression, c.params) == ("a IS NOT NULL", [])
+
+    def test_true(self):
+        c = Q.neq(a = True)
+        assert (c.expression, c.params) == ("NOT a", [])
+
+    def test_false(self):
+        c = Q.neq(a = False)
+        assert (c.expression, c.params) == ("a", [])
 
 
 class TestIn:
