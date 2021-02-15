@@ -3,7 +3,7 @@ import inspect
 from pyracmon.model import Table, Column, define_model
 from pyracmon.model_graph import *
 from pyracmon.graph.schema import walk_schema, Typeable
-from pyracmon.graph.serialize import chain_serializers
+from pyracmon.graph.serialize import chain_serializers, S
 
 
 table1 = Table("t1", [
@@ -33,7 +33,7 @@ class TestConfigurableSpec:
 
         assert spec.get_identifier(GraphEntityMixin) is not None
         assert spec.get_entity_filter(GraphEntityMixin) is not None
-        assert len(spec.find_serializers(GraphEntityMixin)) == 1
+        assert len(spec.find_serializers(GraphEntityMixin)) == 2
 
     def test_clone(self):
         spec = ConfigurableSpec.create()
@@ -175,3 +175,16 @@ class TestSchema:
 
         assert walk_schema(Typeable.resolve(rt, m, spec)) == {"c1": int, "c2": int, "c3": int}
         assert walk_schema(Typeable.resolve(rt, m, spec), True) == {"c1": (int, "c1 in t1"), "c2": (int, "c2 in t1"), "c3": (int, "c3 in t1")}
+
+    def test_serializer(self):
+        m = define_model(table1, [GraphEntityMixin])
+
+        spec = ConfigurableSpec.create()
+        spec.add_serializer(m, S.alter(excludes={"c3"}))
+
+        s = chain_serializers(spec.find_serializers(m))
+
+        rt = inspect.signature(s).return_annotation
+
+        assert walk_schema(Typeable.resolve(rt, m, spec)) == {"c1": int}
+        assert walk_schema(Typeable.resolve(rt, m, spec), True) == {"c1": (int, "c1 in t1")}

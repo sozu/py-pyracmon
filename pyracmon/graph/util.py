@@ -23,7 +23,7 @@ def wrap_serializer(f):
         return g
 
 
-def chain_serializers(fs):
+def chain_serializers(serializers):
     def merge(fs):
         rt = Signature.empty
         for f in fs[::-1]:
@@ -39,7 +39,7 @@ def chain_serializers(fs):
                         return t
         return rt
 
-    funcs = [wrap_serializer(f) for f in fs]
+    funcs = [wrap_serializer(f) for f in serializers]
     rt = merge(funcs)
 
     def composed(cxt, node, base, value) -> rt:

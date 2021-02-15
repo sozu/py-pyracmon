@@ -113,7 +113,7 @@ class TestSerializer:
         spec.add_serializer(A, ser1)
         spec.add_serializer(B, ser2)
 
-        assert spec.find_serializers(B) == [ser2, ser1]
+        assert spec.find_serializers(B) == [ser1, ser2]
         assert spec.find_serializers(A) == [ser1]
 
     def test_priority(self):
@@ -124,7 +124,7 @@ class TestSerializer:
         spec.add_serializer(int, ser1)
         spec.add_serializer(int, ser2)
 
-        assert spec.find_serializers(int) == [ser2, ser1]
+        assert spec.find_serializers(int) == [ser1, ser2]
 
     def test_node_serializer(self):
         spec = GraphSpec()

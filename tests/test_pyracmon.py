@@ -3,7 +3,9 @@ import psycopg2
 import pytest
 from tests import models as m
 from pyracmon import *
+from pyracmon import default_config
 from pyracmon.dialect import postgresql
+from pyracmon.graph.schema import TypedDict, document_type
 
 
 def _connect():
@@ -168,4 +170,69 @@ class TestModelGraph:
                     ], ""),
                 },
             ], "T1"),
+        }
+
+    def test_serializer(self):
+        db = _connect()
+
+        declare_models(postgresql, db, m)
+
+        template = graph_template(
+            t1 = m.t1,
+            t2 = m.t2,
+            t3 = m.t3,
+        )
+        template.t1 << [template.t2, template.t3]
+
+        graph = new_graph(template)
+
+        graph.append(
+            t1 = m.t1(c11=1, c12=11, c13="aaa"),
+            t2 = m.t2(c21=1, c22=21, c23="bbb"),
+            t3 = m.t3(c31=1, c32=31, c33="ccc"),
+        )
+
+        class T2(TypedDict):
+            x1: document_type(int, "X1")
+            x2: str
+
+        def ex(v: m.t2) -> T2:
+            return T2(x1=v.c22*2, x2=f"_{v.c22}_")
+
+        config = default_config().derive()
+        config.graph_spec.include_fk = True
+        config.graph_spec.add_serializer(m.t2, S.alter(ex, {"c22"}))
+
+        assert config.graph_spec.to_dict(
+            graph.view,
+            t1 = S.head(),
+            t2 = S.head(),
+            t3 = S.head(),
+        ) == {
+            "t1": {
+                "c11": 1, "c12": 11, "c13": "aaa",
+                "t2": {
+                    "c21": 1, "c23": "bbb", "x1": 42, "x2": "_21_",
+                },
+                "t3": {
+                    "c31": 1, "c32": 31, "c33": "ccc",
+                },
+            },
+        }
+
+        assert walk_schema(config.graph_spec.to_schema(
+            template,
+            t1 = S.head(),
+            t2 = S.head(),
+            t3 = S.head(),
+        ).schema, True) == {
+            "t1": ({
+                "c11": (int, "comment of c11"), "c12": (int, "comment of c12"), "c13": (str, "comment of c13"),
+                "t2": ({
+                    "c21": (int, ""), "c23": (str, ""), "x1": (int, "X1"), "x2": (str, ""),
+                }, ""),
+                "t3": ({
+                    "c31": (int, ""), "c32": (int, ""), "c33": (str, ""),
+                }, ""),
+            }, ""),
         }

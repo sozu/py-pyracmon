@@ -1,4 +1,5 @@
 from typing import TypeVar
+from itertools import takewhile
 import inspect
 from .util import Configurable
 from .graph.spec import GraphSpec
@@ -114,18 +115,13 @@ class ConfigurableSpec(GraphSpec, Configurable):
             Serialization functions.
         """
         if not self.include_fk:
-            # Use return annotation of base serializer if exists.
-            s = chain_serializers(bases) if bases else None
-
-            rt = inspect.signature(s).return_annotation if s else inspect.Signature.empty
-
-            if issubgeneric(rt, ModelSchema):
-                rt = ExcludeFK[rt]
-
-            def serialize(c, n, b, model:T) -> rt:
+            def serialize(c, n, b, model:T) -> ExcludeFK[T]:
                 d = {c.name:v for c, v in model if not c.fk}
-                return s(c, n, b, type(model)(**d)) if s else d
-            return [serialize]
+                return b(type(model)(**d))
+
+            pos = next(filter(lambda ib: issubgeneric(inspect.signature(ib[1]).return_annotation, ModelSchema), enumerate(bases)), None)
+
+            return bases[0:pos[0]+1] + [serialize] + bases[pos[0]+1:] if pos else bases
         else:
             return bases
 

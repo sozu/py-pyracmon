@@ -181,7 +181,7 @@ class Shrink(Typeable[T]):
         if bound == Signature.empty:
             return TypedDict
         if not issubclass(bound, TypedDict):
-            raise TypeError(f"Type parameter for Shrink must be resolved to TypedDict but {base}.")
+            raise TypeError(f"Type parameter for Shrink must be resolved to TypedDict but {bound}.")
 
         class Schema(TypedDict):
             pass
@@ -201,7 +201,7 @@ class Extend(Typeable[T]):
         if bound == Signature.empty:
             return TypedDict
         if not issubclass(bound, TypedDict):
-            raise TypeError(f"Type parameter for Shrink must be resolved to TypedDict but {base}.")
+            raise TypeError(f"Type parameter for Shrink must be resolved to TypedDict but {bound}.")
 
         class Schema(extend.schema(bound, arg), bound):
             pass

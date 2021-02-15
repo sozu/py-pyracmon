@@ -53,7 +53,7 @@ class GraphSpec:
     def find_serializers(self, t):
         if not isinstance(t, type):
             return []
-        return list(map(lambda x:x[1], filter(lambda x:issubclass(t, x[0]), self.serializers)))
+        return list(map(lambda x:x[1], filter(lambda x:issubclass(t, x[0]), self.serializers[::-1])))
 
     def add_identifier(self, c, f):
         """
