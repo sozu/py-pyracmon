@@ -59,16 +59,16 @@ def read_schema(db, excludes=None, includes=None):
         ORDER BY c.table_name ASC, c.ordinal_position ASC
         """, *params)
 
-    def map_types(t):
+    def map_types(t, udt):
         base = db.context.config.type_mapping
-        ptype = base and base(t)
+        ptype = base and base(t, udt_name=udt)
         return ptype or _map_types(t)
 
     def column_of(n, t, udt, et, eudt, constraint, default, pos):
         m = SequencePattern.match(default or "")
         cs = (constraint or "").split(',')
         seq = m.group(1) if m else None
-        ptype = map_types(t) if t != 'ARRAY' else [map_types(et)]
+        ptype = map_types(t, udt) if t != 'ARRAY' else [map_types(et, eudt)]
         info = (t, udt) if t != 'ARRAY' else (et, eudt)
         return Column(n, ptype, info, 'PRIMARY KEY' in cs, 'FOREIGN KEY' in cs, seq)
 
@@ -103,7 +103,7 @@ def read_schema(db, excludes=None, includes=None):
         """, *params)
 
     def mv_column_of(n, udt, eudt, pos):
-        ptype = map_types(_map_alternates(udt)) if eudt is None else [map_types(_map_alternates(eudt))]
+        ptype = map_types(_map_alternates(udt), udt) if eudt is None else [map_types(_map_alternates(eudt), eudt)]
         info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
         return Column(n, ptype, info, False, False, None)
 

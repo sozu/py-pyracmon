@@ -22,8 +22,8 @@ class PyracmonConfiguration:
         Flag to log query parameters also.
     paramstyle: str
         Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module.
-    type_mapping: str -> type
-        Function estimating python type from the name of type in database.
+    type_mapping: (str, **) -> type
+        Function estimating python type from type name in database and optional DBMS dependent keys.
     graph_spec: ConfigurableSpec
         Graph specification used as default.
     fixture_mapping: (Table, Column, int) -> object

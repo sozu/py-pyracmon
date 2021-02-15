@@ -116,8 +116,16 @@ class TestReadSchema:
         class C:
             pass
 
+        def map_types(t, udt_name, **kwargs):
+            if t in {"boolean", "date"}:
+                return C
+            elif udt_name == "t_enum":
+                return C
+            else:
+                return None
+
         db = _connect()
-        db.context.configure(type_mapping = lambda t: C if t in {"boolean", "date"} else None)
+        db.context.configure(type_mapping = map_types)
 
         tables = sorted(read_schema(db), key = lambda t: t.name)
 
@@ -134,7 +142,7 @@ class TestReadSchema:
             dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, comment=""),
             dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, comment=""),
             dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="enum_", type=C, udt="t_enum", pk=False, fk=False, incremental=None, comment=""),
             dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, comment=""),
             dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
             dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
