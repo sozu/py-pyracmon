@@ -1,5 +1,6 @@
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
+from enum import Enum
 from uuid import UUID, uuid1, uuid3
 from .util import Matcher, config
 
@@ -64,8 +65,8 @@ class TestingMixin:
         model | [model]
             Inserted model(s).
         """
-        if isinstance(variable, int):
-            num = variable
+        if variable is None or isinstance(variable, int):
+            num = variable or 1
             index = TestingState.inc(cls, num) if index is None else index
             models = [_generate_model(cls, index+i) for i in range(num)]
             if db:
@@ -178,5 +179,7 @@ def _generate_value(table, column, index):
         return timedelta(days=index+1)
     elif column.ptype is UUID:
         return str(uuid3(fixed_uuid, f"{table.name}-{column.name}-{index}"))
+    elif isinstance(column.ptype, type) and issubclass(column.ptype, Enum):
+        return next(iter(column.ptype), None)
     else:
         return None

@@ -1,6 +1,7 @@
 import pytest
 import psycopg2
 from datetime import date, datetime, time, timedelta
+from enum import Enum, auto
 from uuid import uuid1, uuid3
 from tests import models as m
 from pyracmon import *
@@ -103,6 +104,36 @@ class TestFixture:
                 array_ = None,
                 deeparray_ = None,
             )
+
+    def test_values(self):
+        class E(Enum):
+            E1 = auto()
+            E2 = auto()
+
+        db = _connect()
+        declare_models(postgresql, db, 'tests.models', mixins=[TestingMixin])
+
+        today = date.today()
+        now = datetime.now().astimezone()
+
+        m.types.column.enum_.ptype = E
+
+        assert m.types.fixture(None)[0].match(
+            bool_ = True,
+            double_ = 1.2,
+            int_ = 1,
+            string_ = "string_-1",
+            bytes_ = "bytes_-1".encode(),
+            date_ = Near(today, 0, 1, days=1),
+            datetime_ = Near(now, 0, 10, seconds=1),
+            time_ = ~one_of(None),
+            delta_ = timedelta(days=2),
+            uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-1")),
+            enum_ = E.E1,
+            record_ = None,
+            array_ = None,
+            deeparray_ = None,
+        )
 
     def test_model(self):
         db = _connect()
