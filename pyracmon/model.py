@@ -66,8 +66,8 @@ def define_model(table_, mixins=[]):
         Table schema.
     - columns: [Column]
         The list of column schemas.
-    - *column name in the table*
-        Column schema.
+    - column: object
+        An object exposing schemas of columns via attributes of their names.
 
     Model instances are created by passing column name and its value as keyword arguments to the constructor.
     They are plain python objects representing a DB record by holding the subset of its columns as attributes.
@@ -128,8 +128,12 @@ def define_model(table_, mixins=[]):
             cols = [c for c in cls.columns if (not includes or c.name in includes) and c.name not in excludes]
             return define_model(Table(cls.name, cols, cls.table.comment), mixins)
 
-    for c in table_.columns:
-        setattr(Meta, c.name, c)
+    class Columns:
+        def __init__(self):
+            for c in table_.columns:
+                setattr(self, c.name, c)
+
+    setattr(Meta, "column", Columns())
 
     class Base(metaclass=Meta):
         pass

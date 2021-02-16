@@ -42,9 +42,9 @@ class TestDefineModel:
         assert [c.name for c in m.columns] == ["c1", "c2", "c3"]
         assert m.table == table1
         assert m.columns == table1.columns
-        assert m.c1 is table1.columns[0]
-        assert m.c2 is table1.columns[1]
-        assert m.c3 is table1.columns[2]
+        assert m.column.c1 is table1.columns[0]
+        assert m.column.c2 is table1.columns[1]
+        assert m.column.c3 is table1.columns[2]
 
         v = m()
         assert not hasattr(v, "name")
