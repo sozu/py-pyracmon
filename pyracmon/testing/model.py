@@ -77,7 +77,7 @@ class TestingMixin:
             index = TestingState.inc(cls, num) if index is None else index
             model = _generate_model(cls, index, variable)
             if db:
-                cls.insert(db, _generate_model(cls, index, variable))
+                cls.insert(db, model)
             return model
         elif isinstance(variable, list):
             num = len(variable)

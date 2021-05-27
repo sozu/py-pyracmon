@@ -6,14 +6,18 @@ from .util import chain_serializers, T
 
 
 if sys.version_info[0:2] >= (3, 8):
-    from typing import TypedDict, get_args, get_origin
+    from typing import get_args, get_origin
 else:
-    class TypedDict(dict):
-        pass
     def get_args(tp):
         return tp.__args__
     def get_origin(tp):
         return tp.__origin__
+
+
+# TODO Should support TypedDict exported from typing package.
+# Current TypedDict has not yet supported subclass check by issubclass().
+class TypedDict(dict):
+    pass
 
 
 def issubgeneric(t, p):
