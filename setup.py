@@ -5,7 +5,7 @@ with open("README.md", "r") as f:
 
 setup(
     name = "pyracmon",
-    version = "1.0.dev6",
+    version = "1.0.dev7",
     author = "sozuberry",
     author_email = "sozuberry@gmail.com",
     description = "Python O/R Mapping extension for DB-API 2.0",

@@ -7,6 +7,23 @@ from .util import chain_serializers, T
 
 if sys.version_info[0:2] >= (3, 8):
     from typing import get_args, get_origin
+elif sys.version_info[0:2] <= (3, 6):
+    def get_args(tp):
+        def bind(base, args):
+            if isinstance(args, tuple):
+                t, subs = args
+                return base[bind(t, subs)]
+            else:
+                return base[args]
+        
+        _, args = tp._subs_tree()
+        if isinstance(args, tuple):
+            b, a = args
+            return [bind(b, a)]
+        else:
+            return [args]
+    def get_origin(tp):
+        return tp.__origin__
 else:
     def get_args(tp):
         return tp.__args__
