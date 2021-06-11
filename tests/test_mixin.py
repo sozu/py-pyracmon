@@ -174,6 +174,36 @@ class TestFetchWhere:
         assert list(db.params_list[0]) == [5, 3, 10, 20]
 
 
+class TestFetchOne:
+    def test_singular(self):
+        db = PseudoAPI().connect()
+
+        db.reserve([[1, "abc", 10]])
+        r = model1.fetch_one(db)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1"
+        assert list(db.params_list[0]) == []
+        assert (r.c1, r.c2, r.c3) == (1, "abc", 10)
+
+    def test_empty(self):
+        db = PseudoAPI().connect()
+
+        db.reserve([])
+        r = model1.fetch_one(db)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1"
+        assert list(db.params_list[0]) == []
+        assert r is None
+
+    def test_multiple(self):
+        db = PseudoAPI().connect()
+
+        db.reserve([[1, "abc", 10], [2, "def", 20]])
+
+        with pytest.raises(ValueError):
+            model1.fetch_one(db)
+
+
 class TestInsert:
     def test_insert(self):
         db = PseudoAPI().connect()

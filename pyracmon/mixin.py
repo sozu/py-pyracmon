@@ -59,7 +59,7 @@ class CRUDMixin(SelectMixin):
         Returns
         -------
         cls
-            A model of the record.
+            A model of the record or `None` if the primary key is not found.
         """
         cols, vals = parse_pks(cls, pks)
         cond = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
@@ -99,6 +99,40 @@ class CRUDMixin(SelectMixin):
         s = cls.select()
         c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(order_by(orders))}{_spacer(rc)}{_spacer(lock)}", *(wp + rp))
         return [read_row(row, s)[0] for row in c.fetchall()]
+
+    @classmethod
+    def fetch_one(cls, db, condition=Q.of(), orders={}, offset=None, lock=None):
+        """
+        Fetch a record which satisfies a condition.
+
+        `ValueError` raises When multiple records are found.
+
+        Parameters
+        ----------
+        db: Connection
+            DB connection.
+        condition: Conditional
+            Condition.
+        orders: {str: bool}
+            Ordering parameters. Each key is column and its value denotes direction; `True` is ascending and `False` is descending.
+        offset: int
+            The number of rows to skip.
+        lock: object
+            An object whose string expression is appended to query.
+
+        Returns
+        -------
+        cls
+            A model of record or `None` if the result is empty.
+        """
+        rs = cls.fetch_where(db, condition, orders, None, offset, lock)
+
+        if not rs:
+            return None
+        elif len(rs) == 1:
+            return rs[0]
+        else:
+            raise ValueError(f"{len(rs)} records are found on the invocation of fetch_one().")
 
     @classmethod
     def insert(cls, db, record, qualifier={}):
