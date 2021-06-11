@@ -7,23 +7,23 @@ from pyracmon.graph.serialize import chain_serializers, S
 
 
 table1 = Table("t1", [
-    Column("c1", int, None, True, False, "seq", "c1 in t1"),
-    Column("c2", int, None, False, True, None, "c2 in t1"),
-    Column("c3", int, None, False, False, None, "c3 in t1"),
+    Column("c1", int, None, True, False, "seq", False, "c1 in t1"),
+    Column("c2", int, None, False, True, None, False, "c2 in t1"),
+    Column("c3", int, None, False, False, None, True, "c3 in t1"),
 ])
 
 
 table2 = Table("t2", [
-    Column("c1", int, None, True, False, "seq"),
-    Column("c2", int, None, True, True, None),
-    Column("c3", int, None, False, False, None),
+    Column("c1", int, None, True, False, "seq", False),
+    Column("c2", int, None, True, True, None, False),
+    Column("c3", int, None, False, False, None, False),
 ])
 
 
 table3 = Table("t3", [
-    Column("c1", int, None, False, False, "seq"),
-    Column("c2", int, None, False, True, None),
-    Column("c3", int, None, False, False, None),
+    Column("c1", int, None, False, False, "seq", False),
+    Column("c2", int, None, False, True, None, False),
+    Column("c3", int, None, False, False, None, False),
 ])
 
 

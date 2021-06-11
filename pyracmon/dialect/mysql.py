@@ -38,7 +38,8 @@ def read_schema(db, excludes=None, includes=None):
 
         cursor = db.stmt().execute(f"""\
             SELECT
-                c.table_name, c.column_name, c.data_type, c.column_type, c.column_key, k.referenced_table_name, k.referenced_column_name, c.extra, c.column_comment
+                c.table_name, c.column_name, c.data_type, c.is_nullable, c.column_type, c.column_key,
+                k.referenced_table_name, k.referenced_column_name, c.extra, c.column_comment
             FROM
                 information_schema.columns AS c
                 LEFT JOIN kcu AS k
@@ -57,8 +58,8 @@ def read_schema(db, excludes=None, includes=None):
             ptype = base and base(t)
             return ptype or _map_types(t)
 
-        def column_of(n, t, ct, key, rt, rc, extra, comment):
-            return Column(n, map_types(t), ct, key == "PRI", bool(rt), True if extra == "auto_increment" else None, comment or "")
+        def column_of(n, t, nullable, ct, key, rt, rc, extra, comment):
+            return Column(n, map_types(t), ct, key == "PRI", bool(rt), True if extra == "auto_increment" else None, nullable == "YES", comment or "")
 
         tables = []
 

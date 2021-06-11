@@ -32,68 +32,68 @@ class TestReadSchema:
         table_map = {t.name:t for t in tables}
 
         _assert_schema(table_map["t1"], "t1", "comment of t1", [
-            dict(name="c11", type=int, pk=True, fk=False, incremental="t1_c11_seq", comment="comment of c11"),
-            dict(name="c12", type=int, pk=False, fk=False, incremental=None, comment="comment of c12"),
-            dict(name="c13", type=str, pk=False, fk=False, incremental=None, comment="comment of c13"),
+            dict(name="c11", type=int, pk=True, fk=False, incremental="t1_c11_seq", nullable=False, comment="comment of c11"),
+            dict(name="c12", type=int, pk=False, fk=False, incremental=None, nullable=False, comment="comment of c12"),
+            dict(name="c13", type=str, pk=False, fk=False, incremental=None, nullable=False, comment="comment of c13"),
         ])
         _assert_schema(table_map["t2"], "t2", "", [
-            dict(name="c21", type=int, pk=True, fk=False, incremental=None, comment=""),
-            dict(name="c22", type=int, pk=True, fk=False, incremental=None, comment=""),
-            dict(name="c23", type=str, pk=False, fk=False, incremental=None, comment=""),
+            dict(name="c21", type=int, pk=True, fk=False, incremental=None, nullable=False, comment=""),
+            dict(name="c22", type=int, pk=True, fk=False, incremental=None, nullable=False, comment=""),
+            dict(name="c23", type=str, pk=False, fk=False, incremental=None, nullable=False, comment=""),
         ])
         _assert_schema(table_map["t3"], "t3", "", [
-            dict(name="c31", type=int, pk=True, fk=True, incremental=None, comment=""),
-            dict(name="c32", type=int, pk=False, fk=False, incremental="t3_c32_seq", comment=""),
-            dict(name="c33", type=str, pk=False, fk=False, incremental=None, comment=""),
+            dict(name="c31", type=int, pk=True, fk=True, incremental=None, nullable=False, comment=""),
+            dict(name="c32", type=int, pk=False, fk=False, incremental="t3_c32_seq", nullable=False, comment=""),
+            dict(name="c33", type=str, pk=False, fk=False, incremental=None, nullable=True, comment=""),
         ])
         _assert_schema(table_map["t4"], "t4", "", [
-            dict(name="c41", type=int, pk=True, fk=True, incremental=None, comment=""),
-            dict(name="c42", type=int, pk=True, fk=True, incremental=None, comment=""),
-            dict(name="c43", type=int, pk=True, fk=True, incremental=None, comment=""),
+            dict(name="c41", type=int, pk=True, fk=True, incremental=None, nullable=False, comment=""),
+            dict(name="c42", type=int, pk=True, fk=True, incremental=None, nullable=False, comment=""),
+            dict(name="c43", type=int, pk=True, fk=True, incremental=None, nullable=False, comment=""),
         ])
         _assert_schema(table_map["types"], "types", "", [
-            dict(name="bool_", type=bool, udt="bool", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="double_", type=float, udt="float4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="int_", type=int, udt="int4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="string_", type=str, udt="text", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="bytes_", type=bytes, udt="bytea", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="date_", type=date, udt="date", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="datetime_", type=datetime, udt="timestamptz", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="bool_", type=bool, udt="bool", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="double_", type=float, udt="float4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="int_", type=int, udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="string_", type=str, udt="text", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="bytes_", type=bytes, udt="bytea", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="date_", type=date, udt="date", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="datetime_", type=datetime, udt="timestamptz", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
         ])
         _assert_schema(table_map["v1"], "v1", "comment of v1", [
-            dict(name="c11", type=int, pk=False, fk=False, incremental=None, comment="comment of c11 in v1"),
-            dict(name="c12", type=int, pk=False, fk=False, incremental=None, comment=""),
-            dict(name="c31", type=int, pk=False, fk=False, incremental=None, comment=""),
-            dict(name="c32", type=int, pk=False, fk=False, incremental=None, comment=""),
+            dict(name="c11", type=int, pk=False, fk=False, incremental=None, nullable=True, comment="comment of c11 in v1"),
+            dict(name="c12", type=int, pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="c31", type=int, pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="c32", type=int, pk=False, fk=False, incremental=None, nullable=True, comment=""),
         ])
         _assert_schema(table_map["mv1"], "mv1", "comment of mv1", [
-            dict(name="c11", type=int, pk=False, fk=False, incremental=None, comment="comment of c11 in mv1"),
-            dict(name="c12", type=int, pk=False, fk=False, incremental=None, comment=""),
-            dict(name="c31", type=int, pk=False, fk=False, incremental=None, comment=""),
-            dict(name="c32", type=int, pk=False, fk=False, incremental=None, comment=""),
+            dict(name="c11", type=int, pk=False, fk=False, incremental=None, nullable=True, comment="comment of c11 in mv1"),
+            dict(name="c12", type=int, pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="c31", type=int, pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="c32", type=int, pk=False, fk=False, incremental=None, nullable=True, comment=""),
         ])
         _assert_schema(table_map["mv2"], "mv2", "", [
-            dict(name="bool_", type=bool, udt="bool", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="double_", type=float, udt="float4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="int_", type=int, udt="int4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="string_", type=str, udt="text", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="bytes_", type=bytes, udt="bytea", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="date_", type=date, udt="date", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="datetime_", type=datetime, udt="timestamptz", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="bool_", type=bool, udt="bool", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="double_", type=float, udt="float4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="int_", type=int, udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="string_", type=str, udt="text", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="bytes_", type=bytes, udt="bytea", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="date_", type=date, udt="date", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="datetime_", type=datetime, udt="timestamptz", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
         ])
 
     def test_excludes(self):
@@ -132,20 +132,20 @@ class TestReadSchema:
         table_map = {t.name:t for t in tables}
 
         _assert_schema(table_map["types"], "types", "", [
-            dict(name="bool_", type=C, udt="bool", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="double_", type=float, udt="float4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="int_", type=int, udt="int4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="string_", type=str, udt="text", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="bytes_", type=bytes, udt="bytea", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="date_", type=C, udt="date", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="datetime_", type=datetime, udt="timestamptz", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="enum_", type=C, udt="t_enum", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
-            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, comment=""),
+            dict(name="bool_", type=C, udt="bool", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="double_", type=float, udt="float4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="int_", type=int, udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="string_", type=str, udt="text", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="bytes_", type=bytes, udt="bytea", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="date_", type=C, udt="date", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="datetime_", type=datetime, udt="timestamptz", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="time_", type=time, udt="time", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="enum_", type=C, udt="t_enum", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="record_", type=object, udt="t_record", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="array_", type=[int], udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
+            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=False, incremental=None, nullable=True, comment=""),
         ])
 
 
@@ -166,6 +166,7 @@ def _assert_schema(actual, t, tcm, cs):
         assert c['pk'] == a.pk
         assert c['fk'] == a.fk
         assert c['incremental'] == a.incremental
+        assert c['nullable'] is a.nullable
         assert c['comment'] == a.comment
 
 

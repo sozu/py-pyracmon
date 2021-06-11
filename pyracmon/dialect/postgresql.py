@@ -36,7 +36,7 @@ def read_schema(db, excludes=None, includes=None):
 
     cursor = db.stmt().execute(f"""\
         SELECT
-            c.table_name, c.column_name, c.data_type, c.udt_name,
+            c.table_name, c.column_name, c.data_type, c.udt_name, c.is_nullable,
             e.data_type, e.udt_name, k.constraint_type, c.column_default, c.ordinal_position
         FROM
             information_schema.columns AS c
@@ -64,13 +64,14 @@ def read_schema(db, excludes=None, includes=None):
         ptype = base and base(t, udt_name=udt)
         return ptype or _map_types(t)
 
-    def column_of(n, t, udt, et, eudt, constraint, default, pos):
+    def column_of(n, t, udt, nullable, et, eudt, constraint, default, pos):
         m = SequencePattern.match(default or "")
         cs = (constraint or "").split(',')
         seq = m.group(1) if m else None
+        null = nullable == 'YES'
         ptype = map_types(t, udt) if t != 'ARRAY' else [map_types(et, eudt)]
         info = (t, udt) if t != 'ARRAY' else (et, eudt)
-        return Column(n, ptype, info, 'PRIMARY KEY' in cs, 'FOREIGN KEY' in cs, seq)
+        return Column(n, ptype, info, 'PRIMARY KEY' in cs, 'FOREIGN KEY' in cs, seq, null)
 
     tables = []
     column_positions = {}
@@ -91,7 +92,7 @@ def read_schema(db, excludes=None, includes=None):
 
     cursor = db.stmt().execute(f"""\
         SELECT
-            c.relname, a.attname, t.typname, et.typname, a.attnum
+            c.relname, a.attname, a.attnotnull, t.typname, et.typname, a.attnum
         FROM
             pg_class AS c
             INNER JOIN pg_attribute AS a ON c.oid = a.attrelid
@@ -102,10 +103,10 @@ def read_schema(db, excludes=None, includes=None):
             c.oid ASC, a.attnum ASC
         """, *params)
 
-    def mv_column_of(n, udt, eudt, pos):
+    def mv_column_of(n, not_null, udt, eudt, pos):
         ptype = map_types(_map_alternates(udt), udt) if eudt is None else [map_types(_map_alternates(eudt), eudt)]
         info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
-        return Column(n, ptype, info, False, False, None)
+        return Column(n, ptype, info, False, False, None, not not_null)
 
     for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
         cols = list(cols)

@@ -19,16 +19,19 @@ class Column:
         An informative object if this column is a foreign key, otherwise `None`.
     incremental: object
         If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
+    nullable: bool
+        Can this column contain null?
     comment: str
         Comment of the column.
     """
-    def __init__(self, name, ptype, type_info, pk, fk, incremental, comment=""):
+    def __init__(self, name, ptype, type_info, pk, fk, incremental, nullable, comment=""):
         self.name = name
         self.ptype = ptype
         self.type_info = type_info
         self.pk = pk
         self.fk = fk
         self.incremental = incremental
+        self.nullable = nullable
         self.comment = comment
 
 
