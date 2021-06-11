@@ -1,10 +1,11 @@
 from datetime import datetime, date, time, timedelta
 from .model import TestingMixin
-from .util import config, truncate, Matcher, near, let, one_of
+from .util import test_config, truncate, Matcher, near, let, one_of
 
 
 __all__ = [
     "TestingMixin",
+    "test_config",
     "truncate",
     "near",
     "let",

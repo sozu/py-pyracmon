@@ -2,7 +2,7 @@ import pytest
 import inspect
 from pyracmon.model import Table, Column, define_model
 from pyracmon.model_graph import *
-from pyracmon.graph.schema import walk_schema, Typeable
+from pyracmon.graph.schema import walk_schema, Typeable, TypedDict, document_type
 from pyracmon.graph.serialize import chain_serializers, S
 
 
@@ -188,3 +188,22 @@ class TestSchema:
 
         assert walk_schema(Typeable.resolve(rt, m, spec)) == {"c1": int}
         assert walk_schema(Typeable.resolve(rt, m, spec), True) == {"c1": (int, "c1 in t1")}
+
+    def test_add_fk_schema(self):
+        m = define_model(table1, [GraphEntityMixin])
+
+        class Ex(TypedDict):
+            c2: document_type(int, "fk")
+
+        def ex(model: m) -> Ex:
+            return Ex(c2 = m.c2)
+
+        spec = ConfigurableSpec.create()
+        spec.add_serializer(m, S.alter(ex, excludes={"c3"}))
+
+        s = chain_serializers(spec.find_serializers(m))
+
+        rt = inspect.signature(s).return_annotation
+
+        assert walk_schema(Typeable.resolve(rt, m, spec)) == {"c1": int, "c2": int}
+        assert walk_schema(Typeable.resolve(rt, m, spec), True) == {"c1": (int, "c1 in t1"), "c2": (int, "fk")}

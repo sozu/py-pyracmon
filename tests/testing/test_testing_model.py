@@ -7,7 +7,7 @@ from tests import models as m
 from pyracmon import *
 from pyracmon.dialect import postgresql
 from pyracmon.testing.model import *
-from pyracmon.testing.util import Near, truncate, one_of
+from pyracmon.testing.util import Near, truncate, one_of, test_config
 
 
 def _connect():
@@ -79,11 +79,14 @@ class TestFixture:
 
         truncate(db, m.types)
 
+        cfg = test_config().derive()
+        cfg.fixture_ignore_nullable = False
+
         today = date.today()
         now = datetime.now().astimezone()
         time = datetime.now().astimezone().time()
 
-        models = m.types.by(1).fixture(db, 3)
+        models = m.types.by(1).fixture(db, 3, cfg=cfg)
 
         assert m.types.count(db) == 3
 
@@ -113,12 +116,15 @@ class TestFixture:
         db = _connect()
         declare_models(postgresql, db, 'tests.models', mixins=[TestingMixin])
 
+        cfg = test_config().derive()
+        cfg.fixture_ignore_nullable = False
+
         today = date.today()
         now = datetime.now().astimezone()
 
         m.types.column.enum_.ptype = E
 
-        assert m.types.fixture(None)[0].match(
+        assert m.types.fixture(None, cfg=cfg)[0].match(
             bool_ = True,
             double_ = 1.2,
             int_ = 1,
@@ -130,6 +136,33 @@ class TestFixture:
             delta_ = timedelta(days=2),
             uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-1")),
             enum_ = E.E1,
+            record_ = None,
+            array_ = None,
+            deeparray_ = None,
+        )
+
+    def test_nullable(self):
+        class E(Enum):
+            E1 = auto()
+            E2 = auto()
+
+        db = _connect()
+        declare_models(postgresql, db, 'tests.models', mixins=[TestingMixin])
+
+        m.types.column.enum_.ptype = E
+
+        assert m.types.fixture(None)[0].match(
+            bool_ = None,
+            double_ = None,
+            int_ = None,
+            string_ = None,
+            bytes_ = None,
+            date_ = None,
+            datetime_ = None,
+            time_ = None,
+            delta_ = None,
+            uuid_ = None,
+            enum_ = None,
             record_ = None,
             array_ = None,
             deeparray_ = None,

@@ -27,6 +27,7 @@ __all__ = [
     "where",
     "new_graph",
     "S",
+    "TypedDict",
     "document_type",
     "Typeable",
     "walk_schema",
@@ -36,9 +37,6 @@ __all__ = [
     "graph_dict",
     "graph_schema",
 ]
-
-if sys.version_info[0:2] < (3, 8):
-    __all__ += ["TypedDict"]
 
 
 def declare_models(dialect, db, module=__name__, mixins=[], excludes=None, includes=None):
@@ -89,7 +87,7 @@ def graph_template(*bases, **definitions):
 
 def graph_dict(graph, **settings):
     """
-    Generates a dictionary representing structured values of a graph on the default specification.
+    Generates a dictionary representing structured values of a graph under the default specification.
 
     Parameters
     ----------

@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid1, uuid3
-from .util import Matcher, config
+from .util import Matcher, test_config
 
 
 class TestingState:
@@ -46,7 +46,7 @@ class TestingMixin:
         return cls
 
     @classmethod
-    def fixture(cls, db, variable=None, index=None):
+    def fixture(cls, db, variable=None, index=None, cfg=None):
         """
         Insert record with auto-generated column values.
 
@@ -59,6 +59,9 @@ class TestingMixin:
             When `dict`, model object or a list of them, inserts record(s) represented by them. Unspecified column values are generated.
         index: int
             Use this to specify index used to generate column values explicitly. If set, indexing state is not updated.
+        cfg: PyracmonConfiguration
+            Configuration used to control the generation of fixuture values.
+            This argument is prepared only for internal use and can be changed or removed in future version.
 
         Returns
         -------
@@ -68,21 +71,21 @@ class TestingMixin:
         if variable is None or isinstance(variable, int):
             num = variable or 1
             index = TestingState.inc(cls, num) if index is None else index
-            models = [_generate_model(cls, index+i) for i in range(num)]
+            models = [_generate_model(cls, index+i, None, cfg) for i in range(num)]
             if db:
                 cls.inserts(db, models)
             return models
         elif isinstance(variable, (cls, dict)):
             num = 1
             index = TestingState.inc(cls, num) if index is None else index
-            model = _generate_model(cls, index, variable)
+            model = _generate_model(cls, index, variable, cfg)
             if db:
                 cls.insert(db, model)
             return model
         elif isinstance(variable, list):
             num = len(variable)
             index = TestingState.inc(cls, num) if index is None else index
-            models = [_generate_model(cls, index+i, v) for i, v in enumerate(variable)]
+            models = [_generate_model(cls, index+i, v, cfg) for i, v in enumerate(variable)]
             if db:
                 cls.inserts(db, models)
             return models
@@ -115,7 +118,7 @@ class TestingMixin:
         return True
 
 
-def _generate_model(model, index, model_or_dict=None):
+def _generate_model(model, index, model_or_dict, cfg):
     values = {}
 
     if isinstance(model_or_dict, TestingMixin):
@@ -123,7 +126,7 @@ def _generate_model(model, index, model_or_dict=None):
     elif isinstance(model_or_dict, dict):
         values = dict(**model_or_dict)
 
-    values.update(**{c.name:_generate_value(model.table, c, index) for c in model.columns if c.name not in values and not c.pk})
+    values.update(**{c.name:_generate_value(model.table, c, index, cfg) for c in model.columns if c.name not in values and not c.pk})
 
     return model(**values)
 
@@ -131,7 +134,7 @@ def _generate_model(model, index, model_or_dict=None):
 fixed_uuid=uuid1(0, 0)
 
 
-def _generate_value(table, column, index):
+def _generate_value(table, column, index, cfg):
     """
     Generates a value for the column on an index.
 
@@ -149,15 +152,21 @@ def _generate_value(table, column, index):
     object
         Generated value.
     """
-    mapping = config().fixture_mapping
+    cfg = cfg or test_config()
+
+    mapping = cfg.fixture_mapping
     if mapping:
         value = mapping(table, column, index)
         if value is not None:
             return value
 
-    tz_aware = config().fixture_tz_aware
+    tz_aware = cfg.fixture_tz_aware
 
-    if column.ptype is bool:
+    if column.nullable and cfg.fixture_ignore_nullable:
+        return None
+    elif column.fk and cfg.fixture_ignore_fk:
+        return None
+    elif column.ptype is bool:
         return True
     elif column.ptype is float:
         return float(f"{index}.{index+1}")

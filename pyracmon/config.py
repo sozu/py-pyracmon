@@ -30,6 +30,10 @@ class PyracmonConfiguration:
         Function generating fixture value for a column and an index.
     fixture_tz_aware: bool
         Flag to make fixture datetime being aware of timezone.
+    fixture_ignore_fk: bool
+        Flag not to generate fixuture value on foreign key columns.
+    fixture_ignore_nullable: bool
+        Flag not to generate fixuture value on nullable columns.
     timedelta_unit: dict
         Default keyword arguments to pass `timedelta()` to compare actual `date`/`datetime` with expected one in `near` matcher.
     """
@@ -45,6 +49,8 @@ class PyracmonConfiguration:
         graph_spec = None,
         fixture_mapping = None,
         fixture_tz_aware = None,
+        fixture_ignore_fk = None,
+        fixture_ignore_nullable = None,
         timedelta_unit = None,
     ):
         self.name = name
@@ -57,6 +63,8 @@ class PyracmonConfiguration:
         self.graph_spec = graph_spec or ConfigurableSpec.create()
         self.fixture_mapping = fixture_mapping
         self.fixture_tz_aware = fixture_tz_aware
+        self.fixture_ignore_fk = fixture_ignore_fk
+        self.fixture_ignore_nullable = fixture_ignore_nullable
         self.timedelta_unit = timedelta_unit
 
     def derive(self, **kwargs):
@@ -97,6 +105,8 @@ def default_config(config=PyracmonConfiguration(
     graph_spec = None,
     fixture_mapping = None,
     fixture_tz_aware = True,
+    fixture_ignore_fk = True,
+    fixture_ignore_nullable = True,
     timedelta_unit = dict(seconds=1),
 )):
     return config

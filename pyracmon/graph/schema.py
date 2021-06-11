@@ -32,7 +32,7 @@ else:
 
 
 # TODO Should support TypedDict exported from typing package.
-# Current TypedDict has not yet supported subclass check by issubclass().
+# In cpython <= 3.9, TypedDict has not yet supported subclass check by issubclass().
 class TypedDict(dict):
     pass
 
@@ -125,10 +125,10 @@ class Typeable(Generic[T]):
     Type resolution should start from the invocation of `Typeable.resolve()`.
     It subsequently invokes the static method with arguments below.
 
-    - Typeable type to resolve whose type parameter is replaced with concrete type or another resolved Typeable type.
-    - Resolved type for the type parameter.
-    - A type passed by the invocation of `Typeable.resolve()`.
-    - `GraphSpec` used for schema generation.
+    - Typeable type to resolve `A`.
+    - A type of `T` resolved by `arg` given to Typeable.resolve().
+    - Given type `arg` is passed through as it is.
+    - Given `GraphSpec` object `spec` is passed through as it is.
     """
     @staticmethod
     def resolve(typeable, arg, spec):
@@ -187,18 +187,48 @@ class Typeable(Generic[T]):
 
 
 class DynamicType(Typeable[T]):
+    """
+    A `Typeable` type which can be resolved dynamically with resolved type parameter.
+    """
     @staticmethod
     def resolve(dynamic, bound, arg, spec):
         return dynamic.fix(bound, arg)
 
     @classmethod
     def fix(cls, bound, arg):
+        """
+        Resolve a resolved type into another type.
+
+        Override this method to apply specific logic of the inheriting type to resolved type.
+
+        ex) Convert resolved model type into `TypedDict` for serialization.
+
+        Parameters
+        ----------
+        bound: type
+            Resolved type of `T`.
+        arg: type
+            A type used for the resolution of `bound`.
+
+        Returns
+        -------
+        type
+            Another type.
+        """
         return bound
 
 
 class Shrink(Typeable[T]):
+    """
+    A type to remove keys from `TypedDict` bound to the type parameter `T`.
+
+    This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
+    """
     @staticmethod
     def resolve(shrink, bound, arg, spec):
+        """
+        Resolve a `TypedDict` into another `TypedDict` by removing some keys defined by `select()`.
+        """
         if bound == Signature.empty:
             return TypedDict
         if not issubclass(bound, TypedDict):
@@ -213,12 +243,37 @@ class Shrink(Typeable[T]):
 
     @classmethod
     def select(cls, bound, arg):
+        """
+        Select excluding and including keys from `TypedDict`.
+
+        Parameters
+        ----------
+        bound: TypedDict | Signature.empty
+            `TypedDict` to be shrinked.
+        arg: type
+            A type used for the resolution of `bound`.
+
+        Returns
+        -------
+        [str]
+            Keys to exlude even if they are contained in including keys.
+        [str]
+            Keys to include. If empty, all keys are included.
+        """
         raise NotImplementedError()
 
 
 class Extend(Typeable[T]):
+    """
+    A type to add keys to `TypedDict` bound to the type parameter `T`.
+
+    This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
+    """
     @staticmethod
     def resolve(extend, bound, arg, spec):
+        """
+        Resolve a `TypedDict` into another `TypedDict` by adding some keys retrieved by `schema()`.
+        """
         if bound == Signature.empty:
             return TypedDict
         if not issubclass(bound, TypedDict):
@@ -231,6 +286,21 @@ class Extend(Typeable[T]):
 
     @classmethod
     def schema(cls, bound, arg):
+        """
+        Creates a `TypedDict` representing a schema of adding keys and their types.
+
+        Parameters
+        ----------
+        bound: TypedDict | Signature.empty
+            `TypedDict` to be extended.
+        arg: type
+            A type used for the resolution of `bound`.
+
+        Returns
+        -------
+        TypedDict
+            Schema of adding keys and their types.
+        """
         raise NotImplementedError()
 
 

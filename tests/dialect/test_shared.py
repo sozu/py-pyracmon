@@ -6,16 +6,16 @@ from tests.db_api import *
 
 
 table1 = Table("t1", [
-    Column("c1", int, None, True, False, "seq"),
-    Column("c2", int, None, False, False, None),
-    Column("c3", int, None, False, False, None),
+    Column("c1", int, None, True, False, "seq", False),
+    Column("c2", int, None, False, False, None, False),
+    Column("c3", int, None, False, False, None, True),
 ])
 
 
 table2 = Table("t2", [
-    Column("c1", int, None, True, False, "seq"),
-    Column("c2", int, None, True, False, None),
-    Column("c3", int, None, False, False, None),
+    Column("c1", int, None, True, False, "seq", False),
+    Column("c2", int, None, True, False, None, True),
+    Column("c3", int, None, False, False, None, False),
 ])
 
 
