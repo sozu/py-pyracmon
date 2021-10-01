@@ -28,30 +28,30 @@ class TestReadSchema:
         table_map = {t.name:t for t in tables}
 
         _assert_schema(table_map["t1"], "t1", "comment of t1", [
-            dict(name = "c11", type = int, pk = True, fk = False, incremental = True, nullable = False, comment = "comment of c11"),
-            dict(name = "c12", type = int, pk = False, fk = False, incremental = None, nullable = False, comment = "comment of c12"),
-            dict(name = "c13", type = str, pk = False, fk = False, incremental = None, nullable = False, comment = "comment of c13"),
+            dict(name="c11", type=int, pk=True, fk=None, incremental=True, nullable=False, comment="comment of c11"),
+            dict(name="c12", type=int, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c12"),
+            dict(name="c13", type=str, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c13"),
         ])
         _assert_schema(table_map["t2"], "t2", "", [
-            dict(name = "c21", type = int, pk = True, fk = False, incremental = None, nullable = False, comment = ""),
-            dict(name = "c22", type = int, pk = True, fk = False, incremental = None, nullable = False, comment = ""),
-            dict(name = "c23", type = str, pk = False, fk = False, incremental = None, nullable = False, comment = ""),
+            dict(name="c21", type=int, pk=True, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c22", type=int, pk=True, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c23", type=str, pk=False, fk=None, incremental=None, nullable=False, comment=""),
         ])
         _assert_schema(table_map["t3"], "t3", "", [
-            dict(name = "c31", type = int, pk = True, fk = True, incremental = None, nullable = False, comment = ""),
-            dict(name = "c32", type = int, pk = False, fk = False, incremental = None, nullable = False, comment = ""),
-            dict(name = "c33", type = str, pk = False, fk = False, incremental = None, nullable = True, comment = ""),
+            dict(name="c31", type=int, pk=True, fk=[(table_map["t1"], "c11")], incremental=None, nullable=False, comment=""),
+            dict(name="c32", type=int, pk=False, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c33", type=str, pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
         _assert_schema(table_map["t4"], "t4", "", [
-            dict(name = "c41", type = int, pk = True, fk = False, incremental = None, nullable = False, comment = ""),
-            dict(name = "c42", type = int, pk = True, fk = True, incremental = None, nullable = False, comment = ""),
-            dict(name = "c43", type = int, pk = True, fk = True, incremental = None, nullable = False, comment = ""),
+            dict(name="c41", type=int, pk=True, fk=[(table_map["t1"], "c11")], incremental=None, nullable=False, comment=""),
+            dict(name="c42", type=int, pk=True, fk=[(table_map["t2"], "c21")], incremental=None, nullable=False, comment=""),
+            dict(name="c43", type=int, pk=True, fk=[(table_map["t2"], "c22")], incremental=None, nullable=False, comment=""),
         ])
         _assert_schema(table_map["v1"], "v1", "", [
-            dict(name = "c11", type = int, pk = False, fk = False, incremental = None, nullable = False, comment = "comment of c11"),
-            dict(name = "c12", type = int, pk = False, fk = False, incremental = None, nullable = False, comment = "comment of c12"),
-            dict(name = "c31", type = int, pk = False, fk = False, incremental = None, nullable = False, comment = ""),
-            dict(name = "c32", type = int, pk = False, fk = False, incremental = None, nullable = False, comment = ""),
+            dict(name="c11", type=int, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c11"),
+            dict(name="c12", type=int, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c12"),
+            dict(name="c31", type=int, pk=False, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c32", type=int, pk=False, fk=None, incremental=None, nullable=False, comment=""),
         ])
 
     def test_excludes(self):
@@ -82,9 +82,9 @@ class TestReadSchema:
         table_map = {t.name:t for t in tables}
 
         _assert_schema(table_map["t1"], "t1", "comment of t1", [
-            dict(name = "c11", type = C, pk = True, fk = False, incremental = True, nullable = False, comment = "comment of c11"),
-            dict(name = "c12", type = C, pk = False, fk = False, incremental = None, nullable = False, comment = "comment of c12"),
-            dict(name = "c13", type = str, pk = False, fk = False, incremental = None, nullable = False, comment = "comment of c13"),
+            dict(name="c11", type=C, pk=True, fk=None, incremental=True, nullable=False, comment="comment of c11"),
+            dict(name="c12", type=C, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c12"),
+            dict(name="c13", type=str, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c13"),
         ])
 
 
@@ -101,7 +101,13 @@ def _assert_schema(actual, t, tcm, cs):
         if 'info' in c:
             assert c['info'] == a.type_info
         assert c['pk'] == a.pk
-        assert c['fk'] == a.fk
+        if c['fk']:
+            assert len(a.fk.constraints) == len(c['fk'])
+            for act, exp in zip(a.fk.constraints, c['fk']):
+                tt, ct = exp[0], exp[0].find(exp[1])
+                assert (act.table, act.column) == (tt, ct)
+        else:
+            assert None is a.fk
         assert c['incremental'] == a.incremental
         assert c['nullable'] is a.nullable
         assert c['comment'] == a.comment

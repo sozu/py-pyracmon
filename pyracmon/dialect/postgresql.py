@@ -3,7 +3,7 @@ from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 from uuid import UUID
 from itertools import groupby
-from pyracmon.model import Table, Column
+from pyracmon.model import Table, Column, ForeignKey, Relations
 from pyracmon.dialect.shared import MultiInsertMixin
 from pyracmon.query import Q, where, holders
 
@@ -71,7 +71,7 @@ def read_schema(db, excludes=None, includes=None):
         null = nullable == 'YES'
         ptype = map_types(t, udt) if t != 'ARRAY' else [map_types(et, eudt)]
         info = (t, udt) if t != 'ARRAY' else (et, eudt)
-        return Column(n, ptype, info, 'PRIMARY KEY' in cs, 'FOREIGN KEY' in cs, seq, null)
+        return Column(n, ptype, info, 'PRIMARY KEY' in cs, Relations() if 'FOREIGN KEY' in cs else None, seq, null)
 
     tables = []
     column_positions = {}
@@ -81,6 +81,31 @@ def read_schema(db, excludes=None, includes=None):
         columns = [column_of(*c[1:]) for c in cols]
         tables.append(Table(t, columns))
         column_positions[t] = {c[1]:c[-1] for c in cols}
+
+    cursor.close()
+
+    cursor = db.stmt().execute(f"""\
+        SELECT
+            k.table_name AS t1, k.column_name AS c1, k2.table_name AS t2, k2.column_name AS c2
+        FROM
+            information_schema.referential_constraints AS r
+            INNER JOIN information_schema.key_column_usage AS k ON r.constraint_name = k.constraint_name
+            INNER JOIN information_schema.key_column_usage AS k2
+                ON r.unique_constraint_name = k2.constraint_name AND k.ordinal_position = k2.ordinal_position
+        ORDER BY
+            k.table_name ASC
+        """)
+
+    table_map = {t.name:t for t in tables}
+
+    for row in cursor.fetchall():
+        table_from = table_map.get(row[0], None)
+        col_from = table_from.find(row[1]) if table_from else None
+
+        if col_from:
+            table_to = table_map.get(row[2], None)
+            col_to = table_to.find(row[3]) if table_to else None
+            col_from.fk.add(ForeignKey(table_to or row[2], col_to or row[3]))
 
     cursor.close()
 
@@ -106,7 +131,7 @@ def read_schema(db, excludes=None, includes=None):
     def mv_column_of(n, not_null, udt, eudt, pos):
         ptype = map_types(_map_alternates(udt), udt) if eudt is None else [map_types(_map_alternates(eudt), eudt)]
         info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
-        return Column(n, ptype, info, False, False, None, not not_null)
+        return Column(n, ptype, info, False, None, None, not not_null)
 
     for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
         cols = list(cols)

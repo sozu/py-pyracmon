@@ -1,6 +1,45 @@
 from collections import OrderedDict
 
 
+class ForeignKey:
+    """
+    This class represents a foreign key constraint.
+
+    Attributes
+    ----------
+    table: Table | str
+        Referenced table model, table name is set alternatively when the table is not modelled.
+    column: Column | str
+        Referenced column model, column name is set alternatively when the column is not modelled.
+    """
+    def __init__(self, table, column) -> None:
+        self.table = table
+        self.column = column
+
+
+class Relations:
+    """
+    This class represents foreign key constraints on a column.
+
+    Attributes
+    ----------
+    constraints: [ForeignKey]
+    """
+    def __init__(self) -> None:
+        self.constraints = []
+
+    def add(self, fk):
+        """
+        Adds another constraint.
+
+        Parameters
+        ----------
+        fk: ForeignKey
+            Foreign key constraint.
+        """
+        self.constraints.append(fk)
+
+
 class Column:
     """
     This class represents a schema of a column.
@@ -52,6 +91,22 @@ class Table:
         self.name = name
         self.columns = columns
         self.comment = ""
+
+    def find(self, name):
+        """
+        Find a column by name.
+
+        Parameters
+        ----------
+        name: str
+            Column name.
+
+        Returns
+        -------
+        Column | None
+            A column. If not found, returns `None`.
+        """
+        return next(filter(lambda c: c.name == name, self.columns), None)
 
 
 def define_model(table_, mixins=[]):

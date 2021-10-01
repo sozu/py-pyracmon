@@ -2,7 +2,7 @@ from itertools import groupby
 from decimal import Decimal
 from enum import Enum
 from datetime import date, datetime, time, timedelta
-from pyracmon.model import Table, Column
+from pyracmon.model import Table, Column, Relations, ForeignKey
 from pyracmon.dialect.shared import MultiInsertMixin
 from pyracmon.query import Q, where, holders
 
@@ -23,74 +23,81 @@ def read_schema(db, excludes=None, includes=None):
     [Table]
         Tables.
     """
-    try:
-        db.stmt().execute(f"DROP TEMPORARY TABLE IF EXISTS kcu")
-        db.stmt().execute(f"""\
-            CREATE TEMPORARY TABLE kcu
-            SELECT * FROM information_schema.key_column_usage WHERE table_schema = DATABASE()
-            """)
+    q = Q(excludes = excludes, includes = includes)
 
-        q = Q(excludes = excludes, includes = includes)
+    cond = Q.of("c.table_schema = DATABASE()") & q.excludes.not_in("c.table_name") & q.includes.in_("c.table_name")
 
-        cond = Q.of("c.table_schema = DATABASE()") & q.excludes.not_in("c.table_name") & q.includes.in_("c.table_name")
+    w, params = where(cond)
 
-        w, params = where(cond)
+    cursor = db.stmt().execute(f"""\
+        SELECT
+            c.table_name, c.column_name, c.data_type, c.is_nullable, c.column_type, c.column_key, c.extra, c.column_comment
+        FROM
+            information_schema.columns AS c
+        {w}
+        ORDER BY
+            c.table_name, c.ordinal_position ASC
+        """, *params)
 
-        cursor = db.stmt().execute(f"""\
-            SELECT
-                c.table_name, c.column_name, c.data_type, c.is_nullable, c.column_type, c.column_key,
-                k.referenced_table_name, k.referenced_column_name, c.extra, c.column_comment
-            FROM
-                information_schema.columns AS c
-                LEFT JOIN kcu AS k
-                    ON c.table_catalog = k.table_catalog
-                        AND c.table_schema = k.table_schema
-                        AND c.table_name = k.table_name
-                        AND c.column_name = k.column_name
-                        AND k.referenced_table_name IS NOT NULL
-            {w}
-            ORDER BY
-                c.table_name, c.ordinal_position ASC
-            """, *params)
+    def map_types(t):
+        base = db.context.config.type_mapping
+        ptype = base and base(t)
+        return ptype or _map_types(t)
 
-        def map_types(t):
-            base = db.context.config.type_mapping
-            ptype = base and base(t)
-            return ptype or _map_types(t)
+    def column_of(n, t, nullable, ct, key, extra, comment):
+        return Column(n, map_types(t), ct, key == "PRI", None, True if extra == "auto_increment" else None, nullable == "YES", comment or "")
 
-        def column_of(n, t, nullable, ct, key, rt, rc, extra, comment):
-            return Column(n, map_types(t), ct, key == "PRI", bool(rt), True if extra == "auto_increment" else None, nullable == "YES", comment or "")
+    tables = []
 
-        tables = []
+    for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
+        tables.append(Table(t, [column_of(*c[1:]) for c in cols]))
 
-        for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
-            tables.append(Table(t, [column_of(*c[1:]) for c in cols]))
+    cursor.close()
 
-        cursor.close()
+    if len(tables) == 0:
+        return []
 
-        if len(tables) == 0:
-            return []
+    cursor = db.stmt().execute(f"""\
+        SELECT
+            table_name, column_name, referenced_table_name, referenced_column_name
+        FROM
+            information_schema.key_column_usage
+        WHERE
+            table_schema = DATABASE() AND referenced_table_name IS NOT NULL
+        """)
 
-        cursor = db.stmt().execute(f"""\
-            SELECT
-                table_name, table_comment
-            FROM
-                information_schema.tables
-            WHERE
-                table_name IN ({holders(len(tables))})
-            """, *[t.name for t in tables])
+    table_map = {t.name:t for t in tables}
 
-        table_map = {t.name: t for t in tables}
+    for row in cursor.fetchall():
+        table_from = table_map.get(row[0], None)
+        col_from = table_from.find(row[1]) if table_from else None
 
-        for n, cmt in cursor.fetchall():
-            if n in table_map:
-                table_map[n].comment = cmt or ""
+        if col_from:
+            table_to = table_map.get(row[2], None)
+            col_to = table_to.find(row[3]) if table_to else None
+            col_from.fk = col_from.fk or Relations()
+            col_from.fk.add(ForeignKey(table_to or row[2], col_to or row[3]))
 
-        cursor.close()
+    cursor.close()
 
-        return tables
-    finally:
-        db.stmt().execute(f"DROP TEMPORARY TABLE IF EXISTS kcu")
+    cursor = db.stmt().execute(f"""\
+        SELECT
+            table_name, table_comment
+        FROM
+            information_schema.tables
+        WHERE
+            table_name IN ({holders(len(tables))})
+        """, *[t.name for t in tables])
+
+    table_map = {t.name: t for t in tables}
+
+    for n, cmt in cursor.fetchall():
+        if n in table_map:
+            table_map[n].comment = cmt or ""
+
+    cursor.close()
+
+    return tables
 
 
 def _map_types(t):

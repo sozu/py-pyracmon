@@ -4,15 +4,15 @@ from pyracmon.select import *
 
 
 table1 = Table("t1", [
-    Column("c1", int, None, True, False, "seq", False),
-    Column("c2", int, None, False, False, None, False),
-    Column("c3", int, None, False, False, None, True),
+    Column("c1", int, None, True, None, "seq", False),
+    Column("c2", int, None, False, None, None, False),
+    Column("c3", int, None, False, None, None, True),
 ])
 
 table2 = Table("t2", [
-    Column("c1", int, None, True, False, "seq", False),
-    Column("c2", int, None, True, False, None, True),
-    Column("c3", int, None, False, False, None, False),
+    Column("c1", int, None, True, None, "seq", False),
+    Column("c2", int, None, True, None, None, True),
+    Column("c3", int, None, False, None, None, False),
 ])
 
 model1 = define_model(table1, [SelectMixin])
