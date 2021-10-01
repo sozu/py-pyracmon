@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid1, uuid3
-from .util import Matcher, test_config
+from .util import Matcher, testing_config
 
 
 class TestingState:
@@ -152,7 +152,7 @@ def _generate_value(table, column, index, cfg):
     object
         Generated value.
     """
-    cfg = cfg or test_config()
+    cfg = cfg or testing_config()
 
     mapping = cfg.fixture_mapping
     if mapping:

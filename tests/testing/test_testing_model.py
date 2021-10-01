@@ -7,7 +7,7 @@ from tests import models as m
 from pyracmon import *
 from pyracmon.dialect import postgresql
 from pyracmon.testing.model import *
-from pyracmon.testing.util import Near, truncate, one_of, test_config
+from pyracmon.testing.util import Near, truncate, one_of, testing_config
 
 
 def _connect():
@@ -79,7 +79,7 @@ class TestFixture:
 
         truncate(db, m.types)
 
-        cfg = test_config().derive()
+        cfg = testing_config().derive()
         cfg.fixture_ignore_nullable = False
 
         today = date.today()
@@ -116,7 +116,7 @@ class TestFixture:
         db = _connect()
         declare_models(postgresql, db, 'tests.models', mixins=[TestingMixin])
 
-        cfg = test_config().derive()
+        cfg = testing_config().derive()
         cfg.fixture_ignore_nullable = False
 
         today = date.today()

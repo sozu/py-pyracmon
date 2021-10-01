@@ -93,7 +93,7 @@ class TestNear:
         exp = datetime(2020, 1, 1, 0, 0, 0)
 
         try:
-            test_config().set(timedelta_unit=dict(minutes=1))
+            testing_config().set(timedelta_unit=dict(minutes=1))
 
             n = near(exp, -1, 1)
 
@@ -103,7 +103,7 @@ class TestNear:
             assert n.match(datetime(2020, 1, 1, 0, 1, 0))
             assert not n.match(datetime(2020, 1, 1, 0, 1, 1))
         finally:
-            test_config().set(timedelta_unit=dict(seconds=1))
+            testing_config().set(timedelta_unit=dict(seconds=1))
 
 
 class TestLet:

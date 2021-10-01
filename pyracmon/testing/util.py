@@ -2,7 +2,7 @@ from datetime import datetime, date, time, timedelta
 from ..config import default_config
 
 
-def test_config(cfg=default_config().derive()):
+def testing_config(cfg=default_config().derive()):
     return cfg
 
 
@@ -112,7 +112,7 @@ def near(expected, negative=None, positive=None, **kwargs):
     """
     if isinstance(expected, datetime):
         if all(k not in kwargs for k in ('weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds', 'microseconds')):
-            kwargs.update(**test_config().timedelta_unit)
+            kwargs.update(**testing_config().timedelta_unit)
     return Near(expected, negative, positive, **kwargs)
 
 
