@@ -2,15 +2,15 @@
 
 ## Overview
 
-This library provides functionalities which refine codes executing DB operations. The main peculiar concepts are *model declaration* and *relational graph*.
+This library provides functionalities to refine codes executing DB operations. The main peculiar concepts are *model declaration* and *relational graph*.
 
 *Model* is the class representing a table and its instance corresponds to a record. This library provides a way to declare model classes by reverse-engineering from actual tables. Once you connect DB, model classes are importable from a module you specified. Those classes have various methods executing simple operations on a table.
 
-*Graph* is composed of *node*s and *edge*s, where each node contains a model object or any kind of value. An edge between nodes represents the relation between their values, such as relation between records. *Graph*s are designed to accept rows obtained from DB with straight-forward codes, which makes you free from suffering from the reconstruction of data structure for query result. Additionally, *graph view* provides intuitive interfaces to traverse it and *graph serialization* feature enables conversion from a *graph* into a `dict` with keeping its structure and applying flexible representation to each node. As a result, you no longer need to care how the result of DB operation is used in other modules.
+*Graph* is composed of *node*s and *edge*s, where each node contains a model object or any kind of value. An edge between nodes represents their relation, such as foreign key constraint between records. *Graph*s are designed to store results of queries with straight-forward codes, which makes you free from suffering from the reconstruction of data structure. Additionally, *graph view* provides intuitive interfaces to traverse it and *graph serialization* feature enables conversion from a *graph* into a `dict` with keeping its structure and applying flexible representation to each node.
 
 On the other hand, this library does NOT support following features which are common in libraries called O/R mapper.
 
-- Query generation which resolves relations (foreign keys) automatically.
+- Query generation resolving relations (foreign keys) automatically.
 - Object based query operation such as lazy loading or dirty state handling.
 - Code first migrations, that is, database migrations based on entity declarations.
 
@@ -18,19 +18,19 @@ On the other hand, this library does NOT support following features which are co
 
 **DB-API 2.0**
 
-This library works as a wrapper of any kind of DB driver compliant with DB-API 2.0 such as *psycopg2* or *PyMySQL*. DB operations are passed to the driver so that any functionality it provides is also available. The role of this library is providing flexible, intuitive and sophisticated way to write codes executing the operations.
+This library works as a wrapper of any kind of DB driver compliant with DB-API 2.0 such as *psycopg2* or *PyMySQL*. DB operations are passed to the driver so that any functionality it provides is also available. 
 
 **Automatic declaration of model types**
 
-Similarly to many other O/R mappers, this library represents a table with a class called *model type*. Though, it exports a function `declare_models()` which collects tables and views from connected databasse and declares model types of them automatically in specified module. Because the declaration is done at runtime, changes by DB schema migrations are reflected without any manual operation.
+Similarly to many other O/R mappers, this library represents a table with a class called *model type*. The characteristic is that the declarations of *model types* are done by a function crawling tables in DB at runtime, not by manual coding.
 
 **Query helpers**
 
-While this library mainly focuses on the use of SQL, not DSL, it exports many functions to generate a part of query and each *model type* has methods to execute some routine DB operations on its representing table. Both will decrease boilerplate codes to construct query string and its parameters. Meanwhile, complicated queries which contain table join, sub-query and so on are not suppoted intentionaly. Trials done by many projects to represent those queries by object oriented interfaces or DSLs have ended up to bring larger difficulties, that is, SQL is preferable than the interfaces or DSLs.
+While this library mainly focuses on the use of SQL, not DSL, it exports functions to generate a part of query and each *model type* has methods to execute some routine DB operations on its representing table. They will decrease boilerplate codes to construct query string and parameters. Meanwhile, complicated queries which contain table join, sub-query and so on are not suppoted intentionaly, because it is revealed that trials to manage to them by DSL will end up to bring larger difficulties.
 
 **Record graph**
 
-`Graph` is a type representing tree structure where each node has at most a parent node. It is designed to store relations between objects, especially *model objects*, without any extension on *model types*. This feature helps us avoiding to declare special classes or properties for each query result. Another functionality of `Graph` is a declarative serialization into a dictionary. Which and how value should be serialied is determined at serialization stage and thereby decoupling database operations from the representastions of the results becomes much easier.
+`Graph` is a type representing tree structure where each node has at most one parent node, where relations between *model*s are represented with edges. By using the graph to store structured records, every *model type* does not require extra attributes which often spoil the type structure. In addition, *graph serialization* feature provides flexible representations of the graph for later use. Therefore, the *graph* contributes decoupling DB operations and data representations in your codes.
 
 **Static typing support**
 
@@ -50,7 +50,7 @@ Experimental, TBD.
 ## Installation
 
 ```
-$ pip install pyracmon==1.0.dev8
+$ pip install pyracmon==1.0.dev9
 ```
 
 ## Grance of functionalities
@@ -112,7 +112,7 @@ Returned object `db` is a wrapped `Connection` object which also conforms to DB-
 
 - A module imported from `pyracmon.dialect` package specifying the type of DBMS. `postgresql` and `mysql` are available currently.
 - `Connection` object.
-- An arbitrary module, where *model types* are declared.
+- An arbitrary module where *model types* are declared.
 
 ```
 import models
@@ -161,7 +161,7 @@ post.update_where(db, dict(title = "New title", content = "New content"), Q.eq(b
 post.delete_where(db, Q.eq(blog_id = 2))
 ```
 
-Data fetching operations return *model object(s)* which expose column values via their attributes. Each column name in database is used for attribute name as it is.
+Data fetching operations return *model object(s)* which expose column values via their attributes whose name indicates the column.
 
 ```
 # Fetch a record by primary key.
@@ -183,13 +183,13 @@ for p in post.fetch_where(db, Q.eq(blog_id = 2), orders = dict(title = True), li
 n = post.count(db, Q.eq(blog_id = 2))
 ```
 
-Other than usages in above example, arguments for those methods have some variations, for example in `insert()`, *model object* is also available instead of dictionary. See API documentation for complete information.
+Other than usages in above examples, arguments for those methods have some variations, for example in `insert()`, *model object* is also available instead of dictionary. See API documentation for complete information.
 
 ### SQL operations
 
-Instead of `Cursor` defined in DB-API 2.0, this library provides `Statement` on which SQL in executed. A functionality of `Statement` is the abstraction layer for placeholder markers. While DB-API 2.0 allows various styles, `Statement` accepts SQL where placeholders are marked by `$` prepended variables. By courtesy of `string.Template` module in python, those variables are converted to correct markers which DB driver can recognize.
+Instead of `Cursor` defined in DB-API 2.0, this library provides `Statement` for query execution. A functionality of `Statement` is the abstraction layer for placeholder markers. While DB-API 2.0 allows various styles, `Statement` accepts SQL where placeholders are marked by `$` prepended variables. By courtesy of `string.Template` module in python, those variables are converted to correct markers which DB driver can recognize.
 
-Although there are several rules for the conversion, using `$_` as every variable and passing parameters in order makes sense in most cases.
+Although there are several rules for the conversion, using `$_` for every placeholder and passing parameters in order makes sense in most cases.
 
 ```
 from pyracmon import Q, where, read_row
@@ -225,20 +225,20 @@ for row in c.fetchall():
     post = r.p
 ```
 
-Above code shows the basic flow of selecting operation by SQL.
+Above code shows the basic flow of execution of SELECT query.
 
-1. Creates `Expressions` object contains columns and aliases of their tables to select.
-    - As well as *models*, raw expressions are also available.
+1. Creates `Expressions` object which contains columns and aliases of their tables to select.
+    - As well as *models*, raw expressions like `COUNT(*)` are also available.
 2. Creates `Conditional` object, and then obtatins conditional clause starting with `WHERE` and parameters used in it.
     - There are many functions to create `Conditional` object like `Q.in_()`.
 3. Executs SQL on `Statement` object. Range condition and its parameters are added in both SQL and parameter list.
-4. Obtains *model objects* from each row. `read_row()` parses a row and returns an object which exposes *model objects* via its attributes named by each alias.
+4. Obtains *model objects* from each row. `read_row()` parses a row and returns an object which exposes *model objects* via its attributes named by the alias given to `select()`.
 
 See API documentation for further information.
 
 ### Graph declaration and construction
 
-Former sections show the way to obtain record values as *model objects*, on the other hand, the way to deal with them is not considered, that is, how to return the to the caller and how to represent them to the application user. `Graph` is introduced to take that role. This section shows the way to gather obtained *model objects* and any other values into a `Graph` with keeping their relationships.
+Previous section shows the way to get *models* by joining query. `Graph` is convenient object to return them with their relational structure.
 
 Suppose you want a structured list of blogs like below.
 
@@ -307,9 +307,9 @@ t.blogs << [t.categories, t.total_posts, t.recent_posts]
 t.recent_posts << [t.images, t.recent_comments, t.most_liked_comment, t.total_comments]
 ```
 
-Each keyword argument corresponds to a node container which stored values of specified type as nodes respectively. Relationships between nodes are declared by shift operators; category, total number of posts and recent post are children of each blog.
+In each keyword argument, key denotes the kind of nodes and value denotes the type of node value; `blogs` specifies the container of nodes each of which contains `blog` *model object*. Relationships between nodes are declared by shift operators; category, total number of posts and recent post are children of each blog.
 
-The function in the next code executes queries (actual queries are not written to save spaces) and stores their results in a `Graph` object bound to the `GraphTemplate`.
+Next example shows the query execution and `Graph` creation which contains the result of the query (actual queries are not written to save spaces).
 
 ```
 def fetch_blogs():
@@ -366,35 +366,30 @@ def fetch_blogs():
     return graph.view
 ```
 
-Values are stored correctly just by repeating invocation of `append()` due to predefined relationships. In short, `append()` works as follows:
+Note that the flattened invocations of `append()` creates hierarchical relationships in a `Graph`. `append()` works as follows:
 
-1. Sorts given values in descending order according to their relationships.
-2. For the top value, searches nodes whose values are *identical* to it. if nodes are found, keeps them as parent nodes for succeeding values, otherwise, adds new node and keep it.
-3. For succeeding values, searches *identical* nodes under parent nodes. Adds new node only under parents having no *identical* node. Found *identical* nodes and added nodes are kept as parent nodes for succeeding values.
+1. Values are sorted from parents to children.
+2. For each value, if *identical* node is found, it is added to the node path of this invocation. Otherwise, new node is created and added to the node path.
+3. Add edges between every adjacent nodes in the path.
 
-While the *identification* of nodes is configurable, only *model objects* having the same primary key are considered to be *identical* by default. This is the reason why a *model object* to which only primary key is assigned is used in the invocation of `append()`.
+A value is determined to be *identical* to a node when the node contains the *identical* value and its parent is the same as previous node in the node path. By default, the *identification* scheme is defined only on *model types*, that is, any pair of values of other types is never considered to be *identical*. Only the pair of *model objects* which have the same type and the same primary key value is *identical*.
 
-This function returns `view` attribute of the `Graph`, which is unmodifiable view exposing intuitive interfaces to access nodes and their values.
+As a result of these mechanisms, foreign key relationships in DB are recovered in the graph.
+
+This function returns `view` attribute of the graph, which is unmodifiable view exposing intuitive interfaces to access nodes and their values.
 
 ### Graph serialization
 
-The another feature of `Graph` is the serialization mechanism which converts `Graph` object into hierarchical dictionary. By default, serialization works as follows:
+The another feature of `Graph` is the serialization mechanism which converts `Graph` object into hierarchical `dict`. By default, serialization works as follows:
 
-1. Starting from root node containers, puts them to the dictionary by setting their names as keys.
-2. Converts Each container to a list containing its nodes.
-3. Converts the value of each node by preset function bound to its type.
-    - *model object* is converted to a dictionary holding column names and their values.
-    - Values of other types are used as they are.
-4. When converted value is a dictionary, serializes child nodes similarly and put them into it.
+1. Starting from specified root node container, descending containers are handled from parents to children.
+2. Each container is converted into a list of its nodes.
+3. For each node, the preset function is applied to its value and the result is the actual value stored in the list.
+    - *model object* is converted into a `dict` where the column name is mapped to the column value.
+    - Values of other types are used as they are unless the function is set explicitly.
+4. When converted value is a `dict`, serializes child nodes similarly and put them into it.
 
-These are default behaviors which can changed at serialization stage. For example:
-
-- Keys in dictionary can be changed.
-- Each node container can be aggregated into a single value (not list).
-- Node conversion function can be supplied to override or inhert preset one.
-- Parent node can merge key value pairs in child dictionary.
-
-Next is an example to serialize a `Graph` into a dicionary in the form shown above.
+Some behaviors can be changed at serialization stage via class methods of `S` as show in next example.
 
 ```
 from pyracmon import S, graph_dict
@@ -418,7 +413,12 @@ result = graph_dict(
 )
 ```
 
-`S` is an utility class providing various class methods which controls serialization. See API documentation for further information.
+- `of()` does not affect default behavior.
+- `name()` changes the key which by default is the name of node container.
+- `head()` uses a value of the first node in the container instead of a list of values.
+- When the function is given by `each()`, it is applied to each node to generate the value in resulting `dict`.
+
+`S` provides some more class methods to control the serialization mechanism. Additionally, their arguments have variations. See API documentation for further information.
 
 ### Static typing
 
