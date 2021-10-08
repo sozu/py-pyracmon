@@ -1,27 +1,23 @@
+"""
+A dialect module for MySQL.
+"""
 from itertools import groupby
 from decimal import Decimal
 from enum import Enum
 from datetime import date, datetime, time, timedelta
+from typing import *
 from pyracmon.model import Table, Column, Relations, ForeignKey
 from pyracmon.dialect.shared import MultiInsertMixin
 from pyracmon.query import Q, where, holders
 
 
-def read_schema(db, excludes=None, includes=None):
+def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> List[Table]:
     """
     Collect tables in current database.
 
-    Parameters
-    ----------
-    excludes: [str]
-        Excluding table names.
-    includes: [str]
-        Including table names. If not specified, all tables are collected.
-
-    Returns
-    -------
-    [Table]
-        Tables.
+    :param excludes: Excluding table names.
+    :param includes: Including table names. If not specified, all tables are collected.
+    :retruns: Tables.
     """
     q = Q(excludes = excludes, includes = includes)
 
@@ -124,6 +120,9 @@ def _map_types(t):
 
 
 class MySQLMixin(MultiInsertMixin):
+    """
+    Model mixin whose methods are available in MySQL.
+    """
     @classmethod
     def last_sequences(cls, db, num):
         cols = [c for c in cls.columns if c.incremental]

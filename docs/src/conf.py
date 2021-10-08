@@ -28,8 +28,8 @@ author = 'Author'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autosummary',
     'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
     'sphinx.ext.viewcode',
     'sphinx.ext.todo',
     'sphinx.ext.napoleon',
@@ -40,6 +40,13 @@ autosummary_generate = True
 autodoc_default_options = {
     'member-order': 'bysource',
 }
+
+autodoc_typehints = 'description'
+autodoc_type_aliases = {
+    'Serializer': 'pyracmon.graph.util.Serializer',
+}
+
+default_role = 'py:obj'
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -62,12 +69,13 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
 #
-html_theme = 'nature'
-html_theme_options = {
-    'sidebarwidth': '15%',
-}
+import sphinx_pdj_theme
+html_theme = 'sphinx_pdj_theme'
+html_theme_path = [sphinx_pdj_theme.get_html_theme_path()]
+
+
 html_static_path = ['_static']
-html_css_files = ['wide.css']
+html_css_files = ['pyracmon.css']
 html_sidebars = {
     "**": ['sidebar.html', 'sourcelink.html', 'searchbox.html'],
 }

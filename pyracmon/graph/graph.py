@@ -1,24 +1,17 @@
+from typing import *
 from .identify import neverPolicy
 from .template import sort_properties, GraphTemplate
 
 
-def new_graph(template, *bases):
+def new_graph(template: GraphTemplate, *bases: GraphTemplate):
     """
     Create a graph from a template.
 
     Use this function instead of invoking constructor directly.
 
-    Parameters
-    ----------
-    template: GraphTemplate
-        A template of a graph.
-    bases: [Graph | GraphView]
-        Other graphs whose nodes are appended to created graph.
-
-    Returns
-    -------
-    Graph
-        Created graph.
+    :param template: A template of a graph.
+    :param bases: Other graphs whose nodes are appended to created graph.
+    :returns: Created graph.
     """
     graph = Graph(template)
 
@@ -30,40 +23,43 @@ def new_graph(template, *bases):
 
 class Graph:
     """
-    The instance of this class contains nodes according to the structure defined by the template.
+    This class represents a graph composed of tree-structured node containers.
 
-    All entities should be appended via `append()` or `replace()` and these methods not only store nodes but also construct relationships between them.
-
-    Entity set given on an appending session is arranged according to the structure of graph template.
-    Relationships between properties are brought into the graph in the form of parent-child relationships between nodes.
-
-    Additionally, each entity value is compared to entities of existing nodes by identification function set on template property,
-    and when some entities of nodes are *identical* to given entity, the graph does not create new node
-    and will create relationships between those identical nodes and nodes for child entities.
-
-    For example, following template defines that each entity for property `a` are identified by its value and `a` is the parent of `b`.
+    The structure is determined by `GraphTemplate`. Use `new_graph` Instead of constructor to create new graph instance.
 
     >>> template = GraphSpac().new_template(
     >>>     a = (int, lambda x:x),
-    >>>     b = str,
+    >>>     b = (str, lambda x:x),
+    >>>     c = (str, lambda x:x),
     >>> )
-    >>> template.a << template.b
-
-    Invocation of `append()` creates nodes and relationships between them.
-    Next code shows that each node of `b` becomes a child of node of `a` created in the same invocation.
-
+    >>> template.a << template.b << template.c
     >>> graph = new_graph(template)
-    >>> graph.append(a=1, b="a").append(a=2, b="b")
-    >>>
-    >>> assert [(na(), [nb() for nb in na.b]) for na in graph.view.a] == [(1, ["a"]), (2, ["b"])]
 
-    Meanwhile, when an *identical* entity is given to `a`, node of `a` is not created and existing one is used as the parent of node `b`.
+    `append` ( `replace` ) is a method to store entities in the graph with tying them each other according to the structure.
+    Entites are encapsulated by `Node` which can have an edge to parent node.
 
-    >>> graph.append(a=1, b="c").append(a=1, b="d")
-    >>>
-    >>> assert [(na(), [nb() for nb in na.b]) for na in graph.view.a] == [(1, ["a", "c", "d"]), (2, ["b"])]
+    >>> graph.append(a=1, b="a", c="x").append(a=2, b="b", c="y")
+
+    In `append`, entities are first sorted in descending order, and then:
+
+    - Search a node whose entity is *identical* to the first entity from the corresponding node container.
+        - If found, new node is not created and the *identical* node is set to next parent.
+        - Otherwise, new node is appended and it is set to next parent.
+    - Repeat above to following entities. A difference is that *identical* node is searched from the parent set in previous operation.
+
+    In example here, the identification is done by entity value itself. Next code is the example where *identical* nodes are found.
+
+    >>> graph.append(a=1, b="a", c="z").append(a=2, b="c", c="y")
+
+    In the first `append`, ``a`` and ``b`` has its *identical* node and ``a`` is *identical* in the second.
+    ``c`` in the second one is not *identical* to any node because parent node ``b="c"`` is added as new node.
+
+    Due to the identification mechanism, repeatin `append` is sufficient to reconstruct entity relationships in the graph.
+
+    :param template: Graph template.
+    :param Dict[str, NodeContainer] containers: Node containers mapped by their names.
     """
-    def __init__(self, template):
+    def __init__(self, template: GraphTemplate):
         self.template = template
         self.containers = {p.name:self._to_container(p) for p in template._properties}
         self._view = None
@@ -140,21 +136,26 @@ class Graph:
         return self
 
     @property
-    def view(self):
+    def view(self) -> 'GraphView':
         """
         Returns an unmodifiable view of this graph.
 
-        Returning object provides intuitive ways to access graph components:
+        The view object works as the accessor to graph components.
 
-        - Attribute access by the property name returns the view of corresponding node container.
-        - Iteration access iterates over views of root containers, that is, containers whose properties have no parent.
+        - Returns a graph instance when invoked as callable object.
+        - The attribute of a container name returns the container view.
+        - In iteration context, it iterates views of root containers.
+            - Root container is the container which has no parent.
 
-        See the documentation of `view` property of `NodeContainer`, `Node`, `Node.Children` for further information.
+        >>> template = GraphSpac().new_template(a=int, b=str, c=str)
+        >>> template.a << template.b
+        >>> graph = new_graph(template)
+        >>> view = graph.view
+        >>> assert view() is graph                        # invocation
+        >>> assert view.a is graph.containers["a"].view   # attribute
+        >>> assert [c().name for c in view] == ["a", "c"] # iteration
 
-        Returns
-        -------
-        GraphView
-            The view of this graph.
+        :getter: The view of this graph.
         """
         if self._view is None:
             graph = self
@@ -186,42 +187,29 @@ class Graph:
 
         return self
 
-    def append(self, **entities):
+    def append(self, **entities: Any) -> 'Graph':
         """
-        Append entity values with associated property names.
+        Append entities with associated property names.
 
-        Each key in keyword arguments indicates a property and the paired value is an entity value stored in this graph.
-
-        Parameters
-        ----------
-        entities: {str: object}
-            Dictionary where the key indicates the property name and the value is the entity value.
-
-        Returns
-        -------
-        Graph
-            This graph.
+        :param entities: Entities keyed with associated property names.
+        :returns: This graph.
         """
         return self._append(False, entities)
 
-    def replace(self, **entities):
+    def replace(self, **entities: Any) -> 'Graph':
         """
-        Behaves like `append()` but replace the entities of identiccal nodes.
+        Works similarly to `append` , but entities of identical nodes are replaced with given entities.
 
-        Parameters
-        ----------
-        entities: {str: object}
-            Dictionary where the key indicates the property name and the value is the entity value.
-
-        Returns
-        -------
-        Graph
-            This graph.
+        :param entities: Entities keyed with associated property names.
+        :returns: This graph.
         """
         return self._append(True, entities)
 
 
 class _EmptyNodeView:
+    """
+    :meta private:
+    """
     def __init__(self, prop, result):
         self.property = prop
         self.result = result
@@ -241,6 +229,9 @@ class _EmptyNodeView:
 
 
 class _EmptyContainerView:
+    """
+    :meta private:
+    """
     def __init__(self, prop):
         self.property = prop
 
@@ -272,38 +263,50 @@ class _EmptyContainerView:
 
 class NodeContainer:
     """
-    This class represents a list of nodes for a template property.
+    This class represents a node container of a template property.
+
+    :param property: Template property.
     """
-    def __init__(self, prop):
+    def __init__(self, property: GraphTemplate.Property):
         self.nodes = []
         self.keys = {}
-        self.property = prop
+        self.property = property
         self._view = None
 
     @property
-    def name(self):
+    def name(self) -> str:
         """
-        Returns a name of the template property.
+        Returns the container name, which is same as the name of template property.
+
+        :getter: Container name.
         """
         return self.property.name
 
     @property
-    def view(self):
+    def view(self) -> 'ContainerView':
         """
         Returns an unmodifiable view of this container.
 
-        Returning object provides intuitive ways to access internal nodes:
+        The view object works as the accessor to container components.
 
-        - Iteration access iterates over internal node views.
-        - Index access and `len()` works as if it is a list of node views.
-        - Attribute access by the property name returns the view of corresponding child node container under the first node.
+        - Returns a container instance when invoked as callable object.
+        - The attribute of a child name returns the child container view of the first node in this container.
+        - Index access returns the view of node at the index.
+        - In iteration context, it iterates views of nodes.
+        - The number of nodes is returned by being applied to `len` .
 
-        See the documentation of `view` property of `Node`, `Node.Children` for further information.
+        >>> template = GraphSpac().new_template(a=int, b=str, c=str)
+        >>> template.a << template.b
+        >>> graph = new_graph(template).append(a=1, b="a").append(a=1, b="b").append(a=2, b="c")
+        >>> container = graph.containers["a"]
+        >>> view = graph.view.a
+        >>> assert view() is container                             # invocation
+        >>> assert view.b is container.nodes[0].children["b"].view # attribute
+        >>> assert view[1] is container.nodes[1].view              # index
+        >>> assert [n() for n in view] == [1, 2]                   # iteration
+        >>> assert len(view) == 2                                  # length
 
-        Returns
-        -------
-        ContainerView
-            The view of this graph.
+        :getter: The view of this container.
         """
         if self._view is None:
             container = self
@@ -336,18 +339,16 @@ class NodeContainer:
             self._view = ContainerView()
         return self._view
 
-    def append(self, entity, ancestors, to_replace=False):
+    def append(self, entity: Any, ancestors: Dict[str, List['Node']], to_replace: bool = False):
         """
         Add an entity to this container.
 
-        Parameters
-        ----------
-        entity: object
-            An entity to be stored in the node.
-        ancestors: {str: [Node]}
-            Dictionary which maps property names to nodes appended to ancestor containers.
-        to_replace: bool
-            If `True`, entities of identical nodes are replaced with given entity.
+        Identical node is searched by examining whether this container already contains a node of the identical entity
+        and its parent is found in `anscestors` .
+
+        :param entity: An entity to be stored in the node.
+        :param ancestors: Parent nodes mapped by property names.
+        :param to_replace: If ``True`` , the entity of identical node is replaced. Otherwise, it is not changed.
         """
         def get_nodes(k):
             return [self.nodes[i] for i in self.keys.get(k, [])]
@@ -380,6 +381,9 @@ class NodeContainer:
 
 
 class GraphNodeContainer(NodeContainer):
+    """
+    :meta private:
+    """
     def append(self, entity, ancestors, to_replace):
         if not isinstance(entity, (dict, Graph)):
             raise ValueError(f"Node of graph only accepts dict or Graph object.")
@@ -414,13 +418,16 @@ class GraphNodeContainer(NodeContainer):
 
 class Node:
     """
-    This class represents a node which contains an entity value.
+    This class represents a node which contains an entity.
+
+    :param property: Template property.
+    :param entity: Entity.
     """
     class Children:
-        def __init__(self, prop):
+        def __init__(self, property: GraphTemplate.Property):
             self.nodes = []
             self.keys = set()
-            self.property = prop
+            self.property = property
             self._view = None
 
         @property
@@ -464,8 +471,8 @@ class Node:
                 self.keys.add(node)
                 self.nodes.append(node)
 
-    def __init__(self, prop, entity, key, index):
-        self.property = prop
+    def __init__(self, property: GraphTemplate.Property, entity: Any, key: Optional[Any], index: int):
+        self.property = property
         self.entity = entity
         self.key = key
         self.parents = set()
@@ -474,24 +481,26 @@ class Node:
         self._view = None
 
     @property
-    def name(self):
+    def name(self) -> str:
+        """
+        Returns the container name, which is same as the name of template property.
+
+        :getter: Container name.
+        """
         return self.property.name
 
     @property
-    def view(self):
+    def view(self) -> 'NodeView':
         """
         Returns an unmodifiable view of this node.
 
-        Returning object provides intuitive ways to access entity and child nodes:
+        The view object works as the accessor to container components.
 
-        - Direct invocation returns the entity value.
-        - Iteration access iterates over views of child nodes.
-        - Attribute access by the property name returns the view of corresponding child node.
+        - Returns a node instance when invoked as callable object.
+        - The attribute of a child name returns the child container view.
+        - In iteration context, it iterates pairs of child conainter name and its view.
 
-        Returns
-        -------
-        NodeView
-            The view of this node.
+        :returns: The view of this node.
         """
         if self._view is None:
             node = self
@@ -508,14 +517,26 @@ class Node:
             self._view = NodeView()
         return self._view
 
-    def add_child(self, child):
+    def add_child(self, child: 'Node') -> 'Node':
+        """
+        Adds a child node.
+
+        :param child: Child node.
+        :returns: This instance.
+        """
         if child.property.template != self.property.template:
             raise ValueError(f"Nodes from difference graph template can't be associated.")
         self.children[child.property.name].append(child)
         child.parents.add(self)
         return self
 
-    def has_child(self, child):
+    def has_child(self, child: 'Node') -> bool:
+        """
+        Checks this node contains the node identical to given node.
+
+        :param child: Node to search.
+        :returns: ``True`` if exists.
+        """
         if child.property.template != self.property.template:
             return False
         elif child.property.name in self.children:
@@ -525,6 +546,9 @@ class Node:
 
 
 class GraphNode(Node):
+    """
+    :meta private:
+    """
     @property
     def view(self):
         return self.entity.view

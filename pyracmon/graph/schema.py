@@ -1,7 +1,8 @@
 import sys
-from typing import get_type_hints, Generic, TypeVar, List
+from typing import Type, get_type_hints, Generic, TypeVar, Any, List, Dict, Tuple, Union
 from inspect import signature, Signature
 from .template import GraphTemplate
+from .spec import GraphSpec
 from .util import chain_serializers, T
 
 
@@ -37,21 +38,13 @@ class TypedDict(dict):
     pass
 
 
-def issubgeneric(t, p):
+def issubgeneric(t: type, p: type) -> bool:
     """
     Check whether a type is subclass of a generic type.
 
-    Parameters
-    ----------
-    t: type
-        A type to check.
-    p: type
-        A generic type.
-
-    Returns
-    -------
-    bool
-        Whether the type in subclass of the generic type.
+    :param t: A type to check.
+    :param p: A generic type.
+    :returns: Whether the type in subclass of the generic type.
     """
     if type(t) is type:
         return issubclass(t, p)
@@ -64,41 +57,24 @@ class DocumentedType(Generic[T]):
     Represents a type having documentation as doc-string.
     """
     @staticmethod
-    def unpack(dt):
+    def unpack(dt: Type['DocumentedType']) -> Tuple[type, str]:
         """
         Unpack a `DocumentedType` into type and documentation.
 
-        Parameters
-        ----------
-        dt: type(DocumentedType)
-            A type of `DocumentedType`.
-
-        Returns
-        -------
-        type
-            Type of the `DocumentedType`.
-        str
-            Documentation of the `DocumentedType`.
+        :param dt: A type of `DocumentedType`.
+        :returns: Unpacked type and documentation of given type.
         """
         t = get_args(dt)[0]
         return t, dt.__doc__
 
 
-def document_type(t, doc):
+def document_type(t: type, doc: str) -> Type[DocumentedType]:
     """
     Creates a `DocumentedType` for given type and documentation.
 
-    Parameters
-    ----------
-    t: type
-        The type of `DocumentedType`
-    doc: string
-        The documentation of `DocumentedType`
-
-    Returns
-    -------
-    Type[DocumentedType]
-        Created `DocumentedType`.
+    :param t: A type to give the documentaion.
+    :param doc: The documentation string.
+    :returns: Created `DocumentedType`.
     """
     if issubgeneric(t, DocumentedType):
         t = get_args(t)[0]
@@ -112,7 +88,7 @@ class Typeable(Generic[T]):
     """
     An interface for generic type which is resolved into a concrete type by a type parameter.
 
-    Inherit this class and declare static method whose signature is `resolve(me, bound, arg, spec)`.
+    Inherit this class and declare static method whose signature is ``resolve(me, bound, arg, spec) -> type`` .
 
     >>> class A(Typeable[T]):
     >>>     @staticmethod
@@ -122,32 +98,24 @@ class Typeable(Generic[T]):
     >>>
     >>> Typeable.resolve(A[T], int, spec)
 
-    Type resolution should start from the invocation of `Typeable.resolve()`.
-    It subsequently invokes the static method with arguments below.
+    Type resolution starts from `Typeable.resolve` which invokes the static method with following arguments.
 
-    - Typeable type to resolve `A`.
-    - A type of `T` resolved by `arg` given to Typeable.resolve().
-    - Given type `arg` is passed through as it is.
-    - Given `GraphSpec` object `spec` is passed through as it is.
+    - Type to resolve itself, in this case, ``A[T]`` .
+    - A resolved type which replace ``T`` .
+        - ``arg`` is the first candidate.
+        - When ``arg`` is also `Typeable` , this resolution flow is applied to it recursively until concrete type if determined.
+    - ``arg`` is passed through as it is.
+    - ``spec`` is passed through as it is.
     """
     @staticmethod
-    def resolve(typeable, arg, spec):
+    def resolve(typeable: Type['Typeable'], arg: type, spec: 'GraphSpec') -> type:
         """
-        Resolve a `Typeable` type by a type.
+        Resolve a `Typeable` type into a concrete type by a type for its type parameter.
 
-        Parameters
-        ----------
-        typeable: type[Typeable[T]]
-            `Typeable` type having a generic type parameter.
-        arg: type
-            Type to replace a type variable.
-        spec: GraphSpec
-            `GraphSpec` used for schema generation.
-
-        Returns
-        -------
-        type
-            Resolved type.
+        :param typeable: `Typeable` type having a generic type parameter.
+        :param arg: Type to replace a type parameter.
+        :param spec: `GraphSpec` used for schema generation.
+        :returns: Resolved type.
         """
         if get_origin(typeable) is Typeable:
             raise ValueError(f"Typeable should not be used directly. Use inheriting class instead.")
@@ -163,19 +131,12 @@ class Typeable(Generic[T]):
             return typeable.resolve(typeable, bound, arg, spec)
 
     @staticmethod
-    def is_resolved(typeable):
+    def is_resolved(typeable: Type['Typeable']) -> bool:
         """
-        Checks a `Typeable` type is already resolved.
+        Checks a type parameter of given `Typeable` is alredy resolved.
 
-        Parameters
-        ----------
-        typeable: type[Typeable[T]]
-            `Typeable` type having a generic type parameter.
-
-        Returns
-        -------
-        bool
-            Whether the type is already resolved or not.
+        :param typeable: `Typeable` type having a generic type parameter.
+        :returns: Whether the type parameter is already resolved or not.
         """
         bound = get_args(typeable)[0]
         if isinstance(bound, TypeVar):
@@ -191,29 +152,20 @@ class DynamicType(Typeable[T]):
     A `Typeable` type which can be resolved dynamically with resolved type parameter.
     """
     @staticmethod
-    def resolve(dynamic, bound, arg, spec):
+    def resolve(dynamic: Type['DynamicType'], bound: type, arg: type, spec: 'GraphSpec') -> type:
         return dynamic.fix(bound, arg)
 
     @classmethod
-    def fix(cls, bound, arg):
+    def fix(cls, bound: type, arg: type) -> type:
         """
         Resolve a resolved type into another type.
 
         Override this method to apply specific logic of the inheriting type to resolved type.
-
         ex) Convert resolved model type into `TypedDict` for serialization.
 
-        Parameters
-        ----------
-        bound: type
-            Resolved type of `T`.
-        arg: type
-            A type used for the resolution of `bound`.
-
-        Returns
-        -------
-        type
-            Another type.
+        :param bound: Resolved type of `T`.
+        :param arg: A type used for the resolution of `bound`.
+        :returns: Another type.
         """
         return bound
 
@@ -225,9 +177,9 @@ class Shrink(Typeable[T]):
     This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
     """
     @staticmethod
-    def resolve(shrink, bound, arg, spec):
+    def resolve(shrink: Type['Shrink'], bound: type, arg: type, spec: 'GraphSpec') -> type:
         """
-        Resolve a `TypedDict` into another `TypedDict` by removing some keys defined by `select()`.
+        Resolve a `TypedDict` into another `TypedDict` by removing some keys defined by `select` .
         """
         if bound == Signature.empty:
             return TypedDict
@@ -242,23 +194,19 @@ class Shrink(Typeable[T]):
         return Schema
 
     @classmethod
-    def select(cls, bound, arg):
+    def select(cls, bound: Union[TypedDict, Signature], arg: type) -> Tuple[List[str], List[str]]:
         """
         Select excluding and including keys from `TypedDict`.
 
-        Parameters
-        ----------
-        bound: TypedDict | Signature.empty
-            `TypedDict` to be shrinked.
-        arg: type
-            A type used for the resolution of `bound`.
+        Subclass should consider the case when the ``bound`` is `Signautre.empty` .
 
-        Returns
-        -------
-        [str]
-            Keys to exlude even if they are contained in including keys.
-        [str]
-            Keys to include. If empty, all keys are included.
+        This method should return excluding and including keys.
+        Excluding key is always excluded if it is contained in including keys.
+        Empty including keys specify that all keys are used.
+
+        :param bound: `TypedDict` to be shrinked.
+        :param arg: A type used for the resolution of `bound` .
+        :returns: Keys to exclude and include.
         """
         raise NotImplementedError()
 
@@ -270,9 +218,9 @@ class Extend(Typeable[T]):
     This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
     """
     @staticmethod
-    def resolve(extend, bound, arg, spec):
+    def resolve(extend: Type['Extend'], bound: type, arg: type, spec: 'GraphSpec'):
         """
-        Resolve a `TypedDict` into another `TypedDict` by adding some keys retrieved by `schema()`.
+        Resolve a `TypedDict` into another `TypedDict` by adding some keys retrieved by `schema` .
         """
         if bound == Signature.empty:
             return TypedDict
@@ -285,40 +233,28 @@ class Extend(Typeable[T]):
         return Schema
 
     @classmethod
-    def schema(cls, bound, arg):
+    def schema(cls, bound: Union[TypedDict, Signature], arg: type) -> TypedDict:
         """
         Creates a `TypedDict` representing a schema of adding keys and their types.
 
+        Subclass should consider the case when the ``bound`` is `Signautre.empty` .
+
         Parameters
         ----------
-        bound: TypedDict | Signature.empty
-            `TypedDict` to be extended.
-        arg: type
-            A type used for the resolution of `bound`.
-
-        Returns
-        -------
-        TypedDict
-            Schema of adding keys and their types.
+        :param bound: `TypedDict` to be extended.
+        :param arg: A type used for the resolution of `bound`.
+        :returns: `TypedDict` extending schema of base `TypedDict` .
         """
         raise NotImplementedError()
 
 
-def walk_schema(td, with_doc=False):
+def walk_schema(td, with_doc=False) -> Dict[str, Union[type, DocumentedType]]:
     """
     Returns a dictionary as a result of walking a schema object from its root.
 
-    Parameters
-    ----------
-    td: TypedDict
-        A schema represented by `TypedDict`.
-    with_doc: bool
-        Flag to include documentations into result.
-
-    Returns
-    -------
-    dict
-        Dictionary representing the schema.
+    :param td: A schema represented by `TypedDict`.
+    :param with_doc: Flag to include documentations into result.
+    :returns: Key value representation of the schema. If ``with_doc`` is ``True``, each value is `DocumentedType` .
     """
     if '__annotations__' not in td.__dict__:
         return {}
@@ -355,9 +291,15 @@ def templateType(t):
 
 class GraphSchema:
     """
-    This class provides property to get the schema of serialization result of a graph as well as serialization method.
+    This class exposes a property to get the schema of serialization result of a graph.
+
+    Schema generation also depends on `GraphSpec` , on which `serialize` serializes a graph.
+
+    :param spec: Specification of graph operations.
+    :param template: Graph template to serialize.
+    :param serializers: `NodeSerializer` s used for the serialization.
     """
-    def __init__(self, spec, template, **serializers):
+    def __init__(self, spec: GraphSpec, template: GraphTemplate, **serializers: 'NodeSerializer'):
         self.spec = spec
         self.template = template
         self.serializers = serializers
@@ -391,19 +333,12 @@ class GraphSchema:
 
         return rt
 
-    def schema_of(self, prop):
+    def schema_of(self, prop: GraphTemplate.Property) -> Type[DocumentedType]:
         """
         Generates structured and documented schema for a template property.
 
-        Parameters
-        ----------
-        prop: GraphTemplate.Property
-            A template property.
-
-        Returns
-        -------
-        Type[DocumentedType]
-            Schema and its documentation.
+        :param prop: A template property.
+        :returns: Schema with documentation.
         """
         rt = self._return_from(prop)
 
@@ -435,14 +370,11 @@ class GraphSchema:
             return document_type(rt, doc)
 
     @property
-    def schema(self):
+    def schema(self) -> TypedDict:
         """
         Generates `TypedDict` which represents the schema of serialized graph.
 
-        Returns
-        -------
-        TypedDict
-            Representation of the schema of serialized graph.
+        :getter: Representation of the schema of serialized graph.
         """
         class Schema(TypedDict):
             pass
@@ -473,20 +405,12 @@ class GraphSchema:
 
         return Schema
 
-    def serialize(self, graph, **node_params):
+    def serialize(self, graph: 'GraphView', **node_params: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
         """
         Serialize graph into a dictionary.
 
-        Parameters
-        ----------
-        graph: GraphView
-            A graph.
-        node_params: {str: {str: object}}
-            Parameters keyed by node names.
-
-        Returns
-        -------
-        dict
-            Serialized representation of the graph.
+        :param graph: A view of a graph.
+        :parma node_params: Parameters passed to `SerializationContext` and used by *serializer*s.
+        :returns: Serialization result.
         """
         return self.spec.to_dict(graph, node_params, **self.serializers)

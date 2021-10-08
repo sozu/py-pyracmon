@@ -1,18 +1,15 @@
 from collections import OrderedDict
+from typing import *
 
 
 class ForeignKey:
     """
     This class represents a foreign key constraint.
 
-    Attributes
-    ----------
-    table: Table | str
-        Referenced table model, table name is set alternatively when the table is not modelled.
-    column: Column | str
-        Referenced column model, column name is set alternatively when the column is not modelled.
+    :param table: Referenced table model, table name is set alternatively when the table is not modelled.
+    :param column: Referenced column model, column name is set alternatively when the column is not modelled.
     """
-    def __init__(self, table, column) -> None:
+    def __init__(self, table: Union['Table', str], column: Union[str, 'Column']) -> None:
         self.table = table
         self.column = column
 
@@ -20,22 +17,15 @@ class ForeignKey:
 class Relations:
     """
     This class represents foreign key constraints on a column.
-
-    Attributes
-    ----------
-    constraints: [ForeignKey]
     """
     def __init__(self) -> None:
         self.constraints = []
 
-    def add(self, fk):
+    def add(self, fk: ForeignKey):
         """
         Adds another constraint.
 
-        Parameters
-        ----------
-        fk: ForeignKey
-            Foreign key constraint.
+        :param fk: Foreign key constraint.
         """
         self.constraints.append(fk)
 
@@ -44,26 +34,26 @@ class Column:
     """
     This class represents a schema of a column.
 
-    Attributes
-    ----------
-    name: str
-        Column name.
-    ptype: type
-        Data type in python.
-    type_info: str
-        Type informations obtained from DB.
-    pk: bool
-        Is this column a PK?
-    fk: object
-        An informative object if this column is a foreign key, otherwise a value evaluated as `False` in boolean context.
-    incremental: object
-        If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
-    nullable: bool
-        Can this column contain null?
-    comment: str
-        Comment of the column.
+    :param name: Column name.
+    :param ptype: Data type in python.
+    :param type_info: Type informations obtained from DB.
+    :param pk: Is this column a primary key?
+    :param fk: An informative object if this column is a foreign key, otherwise a value evaluated as `False` in boolean context.
+    :param incremental: If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
+    :param nullable: Can this column contain null?
+    :param comment: Comment of the column.
     """
-    def __init__(self, name, ptype, type_info, pk, fk, incremental, nullable, comment=""):
+    def __init__(
+        self,
+        name: str,
+        ptype: type,
+        type_info: str,
+        pk: bool,
+        fk: Optional[Relations],
+        incremental: Optional[Any],
+        nullable: bool,
+        comment: str = "",
+    ):
         self.name = name
         self.ptype = ptype
         self.type_info = type_info
@@ -78,63 +68,63 @@ class Table:
     """
     This class represents a schema of a table.
 
-    Attributes
-    ----------
-    name: str
-        Table name.
-    columns: [Column]
-        Columns in the table.
-    comment: str
-        Comment of the table.
+    :param name: Table name.
+    :param columns: Columns in the table.
+    :param comment: Comment of the table.
     """
-    def __init__(self, name, columns, comment=""):
+    def __init__(self, name: str, columns: List[Column], comment: str = ""):
         self.name = name
         self.columns = columns
-        self.comment = ""
+        self.comment = comment
 
-    def find(self, name):
+    def find(self, name: str) -> Optional[Column]:
         """
         Find a column by name.
 
-        Parameters
-        ----------
-        name: str
-            Column name.
-
-        Returns
-        -------
-        Column | None
-            A column. If not found, returns `None`.
+        :param name: Column name.
+        :returns: The column if exists, otherwise ``None`` .
         """
         return next(filter(lambda c: c.name == name, self.columns), None)
 
 
-def define_model(table_, mixins=[]):
+def define_model(table_: Table, mixins: List[type] = []) -> type:
     """
-    Create a model type representing the table.
+    Create a model type representing a table.
 
-    Types in `mixins` argument are base types which created type inherits.
-    When the same attribute is defined in multiple mixin types, the former overwrites the latter.
+    Model type inherits all types in ``mixins`` in order.
+    When the same attribute is defined in multiple mixin types, the former overrides the latter.
 
-    Model type always has following attributes.
+    Every model type has following attributes:
 
-    - name: str
-        Name of the table.
-    - table: Table
-        Table schema.
-    - columns: [Column]
-        The list of column schemas.
-    - column: object
-        An object exposing schemas of columns via attributes of their names.
+    .. list-table::
+       :widths: 10 15 50
 
-    Model instances are created by passing column name and its value as keyword arguments to the constructor.
-    They are plain python objects representing a DB record by holding the subset of its columns as attributes.
+       * - name
+         - type
+         - description
+       * - name
+         - `str`
+         - Name of the table.
+       * - table
+         - `Table`
+         - Table schema.
+       * - columns
+         - `List[Column]`
+         - List of column schemas.
+       * - column
+         - `Any`
+         - An object exposing column schemas by attributes of their names.
+
+    Model instances are created by passing the constructor keyword arguments holding column names and values.
+    The constructor does not require all of columns.
+    Omitted columns don't affect predefined operations such as `CRUDMixin.insert` .
+    If ``not null`` constraint exists on the column, it of course denies the insertion.
 
     >>> # CREATE TABLE t1 (col1 int, col2 text, col3 text);
     >>> table = define_model("t1")
     >>> model = table(col1=1, col2="a")
 
-    Attributes are also assignable by normal setter. In any case, attribute name must be a one of column names, otherwise `TypeError` raises.
+    Attributes are also assignable by normal setter. If attribute name is not a valid column name, `TypeError` raises.
 
     >>> model.col3 = "b"
 
@@ -142,22 +132,13 @@ def define_model(table_, mixins=[]):
 
     >>> for c, v in model:
     >>>     print(f"{c.name} = {v}")
-    >>>
     col1 = 1
     col2 = a
     col3 = b
 
-    Parameters
-    ----------
-    table_: Table
-        Schema of table.
-    mixins: [type]
-        Types the created model type inherits.
-
-    Returns
-    -------
-    type
-        Created model type.
+    :param table__: Table schema.
+    :param mixin: Mixin types providing class methods to the model type.
+    :returns: Model type.
     """
     column_names = {c.name for c in table_.columns}
 
@@ -242,6 +223,8 @@ def parse_pks(model, pks):
     """
     Generates a pair of PK columns names and their values from polymorphic input.
 
+    :meta private:
+
     Parameters
     ----------
     model: type
@@ -270,6 +253,8 @@ def check_columns(model, col_map, condition=lambda c: True, requires_all=False):
     """
     Checks keys of given `dict` match columns selected by a condition from a model.
 
+    :meta private:
+
     Parameters
     ----------
     model: type
@@ -292,6 +277,8 @@ def check_columns(model, col_map, condition=lambda c: True, requires_all=False):
 def model_values(model, values, excludes_pk=False):
     """
     Generates a dictionary whose items are pairs of column name and column value.
+
+    :meta private:
 
     Parameters
     ----------

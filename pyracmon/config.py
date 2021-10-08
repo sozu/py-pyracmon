@@ -1,57 +1,58 @@
+"""
+This module exports types and functions for configurations.
+
+`PyracmonConfiguration` is a class exposing configurable attributes.
+An instance of the class held in this module is treated as global configuration.  `pyracmon` is an only awy to change it.
+Changes done in ``with`` block is activated after the block finished without error.
+
+>>> assert default_config().name == "default"
+>>> with pyracmon() as cfg:
+>>>     cfg.name = "my_config"
+>>> assert default_config().name == "my_config"
+
+See the attributes of `PyracmonConfiguration` to know all configuration keys and their effects.
+"""
 import logging
 from functools import wraps
+from typing import *
+from .model import Table, Column
 from .model_graph import ConfigurableSpec
 from .util import Configurable
 
 
 class PyracmonConfiguration:
     """
-    Configurations for various modules.
+    A class to hold all configurable values in attributes.
 
-    Attributes
-    ----------
-    name: str
-        Name of this configuration. This value has no effect on any behavior of modules.
-    logger: str | logging.Logger
-        Logger or the name of logger used for internal logs such as query logging.
-    log_level: int
-        Logging level of internal logs.
-    sql_log_length: int
-        Maximum length for query log. Queries longer than this value are output with being trimmed.
-    parameter_log: bool
-        Flag to log query parameters also.
-    paramstyle: str
-        Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module.
-    type_mapping: (str, **) -> type
-        Function estimating python type from type name in database and optional DBMS dependent keys.
-    graph_spec: ConfigurableSpec
-        Graph specification used as default.
-    fixture_mapping: (Table, Column, int) -> object
-        Function generating fixture value for a column and an index.
-    fixture_tz_aware: bool
-        Flag to make fixture datetime being aware of timezone.
-    fixture_ignore_fk: bool
-        Flag not to generate fixuture value on foreign key columns.
-    fixture_ignore_nullable: bool
-        Flag not to generate fixuture value on nullable columns.
-    timedelta_unit: dict
-        Default keyword arguments to pass `timedelta()` to compare actual `date`/`datetime` with expected one in `near` matcher.
+    :param name: Name of this configuration. This value has no effect on any behavior of modules. Default is ``default`` .
+    :param logger: Logger or the name of logger used for internal logs such as query logging. Defalut is ``None`` .
+    :param log_level: Logging level of internal logs. Default is `logging.DEBUG` .
+    :param sql_log_length: Maximum length of query log. Queries longer than this value are output being trimmed. Default is ``4096`` .
+    :param parameter_log: Flag to log query parameters also. Default is ``False`` .
+    :param paramstyle: Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module. Default is ``None`` .
+    :param type_mapping: Function estimating python type from type name in database and optional DBMS dependent keys. Default is ``None`` .
+    :param graph_spec: Graph specification used as default. Default is ``None`` .
+    :param fixture_mapping: Function generating fixture value for a column and an index. Default is ``None`` .
+    :param fixture_tz_aware: Flag to make fixture datetime being aware of timezone. Default is ``True`` .
+    :param fixture_ignore_fk: Flag not to generate fixuture value on foreign key columns. Default is ``True`` .
+    :param fixture_ignore_nullable: Flag not to generate fixuture value on nullable columns. Default is ``True`` .
+    :param timedelta_unit: Default keyword arguments to pass ``datetime.timedelta()`` used in `near` matcher.
     """
     def __init__(
         self,
-        name = None,
-        logger = None,
-        log_level = None,
-        sql_log_length = None,
-        parameter_log = None,
-        paramstyle = None,
-        type_mapping = None,
-        graph_spec = None,
-        fixture_mapping = None,
-        fixture_tz_aware = None,
-        fixture_ignore_fk = None,
-        fixture_ignore_nullable = None,
-        timedelta_unit = None,
+        name: str = None,
+        logger: Union[str, logging.Logger] = None,
+        log_level: int = None,
+        sql_log_length: int = None,
+        parameter_log: bool = None,
+        paramstyle: str = None,
+        type_mapping: Callable[[str], type] = None,
+        graph_spec: ConfigurableSpec = None,
+        fixture_mapping: Callable[[Table, Column, int], Any] = None,
+        fixture_tz_aware: bool = None,
+        fixture_ignore_fk: bool = None,
+        fixture_ignore_nullable: bool = None,
+        timedelta_unit: Dict[str, Any] = None,
     ):
         self.name = name
         self.logger = logger
@@ -67,7 +68,13 @@ class PyracmonConfiguration:
         self.fixture_ignore_nullable = fixture_ignore_nullable
         self.timedelta_unit = timedelta_unit
 
-    def derive(self, **kwargs):
+    def derive(self, **kwargs: Any) -> 'PyracmonConfiguration':
+        """
+        Creates new configuration instance deriving this configuration.
+
+        Keys of arguments are attribute names of this class.
+        You don't need to supply value to every key. Values beging untouched or set to ``None`` inherit deriving configuration.
+        """
         def attr(k):
             v = getattr(self, k)
             return v.clone() if isinstance(v, Configurable) else None
@@ -77,6 +84,9 @@ class PyracmonConfiguration:
 
 
 class DerivingConfiguration(PyracmonConfiguration):
+    """
+    :meta private:
+    """
     def __init__(self, base, **kwargs):
         super().__init__(**kwargs)
         self.base = base
@@ -112,16 +122,18 @@ def default_config(config=PyracmonConfiguration(
     return config
 
 
-def pyracmon(**kwargs):
+def pyracmon(**kwargs: Any) -> PyracmonConfiguration:
     """
-    Generates an object which starts `with` context, where global configuration can be changed.
+    Starts `with` block to change global configurations.
 
-    An object obtained by `as` keyword in `with` clause is an instance of `PyracmonConfiguration`,
-    and changes to it done in the `with` context are copied into global configuration at the end of the context if no exception raises.
+    Returning object is not an instance of `PyracmonConfiguration` but allows the access to equivalent attributes.
+    Changes done in the block is activated after the block finished without error.
 
+    >>> assert default_config().name == "default"
     >>> with pyracmon() as cfg:
     >>>     cfg.name = "my_config"
     >>>     ...
+    >>> assert default_config().name == "my_config"
     """
     class Configurable:
         def __init__(self):

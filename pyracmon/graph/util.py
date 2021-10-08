@@ -1,16 +1,37 @@
 from functools import partial, reduce
 from inspect import signature, Signature
-from typing import TypeVar
+from typing import *
 
 
 T = TypeVar('T')
 
 
+# type aliases.
+Serializer = Union[
+    Callable[['SerializationContext', 'Node', Callable[[Any], Any], Any], Any],
+    Callable[['Node', Callable[[Any], Any], Any], Any],
+    Callable[[Callable[[Any], Any], Any], Any],
+    Callable[[Any], Any],
+]
+
+TemplateProperty = Union[
+    type,
+    Tuple[type, Callable[[Any], Any]],
+    Tuple[type, Callable[[Any], Any], Callable[[Any], bool]],
+]
+
+
 def as_is(x):
+    """
+    :meta private:
+    """
     return x
 
 
 def wrap_serializer(f):
+    """
+    :meta private:
+    """
     try:
         sig = signature(f)
         def g(cxt, node, base, value) -> sig.return_annotation:
@@ -24,6 +45,9 @@ def wrap_serializer(f):
 
 
 def chain_serializers(serializers):
+    """
+    :meta private:
+    """
     def merge(fs):
         rt = Signature.empty
         for f in fs[::-1]:

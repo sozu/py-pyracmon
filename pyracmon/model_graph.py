@@ -1,4 +1,9 @@
-from typing import TypeVar
+"""
+This module provides graph specifications to deal with model types.
+
+Most of them are not used directly except for `ConfigurableSpec` which is a configurable attribute of `PyracmonConfiguration` .
+"""
+from typing import *
 from itertools import takewhile
 import inspect
 from .util import Configurable
@@ -13,19 +18,12 @@ class GraphEntityMixin:
     Mixin class for model types which enables identity calculation and nullity check.
     """
     @classmethod
-    def identity(cls, model):
+    def identity(cls, model: 'Model') -> Optional[Any]:
         """
         Returns primary key values as the identity of a model.
 
-        Parameters
-        ----------
-        model: Model
-            A model object.
-
-        Returns
-        -------
-        tuple
-            Primary keys as the identity of the model. If the model type has no primary key, returns `None`.
+        :param model: A model object.
+        :returns: Primary key value(s). ``None`` if the model type does not have primary key(s).
         """
         pks = [c.name for c in cls.columns if c.pk]
         if len(pks) > 0 and all([hasattr(model, n) and getattr(model, n) is not None for n in pks]):
@@ -34,24 +32,20 @@ class GraphEntityMixin:
             return None
 
     @classmethod
-    def is_null(cls, model):
+    def is_null(cls, model: 'Model') -> bool:
         """
         Checks the model is considered to be null.
 
-        Parameters
-        ----------
-        model: Model
-            A model object.
-
-        Returns
-        -------
-        bool
-            `True` if all column values set to the model are `None`, otherwise `False`.
+        :param model: A model object.
+        :returns: Whether all column values are ``None`` .
         """
         return all([getattr(model, c.name, None) is None for c in cls.columns])
 
 
 class ModelSchema(DynamicType[T]):
+    """
+    Schema of model type `T` .
+    """
     @classmethod
     def fix(cls, bound, arg):
         class Schema(TypedDict):
@@ -61,6 +55,9 @@ class ModelSchema(DynamicType[T]):
 
 
 class ExcludeFK(Shrink[T]):
+    """
+    Schema converter which excludes foreign key columns from schema of model type `T` .
+    """
     @classmethod
     def select(cls, bound, arg):
         return {c.name for c in arg.columns if c.fk}, None
@@ -71,6 +68,12 @@ class ConfigurableSpec(GraphSpec, Configurable):
     Extension of `GraphSpec` prepared to integrate model types into graph specification.
 
     This class exposes additional configurable attributes which controls the graph operation for model types.
+    In global configuration, `graph_spec` attribute is an instance of this class,
+    thus changes on it changes graph operations on model types.
+
+    .. note:: The implementation of this class is not stable, don't depends on it.
+
+    :param bool include_fk: Determines whether including foreign key columns in the result of graph serialization.
     """
     @classmethod
     def create(cls):

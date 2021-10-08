@@ -1,3 +1,13 @@
+"""
+Utility types and functions for internal use.
+"""
+from typing import *
+
+
+# type aliases
+Qualifier = Dict[str, Callable[[str], str]]
+
+
 class Configurable:
     """
     Interface for classes of configuration objects.
@@ -9,16 +19,13 @@ class Configurable:
         raise NotImplementedError()
 
 
-def key_to_index(values, ordered_keys):
+def key_to_index(values: Dict[Union[str, int], Any], ordered_keys: List[Union[str, int]]) -> Dict[int, Any]:
     """
-    Generates a dictionary whose values are same as given dictionary but each key is an index of original key in the ordered key list.
+    Replace keys of a `dict` with its index in ordered list.
 
-    Parameters
-    ----------
-    values: {(str|int): object}
-        A dictionary.
-    ordered_keys: [str]
-        Ordered key list. If some original keys are not contained in this list, `ValueError` raises.
+    :param values: A dictionary.
+    :param ordered_keys: Ordered keys.
+    :returns: New dictionary where keys are replaced.
     """
     def index(k):
         if isinstance(k, int):

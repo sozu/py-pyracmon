@@ -1,6 +1,11 @@
+"""
+This module exports model mixin types having model methods available in some RDBMS.
+"""
+from typing import *
+from ..connection import Connection
 from ..query import values
 from ..model import *
-from ..util import key_to_index
+from ..util import key_to_index, Qualifier
 
 
 class MultiInsertMixin:
@@ -8,25 +13,21 @@ class MultiInsertMixin:
     This class provides methods to execute queries which is not standard SQL but common to some RDBMS.
     """
     @classmethod
-    def inserts(cls, db, rows, qualifier={}, rows_per_insert=1000):
+    def inserts(
+        cls,
+        db: Connection,
+        rows: List[Union['Model', Dict[str, Any]]],
+        qualifier: Qualifier = {},
+        rows_per_insert: int = 1000,
+    ) -> int:
         """
         Insert multiple records.
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        values: [model] | [{str: object}]
-            Rows to insert. Each item should be a model object or dictionary of columns and values.
-        qualifier: {str: str -> str}
-            Functions converting place holders.
-        rows_per_insert: int
-            Maximum number of rows to insert in one query execution.
-
-        Returns
-        -------
-        int
-            The number of inserted rows.
+        :param db: DB connection.
+        :param values: Rows to insert. Each item should be a model object or dictionary of columns and values.
+        :param qualifier: Functions qualifying placeholder markers.
+        :param rows_per_insert: Maximum number of rows to insert in one query execution.
+        :returns: The number of inserted rows.
         """
         if len(rows) == 0:
             return 0

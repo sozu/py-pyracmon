@@ -10,7 +10,8 @@ pyracmon API documentation
    :maxdepth: 4
    :caption: Contents:
 
-   pyracmon
+   install
+   modules
 
 
 Indices and tables

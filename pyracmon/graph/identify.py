@@ -1,55 +1,52 @@
+from typing import *
+
+
 class IdentifyPolicy:
     """
-    Provides functionalities to handle identical entities in appending sessions of a graph.
+    Provides entity identification functionalities used during appending entities to a graph.
+
+    Identification mechanism is based on the equality of identification keys extracted by entities.
+
+    :param identifier: A function to extract the identification key from an entity.
     """
-    def __init__(self, identifier):
+    def __init__(self, identifier: Callable[[Any], Any]):
         self.identifier = identifier
 
-    def get_identifier(self, value):
+    def get_identifier(self, value: Any) -> Any:
         """
-        Returns identification key from an entity value.
+        Returns identification key from an entity.
 
-        Parameters
-        ----------
-        value: object
-            An entity value.
-
-        Returns
-        -------
-        object
-            Identification key of the entity value.
+        :param value: An entity.
+        :returns: Identification key.
         """
         return self.identifier(value) if self.identifier else None
 
-    def identify(self, prop, candidates, ancestors):
+    def identify(
+        self,
+        prop: 'GraphTemplate.Property',
+        candidates: List['Node'],
+        ancestors: Dict[str, List['Node']],
+    ) -> Tuple[List[Optional['Node']], List['Node']]:
         """
         Select parent nodes and identical nodes of a new entity.
 
-        Parameters
-        ----------
-        prop: GraphTemplate.Property
-            Template property for new entity.
-        candidates: [Node]
-            Nodes having the same identification key.
-        ancestors: {str: [Node]}
-            Mappings from property name to identical node set which appeared in current appending session.
+        This method is called during appending an entity to a graph.
 
-        Returns
-        -------
-        [Node | None]
-            Parent nodes which the node of new entity should be appended newly.
-            `None` means to append a new node without parent.
-        [Node]
-            Identical existing nodes propagated to identifications of children as ancestors.
+        :param prop: Template property for new entity.
+        :param candidates: Nodes having the same identification key as the key of new entity.
+        :param ancestors: Parent nodes mapped by property names.
+        :returns: The first item is a list of Parent nodes which the node of new entity should be appended newly.
+            ``None`` means to append a new node without parent. The second item is a list of identical nodes,
+            which will be merged into ancestors and used in subsequent identifications of child entities.
         """
         raise NotImplementedError()
 
 
 class HierarchicalPolicy(IdentifyPolicy):
     """
-    Default policy for template properties having identifier.
+    Default identification policy used in a container where identification function is defined.
 
-    This policy identifies nodes whose entity has the same identification key as one of appending entity
+    This policy identifies nodes whose entity has the same identification key as the key of appending entity
     and whose parent is also identical to the parent of the entity.
     """
     def identify(self, prop, candidates, ancestors):
@@ -74,6 +71,11 @@ class HierarchicalPolicy(IdentifyPolicy):
 
 
 class NeverPolicy(IdentifyPolicy):
+    """
+    Identification policy which never identifies nodes.
+
+    This policy is used in a container where identification function is not defined.
+    """
     def identify(self, prop, candidates, ancestors):
         if prop.parent and prop.parent.name in ancestors:
             return ancestors[prop.parent.name], []

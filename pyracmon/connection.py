@@ -1,5 +1,7 @@
 import string
 import threading
+import types
+from typing import *
 from datetime import datetime
 from .query import QueryHelper
 from .sql import Sql
@@ -7,21 +9,24 @@ from .marker import Marker
 from .context import ConnectionContext
 
 
-def connect(api, *args, **kwargs):
+def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
     """
-    Connect to DB by passing arguments to DB-API 2.0 module.
+    Connects to DB by passing arguments to DB-API 2.0 module.
 
-    Every optional argument is passed to `api.connect()` and returns the `Connection` object which wraps obtained DB connection.
+    Every optional argument is passed to ``api.connect()`` and returns the `Connection` object which wraps obtained DB connection.
 
-    Parameters
-    ----------
-    api: module
-        DB-API 2.0 module which should export `connect()` function.
+    Here shows an example connecting to database and executing query.
 
-    Returns
-    -------
-    Connection
-        Wrapper of DB-API 2.0 connection.
+    >>> import psycopg2
+    >>> from pyracmon import connect
+    >>> db = connect(psycopg2, host="localhost", port=5432, dbname="pyracmon", user="postgres", password="postgres")
+    >>> c = db.stmt().execute("SELECT 1")
+    >>> assert c.fetchone()[0] == 1
+
+    :param api: DB-API 2.0 module which exports `connect()` function.
+    :param args: Arguments passed to ``api.connect()`` .
+    :param kwargs: Keyword arguments passed to ``api.connect()`` .
+    :returns: Wrapper of DB-API 2.0 connection.
     """
     return Connection(api, api.connect(*args, **kwargs), None)
 
@@ -72,88 +77,70 @@ class Connection:
         return threading.current_thread().name + "-" + ''.join(gen(t))[::-1]
 
     @property
-    def helper(self):
+    def context(self) -> ConnectionContext:
         """
-        Deprecated. Returns `QueryHelper` object.
-        """
-        return QueryHelper(self.api, None)
+        Returns context object used for this connection.
 
-    @property
-    def context(self):
-        """
-        `ConnectionContext` used for this connection.
-
-        Returns
-        -------
-        ConnectionContext
-            `ConnectionContext` used for this connection.
+        :getter: Context object used for this connection.
         """
         if not self._context:
             self._context = (self.context_factory or ConnectionContext)()
             self._context.identifier = self.identifier
         return self._context
 
-    def use(self, factory):
+    def use(self, factory: Callable[[], ConnectionContext]) -> 'Connection':
         """
         Set factory function of `ConnectionContext`.
 
-        Parameters
-        ----------
-        factory: () -> ConnectionContext
-            A factory function.
+        Use this method to use your custom context object.
 
-        Returns
-        -------
-        Connection
-            This instance.
+        :param factory: Function returning custom context object.
+        :returns: This instance.
         """
         self.context_factory = factory
         return self
 
-    def stmt(self, context=None):
+    def stmt(self, context: Optional[ConnectionContext] = None) -> 'Statement':
         """
         Creates new statement which provides methods to execute query.
 
-        Parameters
-        ----------
-        context: ConnectionContext
-            `ConnectionContext` used in the statement. If `None`, the context of this connection is used.
-
-        Returns
-        -------
-        Statement
-            Created statement.
+        :param context: Context object used in the statement. If `None`, the context of this connection is used.
+        :returns: Created statement.
         """
         return Statement(self, context or self.context)
+
+    @property
+    def helper(self) -> QueryHelper:
+        """
+        .. deprecated:: 1.0.0
+        """
+        return QueryHelper(self.api, None)
 
 
 class Statement:
     """
-    This class has the functionality to execute query on containing connection and context.
+    This class has method to execute query on containing connection and context.
+
+    Be sure to execute queries on this class to benefit from:
+
+    - Query formatting using unified marker ``$_``.
+    - Query logging.
     """
     def __init__(self, conn, context):
         self.conn = conn
         self.context = context
 
-    def prepare(self, sql, *args, **kwargs):
+    def prepare(self, sql: str, *args: Any, **kwargs: Any) -> Tuple[str, Union[List[Any], Dict[str, Any]]]:
         """
-        Generates a prepared SQL statement and its parameters.
+        Generates formatted query and a list of parameters.
 
-        Parameters
-        ----------
-        sql: str
-            SQL template.
-        args: [object]
-            Indexed parameters in the SQL.
-        kwargs: {str: object}
-            Keyword parameters in the SQL.
+        This method is invoked internally during `execute` to generate arguments for cursor object.
+        It's meaningless to use this method except for the debugging purpose.
 
-        Returns
-        -------
-        str
-            Prepared SQL statement.
-        [object] | {str:object}
-            Paremeters for created statement.
+        :param sql: Query template which can contain unified marker.
+        :param args: Indexed parameters of query.
+        :param kwargs: Keyword parameters of query.
+        :returns: Formatted query and parameters.
         """
         paramstyle = self.context.config.paramstyle or self.conn.api.paramstyle
 
@@ -161,23 +148,17 @@ class Statement:
 
         return sql.render(*args, **kwargs)
 
-    def execute(self, sql, *args, **kwargs):
+    def execute(self, sql: str, *args: Any, **kwargs: Any) -> 'Cursor':
         """
-        Executes a query and returns a cursor object used for the execution.
+        Executes a query and returns a cursor object.
 
-        Parameters
-        ----------
-        sql: str
-            SQL template.
-        args: [object]
-            Indexed parameters in the SQL.
-        kwargs: {str: object}
-            Keyword parameters in the SQL.
+        Cursor is defined in DB-API 2.0 and it provides methods to access results of query execution (ex. ``fetchall`` ``fetchone`` ).
+        Those methods and other methods defined by using DB driver are available as they are.
 
-        Returns
-        -------
-        Cursor
-            Cursor object which has been used for the query execution.
+        :param sql: Query template which can contain unified marker.
+        :param args: Indexed parameters of query.
+        :param kwargs: Keyword parameters of query.
+        :returns: Cursor object used for the query execution.
         """
         sql, params = self.prepare(sql, *args, **kwargs)
 

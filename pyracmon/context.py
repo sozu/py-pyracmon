@@ -1,12 +1,13 @@
 import logging
+from typing import *
 from .config import default_config
 
 
 class ConnectionContext:
     """
-    This class represents a context where DB operation is done on the configuration it has.
+    This class represents a context of query execution.
 
-    By default, each instance has the local copy of global configuration which can be changed via `configure()` 
+    You don't need to care this object in most cases except for when you want to change the configuration at a query execution.
     """
     def __init__(self, identifier=None, **configurations):
         self.identifier = identifier
@@ -15,40 +16,30 @@ class ConnectionContext:
     def _message(self, message):
         return f"({self.identifier}) {message}" if self.identifier else message
 
-    def configure(self, **configurations):
+    def configure(self, **configurations: Any) -> 'ConnectionContext':
         """
-        Change the configuration of this context.
+        Change configurations of this context.
 
-        Parameters
-        ----------
-        configurations: {str: object}
-            Pairs of configuration name and its value.
-
-        Returns
-        -------
-        ConnectionContext
-            This instance.
+        :param configurations: Configurations. See `pyracmon.config` to knoe available keys.
+        :returns: This instance.
         """
         self.config.set(**configurations)
         return self
 
-    def execute(self, cursor, sql, params):
+    def execute(self, cursor: 'Cursor', sql: str, params: List[Any]) -> 'Cursor':
         """
         Executes a query on a cursor.
 
-        Parameters
-        ----------
-        cursor: Cursor
-            Cursor object.
-        sql: str
-            Query string.
-        params: [object]
-            Query parameters.
+        Query logging is also done in this method according to the configuration.
 
-        Returns
-        -------
-        Cursor
-            Given cursor object. Internal state may be changed by the execution of the query.
+        This method is invoked from `ConnectionContext.execute` internally.
+        When you intend to change behaviors of query executions,
+        inherit this class, overwrite this method and set factory method for that class by `Connection.use` .
+
+        :param cursor: Cursor object.
+        :param sql: Query string.
+        :param params: Query parameters.
+        :returns: Given cursor object. Internal state may be changed by the execution of the query.
         """
         logger = _logger(self.config)
 

@@ -1,12 +1,16 @@
 from string import digits, Template
+from typing import *
 from .marker import Marker
 
 
 class Sql:
     """
-    Provides functionalities to render SQL string from the template containing place holders.
+    Provides functionalities to render SQL string from the template containing placeholder markers.
 
-    SQL rendering is conform to the way of `string.Template` which replaces `$` prefixed variables with parameters.
+    SQL rendering is conform to the way of `string.Template` which replaces ``$`` prefixed variables with parameters.
+
+    :param marker: Marker used in the template.
+    :param template: SQL template.
     """
     class Substitute:
         def __init__(self, marker):
@@ -20,25 +24,19 @@ class Sql:
             else:
                 return self.marker(key)
 
-    def __init__(self, marker, template):
+    def __init__(self, marker: Marker, template: str):
         self.marker = marker
         self.template = template
 
-    def render(self, *args, **kwargs):
+    def render(self, *args, **kwargs) -> Tuple[str, List[Any]]:
         """
         Renders SQL and converts parameters into the form available for current database driver.
 
-        Parameters
-        ----------
-        params: object
-            Parameters. Raising an exception when the type of this object does not conform to the paramstyle.
+        Arguments type should be consistent to marker paramstyle, otherwise exception is raised.
 
-        Returns
-        -------
-        str
-            SQL string.
-        object
-            Values available as parameters of the SQL.
+        :param args: Indexed parameters.
+        :param kwargs: Keyed parameters.
+        :returns: SQL and parameters available in it.
         """
         self.marker.reset()
 

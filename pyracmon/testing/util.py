@@ -1,21 +1,25 @@
 from datetime import datetime, date, time, timedelta
-from ..config import default_config
+from typing import *
+
+from pyracmon.connection import Connection
+from ..config import PyracmonConfiguration, default_config
 
 
-def testing_config(cfg=default_config().derive()):
+def testing_config(cfg: PyracmonConfiguration = default_config().derive()) -> PyracmonConfiguration:
+    """
+    Returns a configuration used for testing.
+
+    :param cfg: Don't use this argument. This exists to locate global instance in private.
+    """
     return cfg
 
 
-def truncate(db, *models):
+def truncate(db: Connection, *models: List['Model']):
     """
     Truncate tables in order.
 
-    Parameters
-    ----------
-    db: Connection
-        DB connection.
-    tables: [model]
-        Models of tables.
+    :param db: DB connection.
+    :param tables: Models of tables to truncate.
     """
     if len(models) == 0:
         raise ValueError(f"No tables are specified. Did you forget to pass DB connection at the first argument?")
@@ -25,6 +29,9 @@ def truncate(db, *models):
 
 
 class Matcher:
+    """
+    :meta private:
+    """
     def __init__(self):
         self.invert = False
 
@@ -46,6 +53,9 @@ class Matcher:
 
 
 class CompositeMatcher(Matcher):
+    """
+    :meta private:
+    """
     def __init__(self, m1, m2, and_=True):
         super().__init__()
         self.m1 = m1
@@ -60,6 +70,9 @@ class CompositeMatcher(Matcher):
 
 
 class Near(Matcher):
+    """
+    :meta private:
+    """
     def __init__(self, expected, negative=None, positive=None, **kwargs):
         super().__init__()
         self.expected = expected
@@ -90,25 +103,17 @@ class Near(Matcher):
             return low <= actual and actual <= high
 
 
-def near(expected, negative=None, positive=None, **kwargs):
+def near(expected: Any, negative: Optional[Any] = None, positive: Optional[Any] = None, **kwargs: Any) -> Matcher:
     """
-    Create a matcher to check actual value is conatined in a range.
+    Create a matcher to check actual value is in a range.
 
-    Parameters
-    ----------
-    expected: object
-        Expected value.
-    negative: object
-        Margin of negative direction.
-    positive: object
-        Margin of positive direction.
-    kwargs: {str: object}
-        Keyword arguments to create marginal values.
+    Comparison between the value and given range depends on its type.
 
-    Returns
-    -------
-    Near
-        Matcher.
+    :param expected: Expected value.
+    :param negative: Margin of negative direction.
+    :param positive: Margin of positive direction.
+    :param kwargs: Keyword arguments to create marginal values.
+    :returns: Created matcher.
     """
     if isinstance(expected, datetime):
         if all(k not in kwargs for k in ('weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds', 'microseconds')):
@@ -117,19 +122,12 @@ def near(expected, negative=None, positive=None, **kwargs):
 
 
 class let(Matcher):
-    def __init__(self, pred):
+    def __init__(self, pred: Callable[[Any], bool]) -> Matcher:
         """
-        Create a matcher which applies the predicate function to actual value and checks its returning value is `True`.
+        Create a matcher which applies the predicate function to actual value and checks its returning value is ``True`` .
 
-        Parameters
-        ----------
-        pred: object -> bool
-            A predicate function.
-
-        Returns
-        -------
-        let
-            Matcher.
+        :param pred: A predicate function.
+        :returns: Created matcher.
         """
         super().__init__()
         self.pred = pred
@@ -139,19 +137,12 @@ class let(Matcher):
 
 
 class one_of(Matcher):
-    def __init__(self, *candidates):
+    def __init__(self, *candidates) -> Matcher:
         """
         Create a matcher which checks whether the actual value matches one of candidate values.
 
-        Parameters
-        ----------
-        candidates: [object]
-            Candidate values.
-
-        Returns
-        -------
-        one_of
-            Matcher.
+        :param candidates: Candidate values.
+        :returns: Created matcher.
         """
         super().__init__()
         self.candidates = candidates

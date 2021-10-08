@@ -1,5 +1,7 @@
 pytest
 psycopg2-binary
 PyMySQL
-sphinx
 numpydoc
+
+sphinx
+sphinx-pdj-theme

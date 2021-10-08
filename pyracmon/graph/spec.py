@@ -1,10 +1,9 @@
-from itertools import zip_longest
-from functools import reduce, partial
-from pyracmon.graph.identify import IdentifyPolicy, HierarchicalPolicy, neverPolicy
-from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.serialize import S, SerializationContext, NodeSerializer
-from pyracmon.graph.schema import GraphSchema
-from pyracmon.util import Configurable
+from typing import *
+from .identify import IdentifyPolicy, HierarchicalPolicy, neverPolicy
+from .template import GraphTemplate
+from .serialize import S, SerializationContext, NodeSerializer
+from .schema import GraphSchema
+from .util import Serializer, TemplateProperty
 
 
 class GraphSpec:
@@ -15,26 +14,25 @@ class GraphSpec:
 
     *Identifier* is a function to get a value used for the identification of graph entity. See `Graph` to know how this works.
 
-    *Entity fliter* is a function returning `bool` to determine whether the entity should be appended to a graph or not.
-    If `False` is returned for an entity, it is just ignored.
+    *Entity fliter* is a function to determine whether the entity should be appended to a graph or not.
+    If ``False`` is returned for an entity, it is just ignored.
 
-    *Serializer* is a function which converts an entity value into a serializable object.
-    This is used in `to_dict()` to put entities into returning `dict`.
-    Registered *serializer* is first applied to an entity value and other serialization functions in `NodeSerializer` are applied in order.
+    *Serializer* is a function which converts an entity value into a serializable object,
+    whose signature is one of signatures described in `S.each` .
+    In serialization phase, registered *serializer*s are first applied and *serializer* in `NodeSerializer` follows.
 
-    They are registered in the specification via `add_xxx()` methods of this class with its bound `type`.
-    The first function whose bound `type` is the subclass of the `kind` of the template property is choosed and applied.
+    Any kind of function is bound to a type when added, which will work as a key to determine whether it should be applied to a node.
 
-    Attributes
-    ----------
-    identifiers: [(type, T -> ID)]
-        A list of pairs of type and *identifier*.
-    entity_filters: [(type, T -> bool)]
-        A list of pairs of type and *entity filter*.
-    serializers: [(type, T -> U)]
-        A list of pairs of type and *serializer*.
+    :param identifiers: A list of pairs of type and *identifier*.
+    :param entity_filters: A list of pairs of type and *entity_filter*.
+    :param serializers: A list of pairs of type and *serializer*.
     """
-    def __init__(self, identifiers=None, entity_filters=None, serializers=None):
+    def __init__(
+        self,
+        identifiers: List[Tuple[type, Callable[[Any], Any]]] = None,
+        entity_filters: List[Tuple[type, Callable[[Any], bool]]] = None,
+        serializers: List[Tuple[type, Serializer]] = None,
+    ):
         self.identifiers = identifiers or []
         self.entity_filters = entity_filters or []
         self.serializers = serializers or []
@@ -44,70 +42,64 @@ class GraphSpec:
             return None
         return next(map(lambda x:x[1], filter(lambda x:issubclass(t, x[0]), holder)), None)
 
-    def get_identifier(self, t):
+    def get_identifier(self, t: type) -> Optional[Callable[[Any], Any]]:
+        """
+        Returns the most appropriate identifier for a type.
+        
+        :param t: Type of an entity.
+        :returns: Identifier if exists.
+        """
         return self._get_inherited(self.identifiers, t)
 
-    def get_entity_filter(self, t):
+    def get_entity_filter(self, t: type) -> Optional[Callable[[Any], bool]]:
+        """
+        Returns the most appropriate entity filter for a type.
+        
+        :param t: Type of an entity.
+        :returns: Entity filter if exists.
+        """
         return self._get_inherited(self.entity_filters, t)
 
-    def find_serializers(self, t):
+    def find_serializers(self, t: type) -> List[Serializer]:
+        """
+        Returns a list of serializers applicable to a type.
+        
+        :param t: Type of an entity.
+        :returns: Serializers found.
+        """
         if not isinstance(t, type):
             return []
         return list(map(lambda x:x[1], filter(lambda x:issubclass(t, x[0]), self.serializers[::-1])))
 
-    def add_identifier(self, c, f):
+    def add_identifier(self, c: type, f: Callable[[Any], Any]) -> 'GraphSpec':
         """
-        Register an *identifier* with the bound type.
+        Register an identifier with a type.
 
-        Parameters
-        ----------
-        c: type
-            A type bound for the *identifier*.
-        f: T -> ID
-            An *identifier* function.
-
-        Returns
-        -------
-        GraphSpec
-            This instance.
+        :param c: A type bound to the identifier.
+        :param f: An identifier function.
+        :returns: This instance.
         """
         self.identifiers[0:0] = [(c, f)]
         return self
 
-    def add_entity_filter(self, c, f):
+    def add_entity_filter(self, c: type, f: Callable[[Any], bool]) -> 'GraphSpec':
         """
-        Register an *entity filter* with the bound type.
+        Register an entity filter with a type.
 
-        Parameters
-        ----------
-        c: type
-            A type bound for the *entity filter*.
-        f: T -> bool
-            An *entity filter* function.
-
-        Returns
-        -------
-        GraphSpec
-            This instance.
+        :param c: A type bound to the identifier.
+        :param f: An entity filter function.
+        :returns: This instance.
         """
         self.entity_filters[0:0] = [(c, f)]
         return self
 
-    def add_serializer(self, c, f):
+    def add_serializer(self, c: type, f: Serializer) -> 'GraphSpec':
         """
-        Register a *serializer* with the bound type.
+        Register a serializer with a type.
 
-        Parameters
-        ----------
-        c: type
-            A type bound for the *serializer*.
-        f: T -> U
-            An *serializer* function.
-
-        Returns
-        -------
-        GraphSpec
-            This instance.
+        :param c: A type bound to the identifier.
+        :param f: A serializer function.
+        :returns: This instance.
         """
         if isinstance(f, NodeSerializer):
             f = f.serializer
@@ -138,73 +130,62 @@ class GraphSpec:
         else:
             raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
 
-    def new_template(self, *bases, **template):
+    def new_template(self, *bases: GraphTemplate, **properties: TemplateProperty) -> GraphTemplate:
         """
         Creates a graph template with given definitions for template properties.
 
         Each keyword argument corresponds to a template property where the key is proprety name and value is property definition.
 
-        Property definition can be given as a single value or a tuple of at most 3 values.
-        The values are interpreted to property attributes in the following order.
+        Property definition can be a `type` object or a tuple of at most 3 values.
+        The former is the equivalent to a tuple which contains the `type` object alone.
+        Values in the tuple are interpreted into following attributes in order.
 
-        - The kind of entity value which must be a `type` object.
+        - The kind of property which indicates a type of entity.
         - *Identifier* of the property.
-        - *Entity filter* of the property.
+        - *Entity filter* of the property. 
 
-        Parameters
-        ----------
-        bases: [GraphTemplate]
-            Base templates whose properties and relations are merged into new template.
-        template: {str: (type | Tuple[type, T -> ID, T -> bool])}
-            Definitions of template properties.
+        Omitted values are complented with registered items in this object.
 
-        Returns
-        -------
-        GraphTemplate
-            Created graph template.
+        >>> template = GraphSpac().new_template(
+        >>>     a = int,
+        >>>     b = (str, lambda x:x),
+        >>>     c = (str, lambda x:x, lambda x:len(x)>5),
+        >>> )
+
+        :param bases: Base templates whose properties and relations are merged into new template.
+        :param properties: Definitions of template properties.
+        :returns: Created graph template.
         """
         base = sum(bases, GraphTemplate([]))
 
-        return base + GraphTemplate([(n, *self._get_property_definition(d)) for n, d in template.items()])
+        return base + GraphTemplate([(n, *self._get_property_definition(d)) for n, d in properties.items()])
 
-    def to_dict(self, graph, __params={}, **settings):
+    def to_dict(self, graph: 'GraphView', _params_: Dict[str, Dict[str, Any]] = {}, **settings: NodeSerializer) -> Dict[str, Any]:
         """
         Generates a dictionary representing structured entity values of a graph.
 
-        Only nodes whose names appear in keys of `settings` are contained int the result.
+        Only nodes whose names appear in keys of `settings` are serialized into the result.
+        Each `NodeSerializer` object can be built by factory methods on `S` .
 
-        `NodeSerializer` object of each value in `settings` keyword arguments can be built by builder methods of `S`.
+        >>> GraphSpec().to_dict(
+        >>>     graph,
+        >>>     a = S.of(),
+        >>>     b = S.name("B"),
+        >>> )
 
-        Parameters
-        ----------
-        graph: GraphView
-            A view of the graph.
-        __params: {str: {str: object}}
-            Parameters keyed by node names.
-        settings: {str: NodeSerializer}
-            Mapping from property name to `NodeSerializer` s.
-
-        Returns
-        -------
-        Dict[str, object]
-            A dictionary representing the graph.
+        :param graph: A view of the graph.
+        :param _params_: Parameters passed to `SerializationContext` and used by *serializer*s.
+        :param settings: `NodeSerializer` for each property.
+        :returns: Serialization result.
         """
-        return SerializationContext(settings, self.find_serializers, __params).execute(graph)
+        return SerializationContext(settings, self.find_serializers, _params_).execute(graph)
 
-    def to_schema(self, template, **settings):
+    def to_schema(self, template: GraphTemplate, **settings: NodeSerializer) -> GraphSchema:
         """
-        Creates `GraphSchema` under this specifications.
+        Creates `GraphSchema` representing the structure of serialization result under given settings.
 
-        Parameters
-        ----------
-        template: GraphTemplate
-            A template of serializing graph.
-        settings: {str: NodeSerializer}
-            Mapping from property name to `NodeSerializer` s.
-
-        Returns
-        -------
-        GraphSchema
-            An object having schema information of serialized dictionary.
+        :param template: Template of a graph.
+        :param settings: `NodeSerializer` for each property.
+        :returns: Schema of serialization result.
         """
         return GraphSchema(self, template, **settings)

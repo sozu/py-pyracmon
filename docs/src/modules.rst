@@ -1,7 +1,10 @@
-pyracmon
-========
+API documentation
+=================
 
 .. toctree::
-   :maxdepth: 4
+
+.. autosummary::
+   :toctree: _autosummary
+   :recursive:
 
    pyracmon
