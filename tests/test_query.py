@@ -336,11 +336,11 @@ class TestEscapeLike:
 
 class TestWhere:
     def test_where(self):
-        c, p = where(Q.of("a = $_ AND b = $_", [1, 2]))
+        c, p = where(Q.of("a = $_ AND b = $_", 1, 2))
         assert (c, p) == ("WHERE a = $_ AND b = $_", [1, 2])
 
     def test_empty(self):
-        c, p = where(Q.of("", [1, 2]))
+        c, p = where(Q.of("", 1, 2))
         assert (c, p) == ("", [])
 
 

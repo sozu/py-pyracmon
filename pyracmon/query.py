@@ -174,7 +174,7 @@ class Q:
             return Q.NoAttribute()
 
     @classmethod
-    def of(cls, expression: str = "", params: Union[Any, List[Any]] = []) -> 'Conditional':
+    def of(cls, expression: str = "", *params: Any) -> 'Conditional':
         """
         Creates a condition directly from an expression and parameters.
 
@@ -182,13 +182,7 @@ class Q:
         :param params: Parameters used in the condition.
         :returns: Condition object.
         """
-        if isinstance(params, list):
-            pass
-        elif isinstance(params, tuple):
-            params = list(params)
-        else:
-            params = [params]
-        return Conditional(expression, params)
+        return Conditional(expression, list(params))
 
     @classmethod
     def eq(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any):
