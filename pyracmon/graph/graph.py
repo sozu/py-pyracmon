@@ -71,7 +71,7 @@ class Graph:
             return NodeContainer(prop)
 
     def _container_of(self, prop):
-        cands = [c for c in self.containers.values() if c.property.is_compatible(prop)]
+        cands = [c for c in self.containers.values() if c.prop.is_compatible(prop)]
         if len(cands) > 1:
             raise ValueError(f"Container can't be determined from property '{prop.name}'.")
         return cands[0] if cands else None
@@ -119,10 +119,10 @@ class Graph:
         """
         another = another if isinstance(another, Graph) else another()
 
-        roots_ = filter(lambda c: c.property.parent is None, another.containers.values())
+        roots_ = filter(lambda c: c.prop.parent is None, another.containers.values())
 
         def add(n, anc):
-            c = self._container_of(n.property)
+            c = self._container_of(n.prop)
             if c:
                 c.append(n.entity, anc)
             for ch_ in n.children.values():
@@ -165,7 +165,7 @@ class Graph:
                     return graph
                 def __iter__(self):
                     """Iterates views of root containers."""
-                    return map(lambda c: (c.name, c.view), filter(lambda c: c.property.parent is None, graph.containers.values()))
+                    return map(lambda c: (c.name, c.view), filter(lambda c: c.prop.parent is None, graph.containers.values()))
                 def __getattr__(self, name):
                     """Returns a view of a container of the name."""
                     return graph.containers[name].view
@@ -211,7 +211,7 @@ class _EmptyNodeView:
     :meta private:
     """
     def __init__(self, prop, result):
-        self.property = prop
+        self.prop = prop
         self.result = result
 
     def __call__(self, alt=None):
@@ -221,11 +221,11 @@ class _EmptyNodeView:
         return iter([])
 
     def __getattr__(self, key):
-        child = next(filter(lambda c: c.name == key, self.property.children), None)
+        child = next(filter(lambda c: c.name == key, self.prop.children), None)
         if child:
             return _EmptyContainerView(child)
         else:
-            raise KeyError(f"Graph property '{base.property.name}' does not have a child property '{key}'.")
+            raise KeyError(f"Graph property '{self.prop.name}' does not have a child property '{key}'.")
 
 
 class _EmptyContainerView:
@@ -233,7 +233,7 @@ class _EmptyContainerView:
     :meta private:
     """
     def __init__(self, prop):
-        self.property = prop
+        self.prop = prop
 
     def __bool__(self):
         return False
@@ -251,26 +251,26 @@ class _EmptyContainerView:
         if isinstance(index, slice):
             return []
         else:
-            raise IndexError(f"Index for container '{self.property.name}' is out of range.")
+            raise IndexError(f"Index for container '{self.prop.name}' is out of range.")
 
     def __getattr__(self, key):
-        child = next(filter(lambda c: c.name == key, self.property.children), None)
+        child = next(filter(lambda c: c.name == key, self.prop.children), None)
         if child:
             return _EmptyContainerView(child)
         else:
-            raise KeyError(f"Graph property '{self.property.name}' does not have a child property '{key}'.")
+            raise KeyError(f"Graph property '{self.prop.name}' does not have a child property '{key}'.")
 
 
 class NodeContainer:
     """
     This class represents a node container of a template property.
 
-    :param property: Template property.
+    :param prop: Template property.
     """
-    def __init__(self, property: GraphTemplate.Property):
+    def __init__(self, prop: GraphTemplate.Property):
         self.nodes = []
         self.keys = {}
-        self.property = property
+        self.prop = prop
         self._view = None
 
     @property
@@ -280,7 +280,7 @@ class NodeContainer:
 
         :getter: Container name.
         """
-        return self.property.name
+        return self.prop.name
 
     @property
     def view(self) -> 'ContainerView':
@@ -331,11 +331,11 @@ class NodeContainer:
                         return container.nodes[index].view
                 def __getattr__(self, key):
                     """Returns a view of the first node or empty container view if it does not exist."""
-                    child = next(filter(lambda c: c.name == key, container.property.children), None)
+                    child = next(filter(lambda c: c.name == key, container.prop.children), None)
                     if child:
                         return container.nodes[0].children[key].view if len(container.nodes) > 0 else _EmptyContainerView(child)
                     else:
-                        raise KeyError(f"Graph property '{container.property.name}' does not have a child property '{key}'.")
+                        raise KeyError(f"Graph property '{container.prop.name}' does not have a child property '{key}'.")
             self._view = ContainerView()
         return self._view
 
@@ -353,18 +353,18 @@ class NodeContainer:
         def get_nodes(k):
             return [self.nodes[i] for i in self.keys.get(k, [])]
 
-        policy = self.property.policy or neverPolicy()
+        policy = self.prop.policy or neverPolicy()
 
         key = policy.get_identifier(entity)
 
-        parents, identicals = policy.identify(self.property, [self.nodes[i] for i in self.keys.get(key, [])], ancestors)
+        parents, identicals = policy.identify(self.prop, [self.nodes[i] for i in self.keys.get(key, [])], ancestors)
 
         new_nodes = identicals.copy()
 
         for p in parents:
             index = len(self.nodes)
 
-            node = Node(self.property, entity, key, index)
+            node = Node(self.prop, entity, key, index)
             self.nodes.append(node)
             if key is not None:
                 self.keys.setdefault(key, []).append(index)
@@ -377,7 +377,7 @@ class NodeContainer:
             for n in identicals:
                 n.entity = entity
 
-        ancestors[self.property.name] = new_nodes
+        ancestors[self.prop.name] = new_nodes
 
 
 class GraphNodeContainer(NodeContainer):
@@ -388,9 +388,9 @@ class GraphNodeContainer(NodeContainer):
         if not isinstance(entity, (dict, Graph)):
             raise ValueError(f"Node of graph only accepts dict or Graph object.")
 
-        policy = self.property.policy or neverPolicy()
+        policy = self.prop.policy or neverPolicy()
 
-        parents, _ = policy.identify(self.property, [], ancestors)
+        parents, _ = policy.identify(self.prop, [], ancestors)
 
         for p in parents:
             index = len(self.nodes)
@@ -398,8 +398,8 @@ class GraphNodeContainer(NodeContainer):
             graphs = []
 
             if p is None or len(p.children[self.name].nodes) == 0:
-                g = Graph(self.property.kind)
-                node = GraphNode(self.property, g, None, index)
+                g = Graph(self.prop.kind)
+                node = GraphNode(self.prop, g, None, index)
                 self.nodes.append(node)
 
                 if p is not None:
@@ -420,14 +420,14 @@ class Node:
     """
     This class represents a node which contains an entity.
 
-    :param property: Template property.
+    :param prop: Template property.
     :param entity: Entity.
     """
     class Children:
-        def __init__(self, property: GraphTemplate.Property):
+        def __init__(self, prop: GraphTemplate.Property):
             self.nodes = []
             self.keys = set()
-            self.property = property
+            self.prop = prop
             self._view = None
 
         @property
@@ -455,11 +455,11 @@ class Node:
                             return base.nodes[index].view
                     def __getattr__(self, key):
                         """Returns a view of the first node or empty container view if it does not exist."""
-                        child = next(filter(lambda c: c.name == key, base.property.children), None)
+                        child = next(filter(lambda c: c.name == key, base.prop.children), None)
                         if child:
                             return base.nodes[0].children[key].view if len(base.nodes) > 0 else _EmptyContainerView(child)
                         else:
-                            raise KeyError(f"Graph property '{base.property.name}' does not have a child property '{key}'.")
+                            raise KeyError(f"Graph property '{base.prop.name}' does not have a child property '{key}'.")
                 self._view = ChildrenView()
             return self._view
 
@@ -471,12 +471,12 @@ class Node:
                 self.keys.add(node)
                 self.nodes.append(node)
 
-    def __init__(self, property: GraphTemplate.Property, entity: Any, key: Optional[Any], index: int):
-        self.property = property
+    def __init__(self, prop: GraphTemplate.Property, entity: Any, key: Optional[Any], index: int):
+        self.prop = prop
         self.entity = entity
         self.key = key
         self.parents = set()
-        self.children = {c.name: Node.Children(c) for c in property.children}
+        self.children = {c.name: Node.Children(c) for c in prop.children}
         self._index = index
         self._view = None
 
@@ -487,7 +487,7 @@ class Node:
 
         :getter: Container name.
         """
-        return self.property.name
+        return self.prop.name
 
     @property
     def view(self) -> 'NodeView':
@@ -524,9 +524,9 @@ class Node:
         :param child: Child node.
         :returns: This instance.
         """
-        if child.property.template != self.property.template:
+        if child.prop.template != self.prop.template:
             raise ValueError(f"Nodes from difference graph template can't be associated.")
-        self.children[child.property.name].append(child)
+        self.children[child.prop.name].append(child)
         child.parents.add(self)
         return self
 
@@ -537,10 +537,10 @@ class Node:
         :param child: Node to search.
         :returns: ``True`` if exists.
         """
-        if child.property.template != self.property.template:
+        if child.prop.template != self.prop.template:
             return False
-        elif child.property.name in self.children:
-            return child in self.children[child.property.name].keys
+        elif child.prop.name in self.children:
+            return child in self.children[child.prop.name].keys
         else:
             return False
 

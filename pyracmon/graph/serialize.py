@@ -22,7 +22,7 @@ class S:
 
         :param namer: A string or naming function.
         :param aggregator: An aggregation function or an index of node to select in node container.
-        :param serializer: A list of *serializer*s.
+        :param serializer: A list of *serializer* s.
         :returns: Created `NodeSerializer` .
         """
         return NodeSerializer(namer, aggregator, *serializers)
@@ -53,7 +53,7 @@ class NodeSerializer:
     The conversion is composed of 3 phases.
 
     1. If ``aggregator`` is set, aggregate the list of nodes into a node or shrinked list of nodes.
-    2. Convert the entity of each node into a serializable value by *serializer*.
+    2. Convert the entity of each node into a serializable value by *serializer* .
     3. Put the converted value(s) into the dictionary converted from the parent node with a key determined by ``namer``.
 
     These phases are applied from the roots of graph to their descendants as long as the entity is converted to `dict`.
@@ -75,7 +75,7 @@ class NodeSerializer:
 
     :param namer: Key in the dictionary or naming funciton.
     :param aggregator: Function to select node(s) from the node container.
-    :param serializers: List of *serializer*s.
+    :param serializers: List of *serializer* s.
     """
     def __init__(
         self,
@@ -207,7 +207,7 @@ class NodeSerializer:
         `NodeSerializer` built with this methods merges the converted `dict` into parent `dict` and its `be_merged` property becomes ``True`` .
 
         Because merging needs folding, this method overrides the aggregation function by invoking `head()` internally
-        if this serializer is not configured to fold nodes into a single node.
+        if this *serializer* is not configured to fold nodes into a single node.
 
         :param namer: The naming function. If ``None`` , the property name is returned as it is.
         :returns: This instance.
@@ -283,7 +283,7 @@ class NodeSerializer:
 
         In order to progress serialization to child nodes, the function MUST returns a `dict` .
 
-        The function (i.e. *serializer*) will be invoked with 0 to 4 arguments listed below.
+        The function (i.e. *serializer* ) will be invoked with 0 to 4 arguments listed below.
 
         - `SerializationContext` of the serialization.
         - `Node` to serialize.
@@ -370,7 +370,7 @@ class SerializationContext:
     `node_params` enables *serializer* to get values dynamically determined
     because they are obtained by this context which can be obtained at the first argument of *serializer* function.
 
-    Following code shows the example using the parameters in *serializer*.
+    Following code shows the example using the parameters in *serializer* .
 
     >>> cxt = SerializationContext(
     >>>     dict(
@@ -425,7 +425,7 @@ class SerializationContext:
         """
         result = {}
 
-        for n, c in filter(lambda nc: nc[1]().property.parent is None, graph):
+        for n, c in filter(lambda nc: nc[1]().prop.parent is None, graph):
             self.serialize_to(c().name, c, result)
 
         return result
@@ -447,7 +447,7 @@ class SerializationContext:
 
             if ns.be_singular:
                 # Alternative value given to aggregation function may be returned instead of node.
-                value = self._serialize_node(container().property, agg, serializer) if isinstance(agg, Node) else agg
+                value = self._serialize_node(container().prop, agg, serializer) if isinstance(agg, Node) else agg
 
                 if ns.be_merged:
                     if not isinstance(value, dict):
@@ -460,7 +460,7 @@ class SerializationContext:
                 if ns.be_merged:
                     raise ValueError(f"Merging to parent dict requires folding.")
 
-                parent[ns.namer(name)] = [self._serialize_node(container().property, n, serializer) for n in agg]
+                parent[ns.namer(name)] = [self._serialize_node(container().prop, n, serializer) for n in agg]
 
     def _serialize_node(self, prop, node, serializer):
         value = serializer(self, node, chain_serializers(self.finder(prop.kind)), node.entity)

@@ -7,10 +7,12 @@ pyracmon API documentation
 ====================================
 
 .. toctree::
+   :glob:
    :maxdepth: 4
    :caption: Contents:
 
-   install
+   tutorial
+   guide
    modules
 
 

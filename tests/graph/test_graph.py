@@ -330,7 +330,7 @@ class TestNodeContainer:
     def test_append_child_p2_partial(self, policy):
         ca, cb, nas, nbs = self._prepare(policy)
 
-        nn = Node(cb.property, 12, 12, 6)
+        nn = Node(cb.prop, 12, 12, 6)
         nas[0].add_child(nn)
         cb.nodes.append(nn)
         cb.keys[12] = [6]

@@ -409,7 +409,7 @@ class GraphSchema:
         Serialize graph into a dictionary.
 
         :param graph: A view of a graph.
-        :parma node_params: Parameters passed to `SerializationContext` and used by *serializer*s.
+        :parma node_params: Parameters passed to `SerializationContext` and used by *serializer* s.
         :returns: Serialization result.
         """
         return self.spec.to_dict(graph, node_params, **self.serializers)

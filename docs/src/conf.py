@@ -18,8 +18,8 @@ sys.path.insert(0, '/home/pyracmon')
 # -- Project information -----------------------------------------------------
 
 project = 'pyracmon'
-copyright = '2020, Author'
-author = 'Author'
+copyright = '2021, sozu'
+author = 'sozu'
 
 
 # -- General configuration ---------------------------------------------------

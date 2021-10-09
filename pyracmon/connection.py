@@ -138,7 +138,7 @@ class Statement:
         It's meaningless to use this method except for the debugging purpose.
 
         :param sql: Query template which can contain unified marker.
-        :param args: Indexed parameters of query.
+        :param args: Positional parameters of query.
         :param kwargs: Keyword parameters of query.
         :returns: Formatted query and parameters.
         """
@@ -156,7 +156,7 @@ class Statement:
         Those methods and other methods defined by using DB driver are available as they are.
 
         :param sql: Query template which can contain unified marker.
-        :param args: Indexed parameters of query.
+        :param args: Positional parameters of query.
         :param kwargs: Keyword parameters of query.
         :returns: Cursor object used for the query execution.
         """

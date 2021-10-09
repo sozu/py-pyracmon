@@ -10,7 +10,7 @@ class GraphSpec:
     """
     This class contains the specifications of graph which control various behaviors in the lifecycles of graphs.
 
-    Each instance contains 3 kind of functions; *identifier*, *entity filter* and *serializer*.
+    Each instance contains 3 kind of functions; *identifier*, *entity filter* and *serializer* .
 
     *Identifier* is a function to get a value used for the identification of graph entity. See `Graph` to know how this works.
 
@@ -19,13 +19,13 @@ class GraphSpec:
 
     *Serializer* is a function which converts an entity value into a serializable object,
     whose signature is one of signatures described in `S.each` .
-    In serialization phase, registered *serializer*s are first applied and *serializer* in `NodeSerializer` follows.
+    In serialization phase, registered *serializer* s are first applied and *serializer* in `NodeSerializer` follows.
 
     Any kind of function is bound to a type when added, which will work as a key to determine whether it should be applied to a node.
 
-    :param identifiers: A list of pairs of type and *identifier*.
-    :param entity_filters: A list of pairs of type and *entity_filter*.
-    :param serializers: A list of pairs of type and *serializer*.
+    :param identifiers: A list of pairs of type and *identifier* .
+    :param entity_filters: A list of pairs of type and *entity_filter* .
+    :param serializers: A list of pairs of type and *serializer* .
     """
     def __init__(
         self,
@@ -174,7 +174,7 @@ class GraphSpec:
         >>> )
 
         :param graph: A view of the graph.
-        :param _params_: Parameters passed to `SerializationContext` and used by *serializer*s.
+        :param _params_: Parameters passed to `SerializationContext` and used by *serializer* s.
         :param settings: `NodeSerializer` for each property.
         :returns: Serialization result.
         """

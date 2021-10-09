@@ -34,7 +34,7 @@ class Sql:
 
         Arguments type should be consistent to marker paramstyle, otherwise exception is raised.
 
-        :param args: Indexed parameters.
+        :param args: Positional parameters.
         :param kwargs: Keyed parameters.
         :returns: SQL and parameters available in it.
         """
