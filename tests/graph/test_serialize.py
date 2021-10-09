@@ -1,5 +1,5 @@
 import pytest
-from typing import Generic, TypeVar
+from typing import Generic, TypeVar, List
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
@@ -82,7 +82,7 @@ class TestAggregator:
 
     def test_fold(self):
         ns = NodeSerializer()
-        def agg(vs: [int]) -> int:
+        def agg(vs: List[int]) -> int:
             return vs[2]
         ns.fold(agg)
         a = ns.aggregator
@@ -94,19 +94,19 @@ class TestAggregator:
 
     def test_select(self):
         ns = NodeSerializer()
-        def agg(vs: [int]) -> [int]:
+        def agg(vs: List[int]) -> List[int]:
             return vs[0:2]
         ns.select(agg)
         a = ns.aggregator
         r = a([1, 2, 3])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == [int]
+        assert signature(a).return_annotation == List[int]
         assert r == [1, 2]
 
     def test_invalid_fold(self):
         ns = NodeSerializer()
-        def agg(vs: [int]) -> [int]:
+        def agg(vs: List[int]) -> List[int]:
             return vs[0:2]
 
         with pytest.raises(ValueError):
@@ -114,7 +114,7 @@ class TestAggregator:
 
     def test_invalid_select(self):
         ns = NodeSerializer()
-        def agg(vs: [int]) -> int:
+        def agg(vs: List[int]) -> int:
             return vs[0:2]
 
         with pytest.raises(ValueError):

@@ -2,7 +2,6 @@ import sys
 from typing import Type, get_type_hints, Generic, TypeVar, Any, List, Dict, Tuple, Union
 from inspect import signature, Signature
 from .template import GraphTemplate
-from .spec import GraphSpec
 from .util import chain_serializers, T
 
 
@@ -299,7 +298,7 @@ class GraphSchema:
     :param template: Graph template to serialize.
     :param serializers: `NodeSerializer` s used for the serialization.
     """
-    def __init__(self, spec: GraphSpec, template: GraphTemplate, **serializers: 'NodeSerializer'):
+    def __init__(self, spec: 'GraphSpec', template: GraphTemplate, **serializers: 'NodeSerializer'):
         self.spec = spec
         self.template = template
         self.serializers = serializers

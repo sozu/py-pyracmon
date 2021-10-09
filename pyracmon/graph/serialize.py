@@ -150,7 +150,7 @@ class NodeSerializer:
         """
         #return not isinstance(rt, list)
         rt = signature(self.aggregator).return_annotation
-        return issubgeneric(rt, list)
+        return not issubgeneric(rt, list)
 
     def _set_aggregator(self, aggregator, folds):
         try:
@@ -162,7 +162,7 @@ class NodeSerializer:
             def agg(vs: List[T]) -> (T if folds else List[T]):
                 return aggregator(vs)
             self._aggregator = agg
-        elif isinstance(rt, list) ^ (not folds):
+        elif issubgeneric(rt, list) ^ (not folds):
             raise ValueError(f"Return annotation of function is not valid.")
         else:
             self._aggregator = aggregator

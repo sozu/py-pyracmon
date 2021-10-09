@@ -1,6 +1,6 @@
 from typing import *
 from .identify import neverPolicy
-from .template import sort_properties, GraphTemplate
+from .template import GraphTemplate
 
 
 def new_graph(template: GraphTemplate, *bases: GraphTemplate):
@@ -476,7 +476,7 @@ class Node:
         self.entity = entity
         self.key = key
         self.parents = set()
-        self.children = {c.name: Node.Children(c) for c in prop.children}
+        self.children = {c.name: Node.Children(c) for c in property.children}
         self._index = index
         self._view = None
 

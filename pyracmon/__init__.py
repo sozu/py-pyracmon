@@ -17,7 +17,8 @@ from pyracmon.select import read_row
 from pyracmon.model import define_model, Table, Column
 from pyracmon.model_graph import GraphEntityMixin
 from pyracmon.query import Q, Conditional, where
-from pyracmon.graph import new_graph, GraphSpec, S
+from pyracmon.graph import new_graph, S
+from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.schema import TypedDict, document_type, Typeable, walk_schema, GraphSchema
 
