@@ -66,6 +66,8 @@ class TestReadSchema:
             dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="array_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
         _assert_schema(table_map["v1"], "v1", "comment of v1", [
             dict(name="c11", type=int, pk=False, fk=None, incremental=None, nullable=True, comment="comment of c11 in v1"),
@@ -94,6 +96,8 @@ class TestReadSchema:
             dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="array_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
 
     def test_excludes(self):
@@ -146,6 +150,8 @@ class TestReadSchema:
             dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="array_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
 
 

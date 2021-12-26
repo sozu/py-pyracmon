@@ -69,11 +69,13 @@ class TestQuery:
         q = Q()
         c = q.a("a = %s")
         assert (c.expression, c.params) == ("", [])
+        assert bool(q.a) is False
 
     def test_params(self):
         q = Q(a = 1, b = 2)
         c = q.a("a = %s") & q.b("b = %s")
         assert (c.expression, c.params) == ("(a = %s) AND (b = %s)", [1, 2])
+        assert bool(q.a) is True
 
     def test_partial(self):
         q = Q(a = 1)
@@ -85,15 +87,38 @@ class TestQuery:
         c = (q.a("a = %s") | q.b("b = %s")) & ~q.c("c = %s")
         assert (c.expression, c.params) == ("(a = %s) AND (NOT (c = %s))", [1, 3])
 
-    def test_convert(self):
+    def test_convert_func(self):
         q = Q(a = 1, b = "abc")
         c = q.a("a = %s", lambda x: x * 2) & q.b("b = %s", len)
         assert (c.expression, c.params) == ("(a = %s) AND (b = %s)", [2, 3])
+
+    def test_convert_param(self):
+        q = Q(a = 1, b = "abc")
+        c = q.a("a = %s", 3) & q.b("b = %s", [1,2])
+        assert (c.expression, c.params) == ("(a = %s) AND (b = %s)", [3, 1, 2])
 
     def test_func_expression(self):
         q = Q(a = 1, b = "abc")
         c = q.a(lambda v: f"a{v} = %s") & q.b(lambda v: f"b = {len(v)}", lambda x: [])
         assert (c.expression, c.params) == ("(a1 = %s) AND (b = 3)", [1])
+
+    def test_and(self):
+        q = Q(a = True, b = False)
+        c = q.a & Conditional("a", [1, 2])
+        assert (c.expression, c.params) == ("a", [1, 2])
+        c = q.b & Conditional("b", [1, 2])
+        assert (c.expression, c.params) == ("", [])
+        c = q.c & Conditional("c", [1, 2])
+        assert (c.expression, c.params) == ("", [])
+
+    def test_or(self):
+        q = Q(a = True, b = False)
+        c = q.a | Conditional("a", [1, 2])
+        assert (c.expression, c.params) == ("", [])
+        c = q.b | Conditional("b", [1, 2])
+        assert (c.expression, c.params) == ("b", [1, 2])
+        c = q.c & Conditional("c", [1, 2])
+        assert (c.expression, c.params) == ("", [])
 
 
 class TestQueryComposite:
@@ -154,10 +179,20 @@ class TestQueryMethod:
         c = q.a.eq("a", lambda x: x*2)
         assert (c.expression, c.params) == ("a = $_", [2])
 
+    def test_convert_value(self):
+        q = Q(a = 1)
+        c = q.a.eq("a", 5)
+        assert (c.expression, c.params) == ("a = $_", [5])
+
     def test_convert_list(self):
         q = Q(a = [1, 2, 3])
         c = q.a.in_("a", lambda x: [v*2 for v in x])
         assert (c.expression, c.params) == ("a IN ($_, $_, $_)", [2, 4, 6])
+
+    def test_positional_args(self):
+        q = Q(a = 1)
+        c = q.a.eq("a", _alias_="b")
+        assert (c.expression, c.params) == ("b.a = $_", [1])
 
 
 class TestEq:
@@ -356,6 +391,10 @@ class TestOrderBy:
     def test_empty(self):
         r = order_by({})
         assert r == ""
+
+    def test_defaults(self):
+        r = order_by(dict(a=True, b=False), a=False, c=True)
+        assert r == "ORDER BY a ASC, b DESC, c ASC"
 
 
 class TestRangedBy:

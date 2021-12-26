@@ -7,52 +7,46 @@ from .query import *
 from .util import key_to_index, Qualifier
 
 
-Model = 'Model'
-PKS = Union[Any, Dict[str, Any]]
-Record = Union[Model, Dict[str, Any]]
-
-
 class CRUDMixin(SelectMixin):
     """
-    Default mixin of every model type providing class methods available on all model types.
+    Default mixin providing class methods available on all model types.
 
     Every method takes the DB connection object as its first argument.
 
     Following arguments are shared in some methods. Some of them have variations in their forms which are available commonly in every method.
 
-    .. list-table::
-       :widths: 10 15 50
+    **pks**
 
-       * - name
-         - type
-         - description
-       * - pks
-         - `Dict[str, Any]`
-         - Values of multiple primary keys. Key of ``dict`` corresponds to column name.
-       * - 
-         - `Any`
-         - A value of primary key.
-       * - record
-         - Model type
-         - A model object representing a record. Only existing columns affects the operation.
-       * - 
-         - `Dict[str, Any]`
-         - A ``dict`` where column name is mapped to its value. Only existing columns affects the operation.
-       * - condition
-         - `Conditional`
-         - Query condition to select rows to fetch, update or delete.
-       * - lock
-         - `Any`
-         - Any type of object whose string representation is appended to the end of query.
-       * - qualifier
-         - `Dict[str, Callable[[str], str]]`
-         - Functions to convert query expressions for columns. Each function takes default expression and should return actual expression.
+    - `Dict[str, Any]`
+        - Values of multiple primary keys. Key of `dict` corresponds to column name.
+    - `Any`
+        - A value of primary key. 
 
-    Lock is designed to create locking statement but currently it is simply a string appended to the query.
-    The usage will be changed in future version.
+    **record**
+    
+    - `Model`
+        - A model object representing a record. Only existing columns affects the operation.
+    - `Dict[str, Any]`
+        - A `dict` where column name is mapped to its value. Only existing columns affects the operation.
+
+    **condition**
+
+    - `Conditional`
+        - Query condition to select rows to fetch, update or delete.
+
+    **qualifier**
+
+    - `Dict[str, Callable[[str], str]]`
+        - Functions to convert query expressions for columns. Each function takes default expression and should return actual expression.
+
+    **lock**
+
+    - `Any`
+        - This is reserved argument for locking statement but works just as the postfix of the query currently.
+        - The usage will be changed in future version.
 
     Qualifier is used typically to convert or replace placeholder marker in insert/update query.
-    By default, those queries contain markers like ``insert into t (c1, c2) values (?, ?)`` ( ``Q`` parameter style).
+    By default, those queries contain markers like `insert into t (c1, c2) values (?, ?)` (`Q` parameter style).
     We need sometimes qualify markers to apply DB function, calculation, type cast and so on. This feature enables them like below.
 
     >>> t.insert(db, dict(c1=1, c2=None), dict(c1=lambda x: f"{x}+1", c2=lambda x: "now()"))
@@ -68,9 +62,11 @@ class CRUDMixin(SelectMixin):
         >>> t.count(db, Q.eq(c1=1))
         >>> # SQL: SELECT COUNT(*) FROM t WHERE c1 = 1
 
-        :param db: DB connection.
-        :param condition: Query condition.
-        :returns: The number of rows.
+        Args:
+            db: DB connection.
+            condition: Query condition.
+        Returns:
+            The number of rows.
         """
         wc, wp = where(condition)
         c = db.stmt().execute(f"SELECT COUNT(*) FROM {cls.name}{_spacer(wc)}", *wp)
@@ -84,10 +80,12 @@ class CRUDMixin(SelectMixin):
         >>> t.fetch(db, 1)
         >>> # SQL: SELECT * FROM t WHERE id = 1
 
-        :param db: DB connection.
-        :param pks: Primary key value(s).
-        :param lock: Locking statement.
-        :returns: A model object if exists, otherwise ``None`` .
+        Args:
+            db: DB connection.
+            pks: Primary key value(s).
+            lock: Locking statement.
+        Returns:
+            A model object if exists, otherwise `None`.
         """
         cols, vals = parse_pks(cls, pks)
         cond = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
@@ -113,13 +111,15 @@ class CRUDMixin(SelectMixin):
         >>> t.fetch_where(db, Q.eq(c1=1), dict(c2=True), 10, 5)
         >>> # SQL: SELECT * FROM t WHERE c1 = 1 ORDER BY c2 ASC LIMIT 10 OFFSET 5
 
-        :param db: DB connection.
-        :param condition: Query condition.
-        :param orders: Ordering specification where key is column name and value denotes whether the order is ascending or not.
-        :param limit: Maximum nuber of rows to fetch. If ``None`` , all rows are returned.
-        :param offset: The number of rows to skip.
-        :param lock: Locking statement.
-        :returns: Model objects.
+        Args:
+            db: DB connection.
+            condition: Query condition.
+            orders: Ordering specification where key is column name and value denotes whether the order is ascending or not.
+            limit: Maximum nuber of rows to fetch. If `None`, all rows are returned.
+            offset: The number of rows to skip.
+            lock: Locking statement.
+        Returns:
+            Model objects.
         """
         wc, wp = where(condition)
         rc, rp = ranged_by(limit, offset)
@@ -143,10 +143,12 @@ class CRUDMixin(SelectMixin):
         >>> t.fetch_one(db, Q.eq(c1=1)), 5)
         >>> # SQL: SELECT * FROM t WHERE c1 = 1
 
-        :param db: DB connection.
-        :param condition: Query condition.
-        :param lock: Locking statement.
-        :returns: Model objects If exists, otherwise ``None`` .
+        Args:
+            db: DB connection.
+            condition: Query condition.
+            lock: Locking statement.
+        Returns:
+            Model objects If exists, otherwise `None`.
         """
         rs = cls.fetch_where(db, condition, lock=lock)
 
@@ -168,10 +170,12 @@ class CRUDMixin(SelectMixin):
         >>> t.insert(db, dict(c1=1, c2=2))
         >>> # SQL: INSERT INTO t (c1, c2) VALUES (1, 2)
 
-        :param db: DB connection.
-        :param record: Object contains column values.
-        :param qualifier: Functions qualifying placeholder markers.
-        :returns: Model of inserted record.
+        Args:
+            db: DB connection.
+            record: Object contains column values.
+            qualifier: Functions qualifying placeholder markers.
+        Returns:
+            Model of inserted record.
         """
         record = record if isinstance(record, cls) else cls(**record)
         value_dict = model_values(cls, record)
@@ -191,16 +195,18 @@ class CRUDMixin(SelectMixin):
         """
         Update a record by primary key(s).
 
-        This method only updates columns which are found in ``record`` except for primary key(s).
+        This method only updates columns which are found in `record` except for primary key(s).
 
         >>> t.update(db, 1, dict(c1=1, c2=2))
         >>> # SQL: UPDATE t SET c1 = 1, c2 = 2 WHERE id = 1
 
-        :param db: DB connection.
-        :param pks: Primary key value(s).
-        :param record: Object contains column values.
-        :param qualifier: Functions qualifying placeholder markers.
-        :returns: Whether the record exists and updated.
+        Args:
+            db: DB connection.
+            pks: Primary key value(s).
+            record: Object contains column values.
+            qualifier: Functions qualifying placeholder markers.
+        Returns:
+            Whether the record exists and updated.
         """
         cols, vals = parse_pks(cls, pks)
         return cls.update_where(db, record, Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)]), qualifier) == 1
@@ -220,12 +226,14 @@ class CRUDMixin(SelectMixin):
         >>> t.update(db, dict(c2=2), Q.eq(c1=1))
         >>> # SQL: UPDATE t SET c2 = 2 WHERE c1 = 1
 
-        :param db: DB connection.
-        :param record: Object contains column values.
-        :param condition: Query condition.
-        :param qualifier: Functions qualifying placeholder markers.
-        :param allow_all: If ``False`` , empty condition raises ``ValueError`` .
-        :returns: The number of affected rows.
+        Args:
+            db: DB connection.
+            record: Object contains column values.
+            condition: Query condition.
+            qualifier: Functions qualifying placeholder markers.
+            allow_all: If `False`, empty condition raises `ValueError`.
+        Returns:
+            The number of affected rows.
         """
         value_dict = model_values(cls, record, excludes_pk=True)
         check_columns(cls, value_dict)
@@ -262,9 +270,11 @@ class CRUDMixin(SelectMixin):
         >>> t.delete(db, 1)
         >>> # SQL: DELETE FROM t WHERE id = 1
 
-        :param db: DB connection.
-        :param pks: Primary key value(s).
-        :returns: Whether the record exists and deleted.
+        Args:
+            db: DB connection.
+            pks: Primary key value(s).
+        Returns:
+            Whether the record exists and deleted.
         """
         cols, vals = parse_pks(cls, pks)
         return cls.delete_where(db, Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])) == 1
@@ -277,10 +287,12 @@ class CRUDMixin(SelectMixin):
         >>> t.delete(db, Q.eq(c1=1))
         >>> # SQL: DELETE FROM t WHERE c1 = 1
 
-        :param db: DB connection.
-        :param condition: Query condition.
-        :param allow_all: If ``False`` , empty condition raises ``ValueError`` .
-        :returns: The number of affected rows.
+        Args:
+            db: DB connection.
+            condition: Query condition.
+            allow_all: If `False`, empty condition raises `ValueError`.
+        Returns:
+            The number of affected rows.
         """
         wc, wp = where(condition)
         if wc == "" and not allow_all:
@@ -300,9 +312,11 @@ class CRUDMixin(SelectMixin):
 
         This method should be overridden by another mixin class defined in dialect module.
 
-        :param db: DB connection.
-        :param num: The number of records inserted by the latest query.
-        :returns: List of pairs of column and its values.
+        Args:
+            db: DB connection.
+            num: The number of records inserted by the latest query.
+        Returns:
+            List of pairs of column and its values.
         """
         return []
 

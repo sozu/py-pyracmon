@@ -19,9 +19,11 @@ def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> L
     """
     Collect tables in current database.
 
-    :param excludes: Excluding table names.
-    :param includes: Including table names. If not specified, all tables are collected.
-    :retruns: Tables.
+    Args:
+        excludes: Excluding table names.
+        includes: Including table names. If not specified, all tables are collected.
+    Returns:
+        Table schemas.
     """
     q = Q(excludes = excludes, includes = includes)
 
@@ -192,6 +194,8 @@ def _map_types(t):
         return timedelta
     elif t == "uuid":
         return UUID
+    elif t == "json" or t == "jsonb":
+        return dict
     else:
         return object
 

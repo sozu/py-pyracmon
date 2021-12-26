@@ -2,8 +2,10 @@ import pytest
 import inspect
 from pyracmon.model import Table, Column, Relations, define_model
 from pyracmon.model_graph import *
+from pyracmon.graph.graph import Node
+from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.schema import walk_schema, Typeable, TypedDict, document_type
-from pyracmon.graph.serialize import chain_serializers, S
+from pyracmon.graph.serialize import chain_serializers, S, NodeContextFactory
 
 
 table1 = Table("t1", [
@@ -130,6 +132,12 @@ class TestNull:
 
 
 class TestFK:
+    def _context(self, model):
+        t = GraphTemplate([
+            ("a", type(model), None, None),
+        ])
+        return NodeContextFactory(None, [], {}).begin(Node(t.a, model, None, 0), [])
+
     def test_excludes(self):
         m = define_model(table1, [GraphEntityMixin])
 
@@ -137,7 +145,7 @@ class TestFK:
 
         spec = ConfigurableSpec.create()
 
-        assert chain_serializers(spec.find_serializers(type(v)))(None, None, None, v) == {"c1": 1, "c3": 3}
+        assert chain_serializers(spec.find_serializers(type(v)))(self._context(v)) == {"c1": 1, "c3": 3}
 
     def test_includes(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -147,7 +155,7 @@ class TestFK:
         spec = ConfigurableSpec.create()
         spec.include_fk = True
 
-        assert chain_serializers(spec.find_serializers(type(v)))(None, None, None, v) == {"c1": 1, "c2": 2, "c3": 3}
+        assert chain_serializers(spec.find_serializers(type(v)))(self._context(v)) == {"c1": 1, "c2": 2, "c3": 3}
 
 
 class TestSchema:

@@ -1,6 +1,6 @@
 import pytest
-from pyracmon.graph.graph import Graph
-from pyracmon.graph.serialize import S
+from pyracmon.graph.graph import Graph, Node
+from pyracmon.graph.serialize import S, NodeContextFactory
 from pyracmon.graph.spec import *
 
 
@@ -126,16 +126,6 @@ class TestSerializer:
 
         assert spec.find_serializers(int) == [ser1, ser2]
 
-    def test_node_serializer(self):
-        spec = GraphSpec()
-        spec.add_serializer(dict, S.alter(lambda x: {"x": 1}, ["a", "b"]))
-
-        f = spec.find_serializers(dict)[0]
-        assert f is not None
-
-        r = f(None, None, None, dict(a=1, b=2, c=3))
-        assert r == {"x": 1, "c": 3}
-
 
 class TestNewTemplate:
     def test_new(self):
@@ -210,8 +200,8 @@ class TestToDict:
         spec.add_identifier(int, lambda x:x)
         spec.add_identifier(str, lambda x:x)
         spec.add_entity_filter(int, lambda x:x>0)
-        spec.add_serializer(self.A, lambda x:dict(v=x.v, w=x.w))
-        spec.add_serializer(int, lambda x:dict(i=x))
+        spec.add_serializer(self.A, lambda c:dict(v=c.value.v, w=c.value.w))
+        spec.add_serializer(int, lambda c:dict(i=c.value))
 
         t = spec.new_template(
             a = self.A,
@@ -279,7 +269,7 @@ class TestToDict:
         spec = GraphSpec()
 
         spec.add_identifier(self.A, lambda x:x.v)
-        spec.add_serializer(self.A, lambda x:dict(v=x.v, w=x.w))
+        spec.add_serializer(self.A, lambda c:dict(v=c.value.v, w=c.value.w))
 
         sub = spec.new_template(
             a = self.A,

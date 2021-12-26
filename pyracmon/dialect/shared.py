@@ -23,11 +23,13 @@ class MultiInsertMixin:
         """
         Insert multiple records.
 
-        :param db: DB connection.
-        :param rows: Rows to insert. Each item should be a model object or dictionary of columns and values.
-        :param qualifier: Functions qualifying placeholder markers.
-        :param rows_per_insert: Maximum number of rows to insert in one query execution.
-        :returns: The number of inserted rows.
+        Args:
+            db: DB connection.
+            rows: Rows to insert. Each item should be a model object or dictionary of columns and values.
+            qualifier: Functions qualifying placeholder markers.
+            rows_per_insert: Maximum number of rows to insert in one query execution.
+        Returns:
+            The number of inserted rows.
         """
         if len(rows) == 0:
             return 0

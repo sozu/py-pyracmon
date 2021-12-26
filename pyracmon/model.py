@@ -2,15 +2,23 @@ from collections import OrderedDict
 from typing import *
 
 
+class Model:
+    """
+    Base type of model types.
+
+    This class only works as a marker of model types and gives no functionalities to them.
+    """
+    pass
+
+
 class ForeignKey:
     """
     This class represents a foreign key constraint.
-
-    :param table: Referenced table model, table name is set alternatively when the table is not modelled.
-    :param column: Referenced column model, column name is set alternatively when the column is not modelled.
     """
     def __init__(self, table: Union['Table', str], column: Union[str, 'Column']) -> None:
+        #: Referenced table model, table name is set alternatively when the table is not modelled.
         self.table = table
+        #: Referenced column model, column name is set alternatively when the column is not modelled.
         self.column = column
 
 
@@ -19,13 +27,15 @@ class Relations:
     This class represents foreign key constraints on a column.
     """
     def __init__(self) -> None:
+        #: Foreign key constraints on a column.
         self.constraints = []
 
     def add(self, fk: ForeignKey):
         """
-        Adds another constraint.
+        Adds a constraint.
 
-        :param fk: Foreign key constraint.
+        Args:
+            fk: Foreign key constraint.
         """
         self.constraints.append(fk)
 
@@ -33,15 +43,6 @@ class Relations:
 class Column:
     """
     This class represents a schema of a column.
-
-    :param name: Column name.
-    :param ptype: Data type in python.
-    :param type_info: Type informations obtained from DB.
-    :param pk: Is this column a primary key?
-    :param fk: An informative object if this column is a foreign key, otherwise a value evaluated as `False` in boolean context.
-    :param incremental: If this column is auto-incremental, this object contains the information of the feature, otherwise, None.
-    :param nullable: Can this column contain null?
-    :param comment: Comment of the column.
     """
     def __init__(
         self,
@@ -54,35 +55,44 @@ class Column:
         nullable: bool,
         comment: str = "",
     ):
+        #: Column name.
         self.name = name
+        #: Data type in python.
         self.ptype = ptype
+        #: Type informations obtained from DB.
         self.type_info = type_info
+        #: Is this column a primary key?
         self.pk = pk
+        #: Foreign key constraints.
         self.fk = fk
+        #: If this column is auto-incremental, this object contains the information of the feature, otherwise, `None`.
         self.incremental = incremental
+        #: Can this column contain null?
         self.nullable = nullable
+        #: Comment of the column.
         self.comment = comment
 
 
 class Table:
     """
     This class represents a schema of a table.
-
-    :param name: Table name.
-    :param columns: Columns in the table.
-    :param comment: Comment of the table.
     """
     def __init__(self, name: str, columns: List[Column], comment: str = ""):
+        #: Table name.
         self.name = name
+        #: Columns in the table.
         self.columns = columns
+        #: Comment of the table.
         self.comment = comment
 
     def find(self, name: str) -> Optional[Column]:
         """
         Find a column by name.
 
-        :param name: Column name.
-        :returns: The column if exists, otherwise ``None`` .
+        Args:
+            name: Column name.
+        Returns:
+            The column if exists, otherwise `None`.
         """
         return next(filter(lambda c: c.name == name, self.columns), None)
 
@@ -91,34 +101,22 @@ def define_model(table_: Table, mixins: List[type] = []) -> type:
     """
     Create a model type representing a table.
 
-    Model type inherits all types in ``mixins`` in order.
+    Model type inherits all types in `mixins` in order.
     When the same attribute is defined in multiple mixin types, the former overrides the latter.
 
     Every model type has following attributes:
 
-    .. list-table::
-       :widths: 10 15 50
-
-       * - name
-         - type
-         - description
-       * - name
-         - `str`
-         - Name of the table.
-       * - table
-         - `Table`
-         - Table schema.
-       * - columns
-         - `List[Column]`
-         - List of column schemas.
-       * - column
-         - `Any`
-         - An object exposing column schemas by attributes of their names.
+    |name|type|description|
+    |:---|:---|:---|
+    |name|`str`|Name of the table.|
+    |table|`Table`|Table schema.|
+    |columns|`List[Column]`|List of column schemas.|
+    |column|`Any`|An object whose attribute exposes of column schema of its name.|
 
     Model instances are created by passing the constructor keyword arguments holding column names and values.
     The constructor does not require all of columns.
     Omitted columns don't affect predefined operations such as `CRUDMixin.insert` .
-    If ``not null`` constraint exists on the column, it of course denies the insertion.
+    If `not null` constraint exists on the column, it of course denies the insertion.
 
     >>> # CREATE TABLE t1 (col1 int, col2 text, col3 text);
     >>> table = define_model("t1")
@@ -136,9 +134,11 @@ def define_model(table_: Table, mixins: List[type] = []) -> type:
     col2 = a
     col3 = b
 
-    :param table__: Table schema.
-    :param mixin: Mixin types providing class methods to the model type.
-    :returns: Model type.
+    Args:
+        table__: Table schema.
+        mixin: Mixin types providing class methods to the model type.
+    Returns:
+        Model type.
     """
     column_names = {c.name for c in table_.columns}
 
@@ -219,25 +219,19 @@ def define_model(table_: Table, mixins: List[type] = []) -> type:
     return Model
 
 
-def parse_pks(model, pks):
+PKS = Union[Any, Dict[str, Any]]
+Record = Union[Model, Dict[str, Any]]
+
+
+def parse_pks(model: Type[Model], pks: PKS) -> Tuple[List[str], List[Any]]:
     """
     Generates a pair of PK columns names and their values from polymorphic input.
 
-    :meta private:
-
-    Parameters
-    ----------
-    model: type
-        Model class.
-    pks: object | {str: object}
-        A dictionary of PK column name and their values or an object of single PK column.
-
-    Returns
-    -------
-    [str]
-        Names of PK columns.
-    [object]
-        Values of PK columns.
+    Args:
+        model: Model class.
+        pks: A dictionary of PK column name and their values or an object of single PK column.
+    Returns:
+        Names of PK columns and their values.
     """
     if isinstance(pks, dict):
         check_columns(model, pks, lambda c: c.pk, True)
@@ -249,22 +243,20 @@ def parse_pks(model, pks):
         return ([cols[0]], [pks])
 
 
-def check_columns(model, col_map, condition=lambda c: True, requires_all=False):
+def check_columns(
+    model: Type[Model],
+    col_map: Dict[str, Any],
+    condition: Callable[[Column], bool] = lambda c: True,
+    requires_all: bool = False,
+):
     """
     Checks keys of given `dict` match columns selected by a condition from a model.
 
-    :meta private:
-
-    Parameters
-    ----------
-    model: type
-        Model class.
-    col_map: {str: object}
-        Dictionary whose keys are column names.
-    condition: Column -> boolean
-        A Function which selects columns from the model.
-    requires_all: boolean
-        If `True`, `ValueError` raises when the dictionary does not contain keys of all selected columns.
+    Args:
+        model: Model class.
+        col_map: Dictionary whose keys are column names.
+        condition: A Function which selects columns from the model.
+        requires_all: If `True`, `ValueError` raises when the dictionary does not contain keys of all selected columns.
     """
     names = set([c.name for c in model.columns if condition(c)])
     targets = set(col_map.keys())
@@ -274,24 +266,15 @@ def check_columns(model, col_map, condition=lambda c: True, requires_all=False):
         raise ValueError(f"Required columns {names - targets} in '{model.name}' are not found.")
 
 
-def model_values(model, values, excludes_pk=False):
+def model_values(model: Type[Model], values: Record, excludes_pk: bool = False):
     """
     Generates a dictionary whose items are pairs of column name and column value.
 
-    :meta private:
-
-    Parameters
-    ----------
-    model: type
-        Model class.
-    values: dict | Model
-        Dictionary from column name to column value or a model instance.
-    excludes_pk: boolean
-        If `True`, item of PK column is not contained in returned dictionary.
-
-    Returns
-    -------
-    dict
+    Args:
+        model: Model class.
+        values: Dictionary from column name to column value or a model instance.
+        excludes_pk: If `True`, item of PK column is not contained in returned dictionary.
+    Returns:
         A dictionary from column name to column value.
     """
     if isinstance(values, (dict, OrderedDict)):

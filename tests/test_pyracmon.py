@@ -196,8 +196,8 @@ class TestModelGraph:
             x1: document_type(int, "X1")
             x2: str
 
-        def ex(v: m.t2) -> T2:
-            return T2(x1=v.c22*2, x2=f"_{v.c22}_")
+        def ex(cxt) -> T2:
+            return T2(x1=cxt.value.c22*2, x2=f"_{cxt.value.c22}_")
 
         config = default_config().derive()
         config.graph_spec.include_fk = True

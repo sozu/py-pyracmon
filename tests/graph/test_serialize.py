@@ -1,11 +1,13 @@
+from pyracmon.graph.spec import GraphSpec
 import pytest
-from typing import Generic, TypeVar, List
+from typing import Generic, TypeVar, List, get_type_hints
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
 from pyracmon.graph.identify import HierarchicalPolicy
 from pyracmon.graph.serialize import *
-from pyracmon.graph.schema import Typeable, issubgeneric
+from pyracmon.graph.schema import T, Typeable, issubgeneric
+from pyracmon.graph.typing import TypedDict
 
 
 class TestS:
@@ -34,14 +36,14 @@ class TestNamer:
         assert ns.namer("a") == "a"
         assert not ns.be_merged
 
-    def test_str_namer(self):
+    def test_name(self):
         ns = NodeSerializer()
         ns.name("abc")
 
         assert ns.namer("a") == "abc"
         assert not ns.be_merged
 
-    def test_callable_namer(self):
+    def test_merge(self):
         ns = NodeSerializer()
         ns.merge(lambda n: f"__{n}__")
 
@@ -56,29 +58,8 @@ class TestAggregator:
         r = a([1, 2, 3])
 
         assert not ns.be_singular
+        assert signature(a).return_annotation == List[T]
         assert r == [1, 2, 3]
-
-    def test_nosig_fold(self):
-        ns = NodeSerializer()
-        def agg(vs):
-            return vs[2]
-        ns.fold(agg)
-        a = ns.aggregator
-        r = a([1, 2, 3])
-
-        assert ns.be_singular
-        assert r == 3
-
-    def test_nosig_select(self):
-        ns = NodeSerializer()
-        def agg(vs):
-            return vs[0:2]
-        ns.select(agg)
-        a = ns.aggregator
-        r = a([1, 2, 3])
-
-        assert not ns.be_singular
-        assert r == [1, 2]
 
     def test_fold(self):
         ns = NodeSerializer()
@@ -92,6 +73,18 @@ class TestAggregator:
         assert signature(a).return_annotation is int
         assert r == 3
 
+    def test_fold_nosig(self):
+        ns = NodeSerializer()
+        def agg(vs):
+            return vs[2]
+        ns.fold(agg)
+        a = ns.aggregator
+        r = a([1, 2, 3])
+
+        assert ns.be_singular
+        assert signature(a).return_annotation == T
+        assert r == 3
+
     def test_select(self):
         ns = NodeSerializer()
         def agg(vs: List[int]) -> List[int]:
@@ -102,6 +95,18 @@ class TestAggregator:
 
         assert not ns.be_singular
         assert signature(a).return_annotation == List[int]
+        assert r == [1, 2]
+
+    def test_select_nosig(self):
+        ns = NodeSerializer()
+        def agg(vs):
+            return vs[0:2]
+        ns.select(agg)
+        a = ns.aggregator
+        r = a([1, 2, 3])
+
+        assert not ns.be_singular
+        assert signature(a).return_annotation == List[T]
         assert r == [1, 2]
 
     def test_invalid_fold(self):
@@ -148,83 +153,71 @@ class TestAggregator:
         assert a([]) == 100
 
 
-class TestSerializer:
-    def _template(self):
-        return GraphTemplate([
+class TestEach:
+    def _context(self, entity):
+        t = GraphTemplate([
             ("a", int, None, None),
         ])
+        return NodeContextFactory(None, [], {}).begin(Node(t.a, entity, None, 0), [])
 
     def test_no_serializer(self):
-        t = self._template()
-        ns = NodeSerializer()
-        s = ns.serializer
-        r = s(None, Node(t.a, 5, 0, 0).view, None, 5)
+        s = NodeSerializer().serializer
+        r = s(self._context(5))
 
         assert signature(s).return_annotation is Signature.empty
         assert r == 5
 
-    def test_serializer(self):
-        t = self._template()
-        ns = NodeSerializer()
-        ct = 0
-        def f1(v) -> int:
-            nonlocal ct
-            ct += 1
-            return v+1
-        def f2(b, v) -> float:
-            nonlocal ct
-            ct += 1
-            vv = b(v)
-            return vv*1.3
-        def f3(n, b, v) -> str:
-            nonlocal ct
-            ct += 1
-            vv = b(v)
-            return f"{n.entity + vv}"
-        s = ns.each(f1).each(f2).each(f3).serializer
-        r = s(None, Node(t.a, 5, 0, 0), None, 5)
+    def test_serializers(self):
+        def f1(cxt) -> int:
+            return cxt.value+1
+        def f2(cxt) -> float:
+            return cxt.serialize()*1.3
+        def f3(cxt) -> str:
+            return f"{cxt.value + cxt.serialize()}"
+
+        s = NodeSerializer().each(f1).each(f2).each(f3).serializer
+        r = s(self._context(5))
 
         assert signature(s).return_annotation is str
-        assert ct == 3
         assert r == "12.8"
 
     def test_partial_annotation(self):
-        t = self._template()
-        ns = NodeSerializer()
-        def f1(v):
-            return v+1
-        def f2(b, v) -> float:
-            vv = b(v)
+        def f1(cxt):
+            return cxt.value+1
+        def f2(cxt) -> float:
+            vv = cxt.serialize()
             return vv*1.3
-        def f3(n, b, v):
-            vv = b(v)
-            return f"{n.entity + vv}"
-        s = ns.each(f1).each(f2).each(f3).serializer
-        r = s(None, Node(t.a, 5, 0, 0), None, 5)
+        def f3(cxt):
+            vv = cxt.serialize()
+            return f"{cxt.value + vv}"
+
+        s = NodeSerializer().each(f1).each(f2).each(f3).serializer
+        r = s(self._context(5))
 
         assert signature(s).return_annotation is float
         assert r == "12.8"
 
     def test_generic(self):
-        T = TypeVar("T")
-        class G(Generic[T]):
+        X = TypeVar("X")
+        class G(Generic[X]):
             pass
-        t = self._template()
-        ns = NodeSerializer()
-        def f0(v):
-            return v
-        def f1(v) -> int:
-            return v
-        def f2(b, v) -> G[T]:
-            return v
-        def f3(n, b, v) -> G[T]:
-            return v
-        s = ns.each(f0).each(f1).each(f2).each(f3).serializer
+        def f0(cxt):
+            return cxt.value
+        def f1(cxt) -> int:
+            return cxt.value
+        def f2(cxt) -> G[T]:
+            return cxt.value
+        def f3(cxt) -> G[T]:
+            return cxt.value
+
+        s = NodeSerializer().each(f0).each(f1).each(f2).each(f3).serializer
+        r = s(self._context(5))
 
         assert signature(s).return_annotation == G[G[int]]
+        assert r == 5
 
 
-class TestSubGraph:
+class TestSub:
     def _template(self):
         t = GraphTemplate([
             ("a", dict, None, None),
@@ -233,26 +226,26 @@ class TestSubGraph:
             ("d", int, None, None),
         ])
         t.a << [t.d >> t.b, t.c]
-        return t
+
+        u = GraphTemplate([
+            ("a", int, None, None),
+            ("t", t),
+        ])
+
+        return t, u
 
     def test_sub(self):
-        graph = Graph(self._template())
+        t, u = self._template()
 
-        graph.append(a=dict(a0=0, a1=1), b=dict(b0=10, b1=11), c=20, d=30)
-        graph.append(a=dict(a0=2, a1=3), b=dict(b0=12, b1=13), c=21, d=31)
-
-        t = GraphTemplate([
-            ("a", int, None, None),
-            ("t", graph.template),
-        ])
-        ns = NodeSerializer()
-        s = ns.sub(a=S.of(), b=S.of(), c=S.of(), d=S.of()).serializer
-        r = s(
-            SerializationContext({}, lambda t:[]),
-            Node(t.t, graph, None, 0),
-            None,
-            graph,
+        sub = Graph(t).append(
+            a=dict(a0=0, a1=1), b=dict(b0=10, b1=11), c=20, d=30,
+        ).append(
+            a=dict(a0=2, a1=3), b=dict(b0=12, b1=13), c=21, d=31,
         )
+
+        ns = NodeSerializer().sub(a=S.of(), b=S.of(), c=S.of(), d=S.of())
+        s = ns.serializer
+        r = s(NodeContextFactory(None, [], {}).begin(Node(u.t, sub, None, 0), []))
 
         assert ns.be_singular
         assert issubgeneric(signature(s).return_annotation, Typeable)
@@ -260,26 +253,60 @@ class TestSubGraph:
             "a": [
                 {
                     "a0": 0, "a1": 1,
-                    "b": [
-                        {
-                            "b0": 10, "b1": 11,
-                            "d": [30],
-                        },
-                    ],
+                    "b": [{"b0": 10, "b1": 11, "d": [30]}],
                     "c": [20],
                 },
                 {
                     "a0": 2, "a1": 3,
-                    "b": [
-                        {
-                            "b0": 12, "b1": 13,
-                            "d": [31],
-                        },
-                    ],
+                    "b": [{ "b0": 12, "b1": 13, "d": [31]}],
                     "c": [21],
                 },
             ]
         }
+
+
+class TestAlter:
+    class Base(TypedDict):
+        a: int
+        b: int
+        c: int
+        d: int
+        e: int
+    class Gen(TypedDict):
+        g1: int
+        g2: str
+
+    def _context(self, entity):
+        t = GraphTemplate([
+            ("a", str, None, None),
+        ])
+        return NodeContextFactory(None, [], {}).begin(Node(t.a, entity, None, 0), [])
+
+    def test_excludes(self):
+        def f(cxt) -> self.Base:
+            return {c:i for i, c in enumerate(cxt.value)}
+        def gen(cxt) -> self.Gen:
+            return dict(g1=10, g2="def")
+
+        s = NodeSerializer().each(f).alter(gen, ["b", "c"]).serializer
+        r = s(self._context("abcde"))
+
+        assert get_type_hints(Typeable.resolve(signature(s).return_annotation, self.Base, GraphSpec())) \
+            == {"a": int, "d": int, "e": int, "g1": int, "g2": str}
+        assert r == {"a": 0, "d": 3, "e": 4, "g1": 10, "g2": "def"}
+
+    def test_includes(self):
+        def f(cxt) -> self.Base:
+            return {c:i for i, c in enumerate(cxt.value)}
+        def gen(cxt) -> self.Gen:
+            return dict(g1=10, g2="def")
+
+        s = NodeSerializer().each(f).alter(gen, includes=["b", "c", "g2"]).serializer
+        r = s(self._context("abcde"))
+
+        assert get_type_hints(Typeable.resolve(signature(s).return_annotation, self.Base, GraphSpec())) \
+            == {"b": int, "c": int, "g2": str}
+        assert r == {"b": 1, "c": 2, "g2": "def"}
 
 
 class TestContext:
@@ -305,97 +332,77 @@ class TestContext:
 
         return graph.view
 
+    # TODO test_reuse
+
     def test_no_serializer(self):
-        ser_map = dict()
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(), lambda t:[])
+        r = cxt.execute(self._graph())
 
         assert r == {}
 
     def test_default(self):
-        ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(a=S.of(), b=S.of(), c=S.of(), d=S.of()), lambda t:[])
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [0, 1, 2]}
 
     def test_finder(self):
-        ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[lambda v:v*2])
-        cxt.serialize_to("a", self._graph().a, r)
+        finder = lambda t: [lambda cxt: cxt.value*2]
+        cxt = SerializationContext(dict(a=S.of(), b=S.of(), c=S.of(), d=S.of()), finder)
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [0, 2, 4]}
 
-    def test_full_arguments_serializer(self):
-        ser_map = dict(a = S.of(), b = S.of(), c = S.of(), d = S.of())
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[lambda c,n,b,v:v*2])
-        cxt.serialize_to("a", self._graph().a, r)
-
-        assert r == {"a": [0, 2, 4]}
-
-    def test_put_child(self):
-        ser_map = dict(
-            a = S.each(lambda v: {"A": v}),
-            b = S.each(lambda v: {"B": v}),
-            d = S.of(),
-        )
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+    def test_child(self):
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value}),
+            b=S.each(lambda cxt: {"B": cxt.value}),
+            d=S.of(),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [
-            {"A": 0, "b": [
-                {"B": 10, "d": [30, 31]},
-            ]},
-            {"A": 1, "b": [
-                {"B": 11, "d": [30]}, {"B": 12, "d": [30]},
-            ]},
-            {"A": 2, "b": [
-                {"B": 10, "d": [30]}, {"B": 11, "d": [30]},
-            ]},
+            {"A": 0, "b": [{"B": 10, "d": [30, 31]}]},
+            {"A": 1, "b": [{"B": 11, "d": [30]}, {"B": 12, "d": [30]}]},
+            {"A": 2, "b": [{"B": 10, "d": [30]}, {"B": 11, "d": [30]}]},
         ]}
 
-    def test_ignore_child(self):
-        ser_map = dict(
-            a = S.each(lambda v: {"A": v}),
-            d = S.of(),
-        )
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+    def test_child_skipped(self):
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value}),
+            d=S.of(),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [
             {"A": 0}, {"A": 1}, {"A": 2},
         ]}
 
     def test_name(self):
-        ser_map = dict(a = S.name("A"))
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(a=S.name("A")), lambda t:[])
+        r = cxt.execute(self._graph())
 
         assert r == {"A": [0, 1, 2]}
 
-    def test_fold(self):
-        ser_map = dict(a = S.head())
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
-
-        assert r == {"a": 0}
-
     def test_merge(self):
-        ser_map = dict(
-            a = S.each(lambda v: {"A": v}),
-            b = S.head().each(lambda v: {"B": v}).merge(lambda n:f"__{n}__"),
-        )
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value}),
+            b=S.each(lambda cxt: {"B": cxt.value}).merge(),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
+
+        assert r == {"a": [
+            {"A": 0, "B": 10},
+            {"A": 1, "B": 11},
+            {"A": 2, "B": 10},
+        ]}
+
+    def test_merge_named(self):
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value}),
+            b=S.each(lambda cxt: {"B": cxt.value}).merge(lambda n:f"__{n}__"),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [
             {"A": 0, "__B__": 10},
@@ -404,23 +411,33 @@ class TestContext:
         ]}
 
     def test_merge_root(self):
-        ser_map = dict(
-            a = S.merge().each(lambda v: {"a1": v, "a2": v+1}),
-            b = S.head().each(lambda v: {"B": v}).merge(lambda n:f"__{n}__"),
-        )
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"a1": cxt.value, "a2": cxt.value+1}).merge(),
+            b=S.each(lambda cxt: {"B": cxt.value}).merge(lambda n:f"__{n}__"),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
 
         assert r == {
             "a1": 0, "a2": 1, "__B__": 10,
         }
 
+    def test_fold(self):
+        cxt = SerializationContext(dict(a=S.head()), lambda t:[])
+        r = cxt.execute(self._graph())
+
+        assert r == {"a": 0}
+
+    def test_fold_alt(self):
+        cxt = SerializationContext(dict(a=S.head("alt")), lambda t:[])
+        r = cxt.execute(Graph(self._template()).view)
+
+        assert r == {"a": "alt"}
+
     def test_alter_extend(self):
-        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(lambda x: {"D": x*3}))
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value, "B": cxt.value+1, "C": cxt.value+2}).alter(lambda cxt: {"D": cxt.value*3}),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [
             {"A": 0, "B": 1, "C": 2, "D": 0},
@@ -429,10 +446,10 @@ class TestContext:
         ]}
 
     def test_alter_shrink(self):
-        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(excludes=["B"]))
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value, "B": cxt.value+1, "C": cxt.value+2}).alter(excludes=["B"]),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [
             {"A": 0, "C": 2},
@@ -441,10 +458,10 @@ class TestContext:
         ]}
 
     def test_alter_includes(self):
-        ser_map = dict(a = S.each(lambda v: {"A": v, "B": v+1, "C": v+2}).alter(excludes=["B"], includes={"A"}))
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value, "B": cxt.value+1, "C": cxt.value+2}).alter(excludes=["B"], includes=["A"]),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
 
         assert r == {"a": [
             {"A": 0},
@@ -453,14 +470,14 @@ class TestContext:
         ]}
 
     def test_node_params(self):
-        def ser(cxt, n, b, v):
-            return v * cxt[n].v
+        def f(cxt):
+            return cxt.value * cxt.params.v
 
-        ser_map = dict(a = S.each(ser).each(lambda b, v: {"A": b(v)}), c = S.each(ser))
-        cxt = SerializationContext(ser_map, lambda x:[], dict(
-            a = dict(v = 2),
-            b = dict(v = 10),
-            c = dict(v = 3),
+        cxt = SerializationContext(dict(
+            a=S.each(f).each(lambda cxt: {"A": cxt.serialize()}),
+            c=S.each(f)
+        ), lambda t: [], dict(
+            a=dict(v=2), b=dict(v=10), c=dict(v=3),
         ))
         r = cxt.execute(self._graph())
 
@@ -472,45 +489,25 @@ class TestContext:
             ]
         }
 
-    def test_node_params_name(self):
-        def ser(cxt, n, b, v):
-            return v * cxt["b"].v
+    def test_all(self):
+        def f1(cxt):
+            return cxt.value+1
+        def f2(cxt) -> float:
+            vv = cxt.serialize()
+            return vv*cxt.params.v
+        def f3(cxt):
+            vv = cxt.serialize()
+            return f"{cxt.value + vv + cxt.params.w}"
 
-        ser_map = dict(a = S.each(ser).each(lambda b, v: {"A": b(v)}), c = S.each(ser))
-        cxt = SerializationContext(ser_map, lambda x:[], dict(
-            a = dict(v = 2),
-            b = dict(v = 10),
-            c = dict(v = 3),
+        cxt = SerializationContext(dict(
+            a = S.each(lambda c: {"A": c.value}),
+            b = S.name("x").each(lambda c: {"B": c.value}),
+            c = S.each(f1).each(f2).each(f3),
+            d = S.last().merge(lambda n:f"__{n}__").each(lambda c: {"D": c.value}),
+        ), lambda t: [], dict(
+            c=dict(v=2.0, w=3.0),
         ))
         r = cxt.execute(self._graph())
-
-        assert r == {
-            "a": [
-                {"A": 0, "c": [200, 210]},
-                {"A": 10, "c": [200]},
-                {"A": 20, "c": [200, 210]},
-            ]
-        }
-
-    def test_all(self):
-        def f1(v):
-            return v+1
-        def f2(b, v) -> float:
-            vv = b(v)
-            return vv*2.0
-        def f3(n, b, v):
-            vv = b(v)
-            return f"{n.entity + vv}"
-
-        ser_map = dict(
-            a = S.each(lambda v: {"A": v}),
-            b = S.name("x").each(lambda v: {"B": v}),
-            c = S.each(f1).each(f2).each(f3),
-            d = S.last().merge(lambda n:f"__{n}__").each(lambda v: {"D": v}),
-        )
-        r = {}
-        cxt = SerializationContext(ser_map, lambda x:[])
-        cxt.serialize_to("a", self._graph().a, r)
 
         assert r == {"a": [
             {
@@ -518,7 +515,7 @@ class TestContext:
                 "x": [
                     {"B": 10, "__D__": 31},
                 ],
-                "c": ["62.0", "65.0"],
+                "c": ["65.0", "68.0"],
             },
             {
                 "A": 1,
@@ -526,7 +523,7 @@ class TestContext:
                     {"B": 11, "__D__": 30},
                     {"B": 12, "__D__": 30},
                 ],
-                "c": ["62.0"],
+                "c": ["65.0"],
             },
             {
                 "A": 2,
@@ -534,6 +531,6 @@ class TestContext:
                     {"B": 10, "__D__": 30},
                     {"B": 11, "__D__": 30},
                 ],
-                "c": ["62.0", "65.0"],
+                "c": ["65.0", "68.0"],
             },
         ]}

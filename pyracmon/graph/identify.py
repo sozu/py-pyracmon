@@ -6,18 +6,19 @@ class IdentifyPolicy:
     Provides entity identification functionalities used during appending entities to a graph.
 
     Identification mechanism is based on the equality of identification keys extracted by entities.
-
-    :param identifier: A function to extract the identification key from an entity.
     """
     def __init__(self, identifier: Callable[[Any], Any]):
+        #: A function to extract the identification key from an entity.
         self.identifier = identifier
 
     def get_identifier(self, value: Any) -> Any:
         """
         Returns identification key from an entity.
 
-        :param value: An entity.
-        :returns: Identification key.
+        Args:
+            value: An entity.
+        Returns:
+            Identification key.
         """
         return self.identifier(value) if self.identifier else None
 
@@ -32,11 +33,13 @@ class IdentifyPolicy:
 
         This method is called during appending an entity to a graph.
 
-        :param prop: Template property for new entity.
-        :param candidates: Nodes having the same identification key as the key of new entity.
-        :param ancestors: Parent nodes mapped by property names.
-        :returns: The first item is a list of Parent nodes which the node of new entity should be appended newly.
-            ``None`` means to append a new node without parent. The second item is a list of identical nodes,
+        Args:
+            prop: Template property for new entity.
+            candidates: Nodes having the same identification key as the key of new entity.
+            ancestors: Parent nodes mapped by property names.
+        Returns
+            The first item is a list of Parent nodes which the node of new entity should be appended newly.
+            `None` means to append a new node without parent. The second item is a list of identical nodes,
             which will be merged into ancestors and used in subsequent identifications of child entities.
         """
         raise NotImplementedError()

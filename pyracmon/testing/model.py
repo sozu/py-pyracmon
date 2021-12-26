@@ -4,14 +4,13 @@ from enum import Enum
 from uuid import UUID, uuid1, uuid3
 from typing import *
 
+from pyracmon.config import PyracmonConfiguration
 from pyracmon.connection import Connection
+from pyracmon.model import Model
 from .util import Matcher, testing_config
 
 
 class TestingState:
-    """
-    :meta private:
-    """
     indexes = {}
 
     @classmethod
@@ -38,8 +37,10 @@ class TestingMixin:
         """
         Set current fixture index.
 
-        :param index: Fixture index.
-        :returns: This type.
+        Args:
+            index: Fixture index.
+        Returns:
+            This type.
         """
         TestingState.set_index(cls, index)
         return cls
@@ -48,22 +49,22 @@ class TestingMixin:
     def fixture(
         cls,
         db: Connection,
-        variable: Optional[Union[int, Dict[str, Any], 'Model', List[Dict[str, Any]], List['Model']]] = None,
+        variable: Optional[Union[int, Dict[str, Any], Model, List[Dict[str, Any]], List[Model]]] = None,
         index: Optional[int] = None,
-        cfg: Optional['PyracmonConfiguration'] = None,
-    ) -> Union['Model', List['Model']]:
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> Union[Model, List[Model]]:
         """
         Inserts record(s) with auto-generated column values.
 
-        Parameters
-        ----------
-        :param db: DB connection. If a value evaluated to be `False` in boolean context, generated model is not inserted and just returned.
-        :param variable: When `int`, inserts records as many as the number. All of their column values are generated.
-            When `dict`, model object or a list of them, inserts record(s) represented by them. Unspecified column values are generated.
-        :param index: Use this to specify index used to generate column values explicitly. If set, indexing state is not updated.
-        :param cfg: Configuration used to control the generation of fixuture values.
-            This argument is prepared only for internal use and can be changed or removed in future version.
-        :returns: Inserted model(s).
+        Args:
+            db: DB connection. If a value evaluated to be `False` in boolean context, generated model is not inserted and just returned.
+            variable: When `int`, inserts records as many as the number. All of their column values are generated.
+                When `dict`, model object or a list of them, inserts record(s) represented by them. Unspecified column values are generated.
+            index: Use this to specify index used to generate column values explicitly. If set, indexing state is not updated.
+            cfg: Configuration used to control the generation of fixuture values.
+                This argument is prepared only for internal use and can be changed or removed in future version.
+        Returns:
+            Inserted model(s).
         """
         if variable is None or isinstance(variable, int):
             num = variable or 1
@@ -93,10 +94,13 @@ class TestingMixin:
         """
         Tests columns values matches to expected values.
 
-        :param expected: Expected values.
-        :returns: Matches or not.
+        .. warning::
+            This method will be replaced in different implementation.
 
-        :meta private:
+        Args:
+            expected: Expected values.
+        Returns
+            Matches or not.
         """
         for k, v in expected.items():
             actual = getattr(self, k)
@@ -130,18 +134,11 @@ def _generate_value(table, column, index, cfg):
     """
     Generates a value for the column on an index.
 
-    Parameters
-    ----------
-    table: Table
-        Table.
-    column: Column
-        Column.
-    index: int
-        Index
-
-    Returns
-    -------
-    object
+    Args:
+        table: Table.
+        column: Column.
+        index: Index
+    Returns:
         Generated value.
     """
     cfg = cfg or testing_config()

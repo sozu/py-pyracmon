@@ -85,7 +85,9 @@ CREATE TABLE types (
     enum_ t_enum,
     record_ t_record,
     array_ integer[],
-    deeparray_ integer[][]
+    deeparray_ integer[][],
+    json_ json,
+    jsonb_ jsonb
 );
 
 CREATE MATERIALIZED VIEW mv2 AS SELECT * FROM types;

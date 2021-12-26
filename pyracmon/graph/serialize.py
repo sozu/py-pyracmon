@@ -1,9 +1,10 @@
 from inspect import signature, Signature
+from itertools import chain
 from typing import *
 from .template import GraphTemplate
-from .graph import Node, NodeContainer
-from .schema import Shrink, Extend, T, TypedDict, Typeable, GraphSchema, issubgeneric
-from .util import Serializer, chain_serializers, wrap_serializer
+from .graph import Node, NodeContainer, GraphView
+from .schema import Shrink, Extend, T, Typeable, GraphSchema, issubgeneric
+from .util import Serializer, chain_serializers
 
 
 class S:
@@ -87,6 +88,7 @@ class NodeSerializer:
         self._aggregator = aggregator
         self._serializers = list(serializers)
         self._doc = ""
+        self._doc_options = {}
 
     @property
     def namer(self) -> Callable[[str], str]:
@@ -103,7 +105,7 @@ class NodeSerializer:
             return lambda n: self._namer(n)
 
     @property
-    def aggregator(self) -> Union[Callable[[Node], Node], Callable[[Node], List[Node]]]:
+    def aggregator(self) -> Callable[[List[Node]], Union[List[Node], Node, Any]]:
         """
         Returns aggregation function which selects node(s) from nodes in the container.
 
@@ -148,7 +150,6 @@ class NodeSerializer:
 
         :getter: ``True`` if converted value will be a singular object. ``False`` means that it will be a list.
         """
-        #return not isinstance(rt, list)
         rt = signature(self.aggregator).return_annotation
         return not issubgeneric(rt, list)
 
@@ -173,7 +174,7 @@ class NodeSerializer:
     # Documentation
     #----------------------------------------------------------------
     @S.builder
-    def doc(self, document: str) -> 'NodeSerializer':
+    def doc(self, document: str, **options: Any) -> 'NodeSerializer':
         """
         Set the documentation for this node.
 
@@ -181,6 +182,7 @@ class NodeSerializer:
         :returns: This instance.
         """
         self._doc = document
+        self._doc_options = options
         return self
 
     #----------------------------------------------------------------
@@ -200,7 +202,7 @@ class NodeSerializer:
         return self
 
     @S.builder
-    def merge(self, namer: Optional[Union[str, Callable[[str], str]]] = None) -> 'NodeSerializer':
+    def merge(self, namer: Optional[Callable[[str], str]] = None) -> 'NodeSerializer':
         """
         Set a naming function taking a property name and returning a key in parent `dict`.
 
@@ -254,9 +256,9 @@ class NodeSerializer:
         return self.fold(lambda vs: vs[-1] if len(vs) > 0 else alt)
 
     @S.builder
-    def fold(self, aggregator: Callable[[List[Node]], Node]) -> 'NodeSerializer':
+    def fold(self, aggregator: Callable[[List[Node]], Any]) -> 'NodeSerializer':
         """
-        Set an aggregation function converting a list of nodes into a single node.
+        Set an aggregation function converting a list of nodes into a single node or any value.
 
         :param aggregator: An aggregation function.
         :returns: This instance.
@@ -317,9 +319,10 @@ class NodeSerializer:
             def resolve(sub_graph, bound, arg, spec):
                 return GraphSchema(spec, arg.template, **sub_graph.serializers).schema
 
-        def to_dict(c, n, b, v) -> SubGraph[T]:
-            vv = b(v)
-            return SerializationContext(settings, c.finder).execute(vv.view)
+        def to_dict(cxt) -> SubGraph[T]:
+            vv = cxt.serialize()
+            return SerializationContext(settings, cxt.context.finder if cxt.context else lambda t: []).execute(vv.view)
+
         self._serializers.append(to_dict)
         return self.head()
 
@@ -353,14 +356,70 @@ class NodeSerializer:
             def select(cls, td, bound):
                 return excludes, includes
 
-        def convert(c, n, b, v) -> EachShrink[EachExtend[T]]:
-            ext = wrap_serializer(generator)(c, n, b, v) if generator else {}
-            vv = b(v)
+        def convert(cxt) -> EachShrink[EachExtend[T]]:
+            ext = generator(cxt) if generator else {}
+            vv = cxt.serialize()
             vv.update(**ext)
             return {k:v for k, v in vv.items() if (not includes or k in includes) and k not in excludes}
 
         self._serializers.append(convert)
         return self
+
+
+class NodeParams:
+    def __init__(self, params) -> None:
+        self.params = params
+
+    def __getattr__(self, key) -> Optional[Any]:
+        return self.params.get(key, None)
+
+
+class NodeContext:
+    def __init__(self, context: 'SerializationContext', params: NodeParams) -> None:
+        self._context = context
+        self._node = None
+        self._iterator = None
+        self.params = params
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self._node = None
+        self._iterator = None
+
+    @property
+    def context(self) -> Optional['SerializationContext']:
+        return self._context
+
+    @property
+    def node(self) -> Node:
+        return self._node
+
+    @property
+    def value(self) -> Any:
+        return self._node.entity
+
+    def serialize(self) -> Any:
+        try:
+            return next(self._iterator)(self)
+        except StopIteration:
+            return self.node.entity
+
+
+class NodeContextFactory:
+    def __init__(self, context: 'SerializationContext', serializers, params: Dict[str, Any]) -> None:
+        self.serializers = serializers
+        self.node_context = NodeContext(context, NodeParams(params))
+
+    @property
+    def base_serializers(self):
+        return self.serializers
+
+    def begin(self, node, serializers):
+        self.node_context._node = node
+        self.node_context._iterator = iter((self.base_serializers + serializers)[::-1])
+        return self.node_context
 
 
 class SerializationContext:
@@ -393,6 +452,7 @@ class SerializationContext:
         self.serializer_map = {n:self._to_serializer(s) for n, s in settings.items()}
         self.finder = finder
         self.node_params = node_params or {}
+        self.context_factories = {}
 
     def __getitem__(self, node: Union[Node, str]) -> Any:
         """
@@ -416,7 +476,7 @@ class SerializationContext:
         else:
             return S.of(*s)
 
-    def execute(self, graph: 'GraphView') -> Dict[str, Any]:
+    def execute(self, graph: GraphView) -> Dict[str, Any]:
         """
         Serializes a graph.
 
@@ -443,11 +503,9 @@ class SerializationContext:
         if ns:
             agg = ns.aggregator(container().nodes)
 
-            serializer = ns.serializer
-
             if ns.be_singular:
                 # Alternative value given to aggregation function may be returned instead of node.
-                value = self._serialize_node(container().prop, agg, serializer) if isinstance(agg, Node) else agg
+                value = self._serialize_node(agg, ns) if isinstance(agg, Node) else agg
 
                 if ns.be_merged:
                     if not isinstance(value, dict):
@@ -460,13 +518,23 @@ class SerializationContext:
                 if ns.be_merged:
                     raise ValueError(f"Merging to parent dict requires folding.")
 
-                parent[ns.namer(name)] = [self._serialize_node(container().prop, n, serializer) for n in agg]
+                parent[ns.namer(name)] = [self._serialize_node(n, ns) for n in agg]
 
-    def _serialize_node(self, prop, node, serializer):
-        value = serializer(self, node, chain_serializers(self.finder(prop.kind)), node.entity)
+    def _serialize_node(self, node, node_serializer):
+        if not node.prop.name in self.context_factories:
+            self.context_factories[node.prop.name] = NodeContextFactory(
+                self,
+                self.finder(node.prop.kind),
+                self.node_params.get(node.prop.name, {}),
+            )
 
-        if isinstance(value, dict):
-            for n, ch in node.children.items():
-                self.serialize_to(n, ch.view, value)
+        factory = self.context_factories[node.prop.name]
 
-        return value
+        with factory.begin(node, node_serializer._serializers) as cxt:
+            value = cxt.serialize()
+
+            if isinstance(value, dict):
+                for n, ch in node.children.items():
+                    self.serialize_to(n, ch.view, value)
+
+            return value

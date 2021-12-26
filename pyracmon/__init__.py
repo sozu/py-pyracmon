@@ -1,7 +1,5 @@
 """
-Base module of pyracmon exporting commonly used objects.
-
-For simple use of the library, this module is designed to be imported Using ``*`` .
+Base module of pyracmon exporting commonly used objects.  Use `*` simply to import them.
 
 >>> from pyracmon import *
 """
@@ -14,10 +12,11 @@ from pyracmon.context import ConnectionContext
 from pyracmon.graph.serialize import NodeSerializer
 from pyracmon.mixin import CRUDMixin
 from pyracmon.select import read_row
-from pyracmon.model import define_model, Table, Column
+from pyracmon.model import define_model, Table, Column, Model
 from pyracmon.model_graph import GraphEntityMixin
-from pyracmon.query import Q, Conditional, where
+from pyracmon.query import Q, Expression, Conditional, escape_like, where, order_by, ranged_by
 from pyracmon.graph import new_graph, S
+from pyracmon.graph.graph import Graph, GraphView, NodeContainer, ContainerView, Node, NodeView, NodeChildrenView
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.schema import TypedDict, document_type, Typeable, walk_schema, GraphSchema
@@ -34,15 +33,27 @@ __all__ = [
     "Table",
     "Column",
     "Q",
+    "Expression",
     "Conditional",
     "where",
+    "escape_like",
+    "order_by",
+    "ranged_by",
     "new_graph",
     "S",
+    "Graph",
+    "GraphView",
+    "NodeContainer",
+    "ContainerView",
+    "Node",
+    "NodeView",
+    "NodeChildrenView",
     "TypedDict",
     "document_type",
     "Typeable",
     "walk_schema",
     "GraphSchema",
+    "Model",
     "declare_models",
     "graph_template",
     "graph_dict",
@@ -57,23 +68,25 @@ def declare_models(
     mixins: List[type] = [],
     excludes: List[str] = None,
     includes: List[str] = None,
-) -> List[Type['Model']]:
+) -> List[Type[Model]]:
     """
-    Declare model types read from database in the specified module.
+    Declare model types read from database into the specified module.
 
-    :param dialect: A module exporting ``read_schema`` function and ``mixins`` classes.
-        `pyracmon.dialect.postgresql` and `pyracmon.dialect.mysql` are available.
-    :param db: Connection already connected to database.
-    :param module: A module or module name where the declarations are located.
-    :param mixins: Additional mixin classes for declaring model types.
-    :param excludes: Excluding table names.
-    :param includes: Including table names. When this argument is omitted, all tables except for specified in `excludes` are declared.
-    :returns: Declared model types.
+    Args:
+        dialect: A module exporting `read_schema` function and `mixins` classes.
+            `pyracmon.dialect.postgresql` and `pyracmon.dialect.mysql` are available.
+        db: Connection already connected to database.
+        module: A module or module name where the declarations are located.
+        mixins: Additional mixin classes for declaring model types.
+        excludes: Excluding table names.
+        includes: Including table names. When this argument is omitted, all tables except for specified in `excludes` are declared.
+    Returns:
+        Declared model types.
     """
     tables = dialect.read_schema(db, excludes, includes)
     models = []
     for t in tables:
-        m = define_model(t, mixins + dialect.mixins + [CRUDMixin, GraphEntityMixin])
+        m = define_model(t, mixins + dialect.mixins + [CRUDMixin, GraphEntityMixin, Model])
         if isinstance(module, types.ModuleType):
             module.__dict__[t.name] = m
         else:
@@ -88,22 +101,26 @@ def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
 
     See `pyracmon.graph.GraphSpec.new_template` for the detail of definitions.
 
-    :param bases: Base templates whose properties and relations are merged into new template.
-    :param definitions: Definitions of template properties.
-    :returns: Graph template.
+    Args:
+        bases: Base templates whose properties and relations are merged into new template.
+        definitions: Definitions of template properties.
+    Returns:
+        Graph template.
     """
     return default_config().graph_spec.new_template(*bases, **definitions)
 
 
-def graph_dict(graph: 'GraphView', **settings: NodeSerializer) -> Dict[str, Any]:
+def graph_dict(graph: GraphView, **settings: NodeSerializer) -> Dict[str, Any]:
     """
     Serialize a graph into a `dict` under the default specification.
 
     See `pyracmon.graph.GraphSpec.to_dict` for the detail of serialization settings.
 
-    :param graph: A view of the graph.
-    :param settings: Serialization settings.
-    :returns: Serialization result.
+    Args:
+        graph: A view of the graph.
+        settings: Serialization settings.
+    Returns:
+        Serialization result.
     """
     return default_config().graph_spec.to_dict(graph, **settings)
 
@@ -115,10 +132,12 @@ def graph_schema(template: GraphTemplate, **settings: NodeSerializer) -> GraphSc
     `GraphSchema` represents the structure of `dict` serialized a graph of the template with given serialization settings.
     Use this, for example, to document REST API which responds serialized graph in JSON format. 
 
-    See `pyracmon.graph.GraphSpec.to_dict` for the detail of serialization settings.
+    See `pyracmon.graph.GraphSpec.to_schema` for the detail of serialization settings.
 
-    :param template: A template of serializing graph.
-    :param settings: Serialization settings.
-    :returns: Schema of serialization result.
+    Args:
+        template: A template of serializing graph.
+        settings: Serialization settings.
+    Returns:
+        Schema of serialization result.
     """
     return default_config().graph_spec.to_schema(template, **settings)

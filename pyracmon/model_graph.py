@@ -6,11 +6,13 @@ Most of them are not used directly except for `ConfigurableSpec` which is a conf
 from typing import *
 from itertools import takewhile
 import inspect
+from .model import Model
 from .util import Configurable
 from .graph.spec import GraphSpec
-from .graph.schema import TypedDict, DynamicType, Shrink, issubgeneric, document_type
+from .graph.schema import DynamicType, Shrink, document_type
 from .graph.serialize import T
-from .graph.util import chain_serializers
+from .graph.typing import TypedDict, issubgeneric
+from .graph.util import Serializer
 
 
 class GraphEntityMixin:
@@ -18,12 +20,14 @@ class GraphEntityMixin:
     Mixin class for model types which enables identity calculation and nullity check.
     """
     @classmethod
-    def identity(cls, model: 'Model') -> Optional[Any]:
+    def identity(cls, model: Model) -> Optional[Any]:
         """
         Returns primary key values as the identity of a model.
 
-        :param model: A model object.
-        :returns: Primary key value(s). ``None`` if the model type does not have primary key(s).
+        Args:
+            model: A model object.
+        Returns:
+            Primary key value(s). `None` if the model type does not have primary key(s).
         """
         pks = [c.name for c in cls.columns if c.pk]
         if len(pks) > 0 and all([hasattr(model, n) and getattr(model, n) is not None for n in pks]):
@@ -32,19 +36,21 @@ class GraphEntityMixin:
             return None
 
     @classmethod
-    def is_null(cls, model: 'Model') -> bool:
+    def is_null(cls, model: Model) -> bool:
         """
         Checks the model is considered to be null.
 
-        :param model: A model object.
-        :returns: Whether all column values are ``None`` .
+        Args:
+            model: A model object.
+        Returns:
+            Whether all column values are `None`.
         """
         return all([getattr(model, c.name, None) is None for c in cls.columns])
 
 
 class ModelSchema(DynamicType[T]):
     """
-    Schema of model type `T` .
+    Schema of model type `T`.
     """
     @classmethod
     def fix(cls, bound, arg):
@@ -71,9 +77,8 @@ class ConfigurableSpec(GraphSpec, Configurable):
     In global configuration, `graph_spec` attribute is an instance of this class,
     thus changes on it changes graph operations on model types.
 
-    .. note:: The implementation of this class is not stable, don't depends on it.
-
-    :param bool include_fk: Determines whether including foreign key columns in the result of graph serialization.
+    .. warning::
+        The implementation of this class is not stable, don't depends on it.
     """
     @classmethod
     def create(cls):
@@ -82,8 +87,8 @@ class ConfigurableSpec(GraphSpec, Configurable):
         spec.add_identifier(GraphEntityMixin, lambda m: type(m).identity(m))
         spec.add_entity_filter(GraphEntityMixin, lambda m: m and not type(m).is_null(m))
 
-        def serialize(model:T) -> ModelSchema[T]:
-            return {c.name:v for c, v in model}
+        def serialize(cxt) -> ModelSchema[T]:
+            return {c.name:v for c, v in cxt.value}
         spec.add_serializer(GraphEntityMixin, serialize)
 
         return spec
@@ -91,6 +96,7 @@ class ConfigurableSpec(GraphSpec, Configurable):
     def __init__(self, *args):
         super(ConfigurableSpec, self).__init__(*args)
 
+        #: A flag which determines whether including foreign key columns in the result of graph serialization.
         self.include_fk = False
 
     def clone(self):
@@ -108,19 +114,19 @@ class ConfigurableSpec(GraphSpec, Configurable):
         self.serializers[:] = another.serializers
         self.include_fk = another.include_fk
 
-    def _model_serializer(self, bases):
+    def _model_serializer(self, bases: Callable[[Model], Any]) -> Serializer:
         """
         Generate configured serializer for model type.
 
-        Parameters
-        ----------
-        bases: [Model -> object]
-            Serialization functions.
+        Args:
+            bases: Serialization functions.
+        Returns:
         """
         if not self.include_fk:
-            def serialize(c, n, b, model:T) -> ExcludeFK[T]:
-                d = {c.name:v for c, v in model if not c.fk}
-                return b(type(model)(**d))
+            def serialize(cxt) -> ExcludeFK[T]:
+                fk = {c.name for c, _ in cxt.value if c.fk}
+                values = cxt.serialize()
+                return {c:v for c, v in values.items() if not c in fk}
 
             pos = next(filter(lambda ib: issubgeneric(inspect.signature(ib[1]).return_annotation, ModelSchema), enumerate(bases)), None)
 
@@ -128,7 +134,7 @@ class ConfigurableSpec(GraphSpec, Configurable):
         else:
             return bases
 
-    def find_serializers(self, t):
+    def find_serializers(self, t) -> Optional[Serializer]:
         bases = super(ConfigurableSpec, self).find_serializers(t)
 
         if issubclass(t, GraphEntityMixin):

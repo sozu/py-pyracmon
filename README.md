@@ -34,18 +34,27 @@ While this library mainly focuses on the use of SQL, not DSL, it exports functio
 
 **Static typing support**
 
-Experimental, TBD.
+This library provides the functionality to get the schema of serialized graph statically. For example in RESTful applications, the schema can be used for documentation of HTTP response. Because the schema reflects flexible change on data structure (ex. adding computed values, removing keys from a dictionary) in serialization phase, it no longer necessary to declare a type only to represent response structure. Note that the state of this functionality is still unstable becasue static typing support of python is changing frequently.
 
 **Testing support**
 
-Experimental, TBD.
+Experimental.
+
+Testing DB operations is an important but difficult task. `pyracmon.testing` provides interfaces to reduce the difficulty. One of them is the generation of fixture by minimal declaration of column values. Feeding values only on columns in interest generates rows by complementing other columns with automatically generated values. Others are in experimental stage and will be changed or removed in future version.
 
 ## Prerequisite
 
-- Python >= 3.6
-- Supporting DBMS
-    - MySQL >= 8.0
-    - PostgreSQL >= 10
+Pyracmon requires python 3.6 or higher.
+
+Static typing functionalities are highly affected by python version.
+Because of frequent update of python `typing` package, syntax assumed in this library might already have got deprecated.
+Those functionalities will be left not completely conforming to specifications of the package while they are unstable.
+
+Currently supported DBMS are PostgreSQL (>= 10.0) and MySQL (>= 8.0).
+
+Although pyracmon does not require any libraries for use by itself, it needs DB driver which conforms to DB-API 2.0.
+[psycopg2](https://pypi.org/project/psycopg2/) (for PostgreSQL) and [PyMySQL](https://pypi.org/project/PyMySQL/)_ are used in development.
+Use them or some other library and tell it to pyracmon via `pyracmon.declare_models`.
 
 ## Installation
 
@@ -422,7 +431,36 @@ result = graph_dict(
 
 ### Static typing
 
-TBD.
+The schema of graph serialization can be obtained via `graph_schema()`. Its signature is similar to `graph_dict()` except for that the first argument is `GraphTemplate` instead of `GraphView`, which means the schema is generated statically.
+
+```
+from pyracmon import S, graph_schema
+
+schema = graph_schema(
+    t,
+    blogs = S.of(),
+    recent_posts = S.name("posts"),
+    total_posts = S.head(),
+    categories = S.of(),
+    images = S.each(add_thumbnail),
+    recent_comments = S.name("comments"),
+    most_liked_comment = S.head(),
+    total_comments = S.head(),
+    total = S.head(),
+)
+```
+
+Returned value is an instance of `GraphSchema` which exposes `schema` attribute. It is an instance of `TypedDict` which is similar implementation of `typing.TypedDict` introduced in python3.8. `TypedDict` represents a key-value data with types of values specified by type annotations. `walk_schema` returns the structure in the form of `dict`.
+
+```
+>>> from pyracmon.graph.schema import walk_schema
+>>> 
+>>> walk_schema(schema, True)
+```
+
+The second argument denotes whether the result contains a documentation of each item which is given by `S.doc()`. Note that each column of *model types* uses its comment as the document. DBMS such as PostgreSQL provides a way to set a comment on each column and it will be used in the documentation automatically. This feature shows the *DB first* principle.
+
+You can use the schema as you like, for example, `swagger` is a good solution to describe it. The conversion into a commonly defined format is not the role of this library.
 
 ### Testing
 

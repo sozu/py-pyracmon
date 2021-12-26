@@ -1,0 +1,10 @@
+FROM python:3.6-alpine
+ENV PYTHONUNBUFFERED 1
+RUN mkdir /home/pyracmon
+ADD requirements.txt /tmp
+RUN apk add --no-cache alpine-sdk postgresql-dev && \
+    pip3 install --upgrade pip && \
+    pip3 install setuptools wheel && \
+    pip3 install -r /tmp/requirements.txt && \
+    apk del --purge alpine-sdk
+WORKDIR /home/pyracmon

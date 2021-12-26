@@ -3,22 +3,8 @@ from .identify import neverPolicy
 from .template import GraphTemplate
 
 
-def new_graph(template: GraphTemplate, *bases: GraphTemplate):
-    """
-    Create a graph from a template.
-
-    Use this function instead of invoking constructor directly.
-
-    :param template: A template of a graph.
-    :param bases: Other graphs whose nodes are appended to created graph.
-    :returns: Created graph.
-    """
-    graph = Graph(template)
-
-    for b in bases:
-        graph += b
-
-    return graph
+class GraphView:
+    pass
 
 
 class Graph:
@@ -51,22 +37,21 @@ class Graph:
 
     >>> graph.append(a=1, b="a", c="z").append(a=2, b="c", c="y")
 
-    In the first `append`, ``a`` and ``b`` has its *identical* node and ``a`` is *identical* in the second.
-    ``c`` in the second one is not *identical* to any node because parent node ``b="c"`` is added as new node.
+    In the first `append`, `a` and `b` has its *identical* node and `a` is *identical* in the second.
+    `c` in the second one is not *identical* to any node because parent node `b="c"` is added as new node.
 
     Due to the identification mechanism, repeatin `append` is sufficient to reconstruct entity relationships in the graph.
-
-    :param template: Graph template.
-    :param Dict[str, NodeContainer] containers: Node containers mapped by their names.
     """
     def __init__(self, template: GraphTemplate):
+        #: Graph template.
         self.template = template
+        #: A `dict` containing node containers by their names.
         self.containers = {p.name:self._to_container(p) for p in template._properties}
         self._view = None
 
     def _to_container(self, prop):
         if isinstance(prop.kind, GraphTemplate):
-            return GraphNodeContainer(prop)
+            return _GraphNodeContainer(prop)
         else:
             return NodeContainer(prop)
 
@@ -76,21 +61,16 @@ class Graph:
             raise ValueError(f"Container can't be determined from property '{prop.name}'.")
         return cands[0] if cands else None
 
-    def __add__(self, another):
+    def __add__(self, another: Union['Graph', GraphView]) -> 'Graph':
         """
         Create new graph by adding this graph and another graph.
 
         New graph has the same template as this graph'S.
         On the other hand, because this method depends on `__iadd__()`, another graph must not have the same template.
 
-        Parameters
-        ----------
-        another: Graph | GraphView
-            Graph or its view.
-
-        Returns
-        -------
-        Graph
+        Args:
+            another: Graph or its view.
+        Returns:
             Created graph.
         """
         graph = Graph(self.template)
@@ -100,21 +80,16 @@ class Graph:
 
         return graph
 
-    def __iadd__(self, another):
+    def __iadd__(self, another: Union['Graph', GraphView]) -> 'Graph':
         """
         Append nodes from another graph.
 
         Templates of this graph and another graph must not be the same.
         Nodes of another graph are traversed from its root and appended to compatible containers each other.
 
-        Parameters
-        ----------
-        another: Graph | GraphView
-            Graph or its view.
-
-        Returns
-        -------
-        Graph
+        Args:
+            another: Graph or its view.
+        Returns:
             This graph.
         """
         another = another if isinstance(another, Graph) else another()
@@ -136,7 +111,7 @@ class Graph:
         return self
 
     @property
-    def view(self) -> 'GraphView':
+    def view(self) -> GraphView:
         """
         Returns an unmodifiable view of this graph.
 
@@ -154,12 +129,10 @@ class Graph:
         >>> assert view() is graph                        # invocation
         >>> assert view.a is graph.containers["a"].view   # attribute
         >>> assert [c().name for c in view] == ["a", "c"] # iteration
-
-        :getter: The view of this graph.
         """
         if self._view is None:
             graph = self
-            class GraphView:
+            class _GraphView:
                 def __call__(self):
                     """Returns the greph of this view."""
                     return graph
@@ -169,7 +142,7 @@ class Graph:
                 def __getattr__(self, name):
                     """Returns a view of a container of the name."""
                     return graph.containers[name].view
-            self._view = GraphView()
+            self._view = _GraphView()
         return self._view
 
     def _append(self, to_replace, entities):
@@ -191,25 +164,46 @@ class Graph:
         """
         Append entities with associated property names.
 
-        :param entities: Entities keyed with associated property names.
-        :returns: This graph.
+        Args:
+            entities: Entities keyed with associated property names.
+        Returns:
+            This graph.
         """
         return self._append(False, entities)
 
     def replace(self, **entities: Any) -> 'Graph':
         """
-        Works similarly to `append` , but entities of identical nodes are replaced with given entities.
+        Works similarly to `append`, but entities of identical nodes are replaced with given entities.
 
-        :param entities: Entities keyed with associated property names.
-        :returns: This graph.
+        Args:
+            entities: Entities keyed with associated property names.
+        Returns:
+            This graph.
         """
         return self._append(True, entities)
 
 
+def new_graph(template: GraphTemplate, *bases: Graph) -> Graph:
+    """
+    Create a graph from a template.
+
+    Use this function instead of invoking constructor directly.
+
+    Args:
+        template: A template of a graph.
+        bases: Other graphs whose nodes are appended to created graph.
+    Returns:
+        Created graph.
+    """
+    graph = Graph(template)
+
+    for b in bases:
+        graph += b
+
+    return graph
+
+
 class _EmptyNodeView:
-    """
-    :meta private:
-    """
     def __init__(self, prop, result):
         self.prop = prop
         self.result = result
@@ -229,9 +223,6 @@ class _EmptyNodeView:
 
 
 class _EmptyContainerView:
-    """
-    :meta private:
-    """
     def __init__(self, prop):
         self.prop = prop
 
@@ -261,15 +252,18 @@ class _EmptyContainerView:
             raise KeyError(f"Graph property '{self.prop.name}' does not have a child property '{key}'.")
 
 
+class ContainerView:
+    pass
+
+
 class NodeContainer:
     """
     This class represents a node container of a template property.
-
-    :param prop: Template property.
     """
     def __init__(self, prop: GraphTemplate.Property):
         self.nodes = []
         self.keys = {}
+        #: Template property.
         self.prop = prop
         self._view = None
 
@@ -277,13 +271,11 @@ class NodeContainer:
     def name(self) -> str:
         """
         Returns the container name, which is same as the name of template property.
-
-        :getter: Container name.
         """
         return self.prop.name
 
     @property
-    def view(self) -> 'ContainerView':
+    def view(self) -> ContainerView:
         """
         Returns an unmodifiable view of this container.
 
@@ -305,12 +297,10 @@ class NodeContainer:
         >>> assert view[1] is container.nodes[1].view              # index
         >>> assert [n() for n in view] == [1, 2]                   # iteration
         >>> assert len(view) == 2                                  # length
-
-        :getter: The view of this container.
         """
         if self._view is None:
             container = self
-            class ContainerView:
+            class _ContainerView(ContainerView):
                 def __bool__(self):
                     """Returns whether this container is not empty."""
                     return len(container.nodes) != 0
@@ -336,7 +326,7 @@ class NodeContainer:
                         return container.nodes[0].children[key].view if len(container.nodes) > 0 else _EmptyContainerView(child)
                     else:
                         raise KeyError(f"Graph property '{container.prop.name}' does not have a child property '{key}'.")
-            self._view = ContainerView()
+            self._view = _ContainerView()
         return self._view
 
     def append(self, entity: Any, ancestors: Dict[str, List['Node']], to_replace: bool = False):
@@ -346,9 +336,10 @@ class NodeContainer:
         Identical node is searched by examining whether this container already contains a node of the identical entity
         and its parent is found in `anscestors` .
 
-        :param entity: An entity to be stored in the node.
-        :param ancestors: Parent nodes mapped by property names.
-        :param to_replace: If ``True`` , the entity of identical node is replaced. Otherwise, it is not changed.
+        Args:
+            entity: An entity to be stored in the node.
+            ancestors: Parent nodes mapped by property names.
+            to_replace: If `True`, the entity of identical node is replaced. Otherwise, it is not changed.
         """
         def get_nodes(k):
             return [self.nodes[i] for i in self.keys.get(k, [])]
@@ -380,10 +371,7 @@ class NodeContainer:
         ancestors[self.prop.name] = new_nodes
 
 
-class GraphNodeContainer(NodeContainer):
-    """
-    :meta private:
-    """
+class _GraphNodeContainer(NodeContainer):
     def append(self, entity, ancestors, to_replace):
         if not isinstance(entity, (dict, Graph)):
             raise ValueError(f"Node of graph only accepts dict or Graph object.")
@@ -399,7 +387,7 @@ class GraphNodeContainer(NodeContainer):
 
             if p is None or len(p.children[self.name].nodes) == 0:
                 g = Graph(self.prop.kind)
-                node = GraphNode(self.prop, g, None, index)
+                node = _GraphNode(self.prop, g, None, index)
                 self.nodes.append(node)
 
                 if p is not None:
@@ -416,25 +404,34 @@ class GraphNodeContainer(NodeContainer):
                     g += entity
 
 
+class NodeView:
+    pass
+
+
+class NodeChildrenView:
+    pass
+
+
 class Node:
     """
     This class represents a node which contains an entity.
-
-    :param prop: Template property.
-    :param entity: Entity.
     """
     class Children:
+        """
+        This class represents a child nodes of a node.
+        """
         def __init__(self, prop: GraphTemplate.Property):
             self.nodes = []
             self.keys = set()
+            #: Template property.
             self.prop = prop
             self._view = None
 
         @property
-        def view(self):
+        def view(self) -> NodeChildrenView:
             if self._view is None:
                 base = self
-                class ChildrenView:
+                class _ChildrenView(NodeChildrenView):
                     def __bool__(self):
                         """Returns whether this container is not empty."""
                         return len(base.nodes) != 0
@@ -460,7 +457,7 @@ class Node:
                             return base.nodes[0].children[key].view if len(base.nodes) > 0 else _EmptyContainerView(child)
                         else:
                             raise KeyError(f"Graph property '{base.prop.name}' does not have a child property '{key}'.")
-                self._view = ChildrenView()
+                self._view = _ChildrenView()
             return self._view
 
         def has(self, node):
@@ -472,7 +469,9 @@ class Node:
                 self.nodes.append(node)
 
     def __init__(self, prop: GraphTemplate.Property, entity: Any, key: Optional[Any], index: int):
+        #: Template property.
         self.prop = prop
+        #: An entity value.
         self.entity = entity
         self.key = key
         self.parents = set()
@@ -484,13 +483,11 @@ class Node:
     def name(self) -> str:
         """
         Returns the container name, which is same as the name of template property.
-
-        :getter: Container name.
         """
         return self.prop.name
 
     @property
-    def view(self) -> 'NodeView':
+    def view(self) -> NodeView:
         """
         Returns an unmodifiable view of this node.
 
@@ -499,12 +496,10 @@ class Node:
         - Returns a node instance when invoked as callable object.
         - The attribute of a child name returns the child container view.
         - In iteration context, it iterates pairs of child conainter name and its view.
-
-        :returns: The view of this node.
         """
         if self._view is None:
             node = self
-            class NodeView:
+            class _NodeView(NodeView):
                 def __call__(self, alt=None):
                     """Returns an entity of this node."""
                     return node.entity
@@ -514,18 +509,20 @@ class Node:
                 def __iter__(self):
                     """Iterate key-value pairs of child nodes."""
                     return map(lambda nc: (nc[0], nc[1].view), node.children.items())
-            self._view = NodeView()
+            self._view = _NodeView()
         return self._view
 
     def add_child(self, child: 'Node') -> 'Node':
         """
         Adds a child node.
 
-        :param child: Child node.
-        :returns: This instance.
+        Args:
+            child: Child node.
+        Returns:
+            This instance.
         """
         if child.prop.template != self.prop.template:
-            raise ValueError(f"Nodes from difference graph template can't be associated.")
+            raise ValueError(f"Nodes from different graph template can't be associated.")
         self.children[child.prop.name].append(child)
         child.parents.add(self)
         return self
@@ -534,8 +531,10 @@ class Node:
         """
         Checks this node contains the node identical to given node.
 
-        :param child: Node to search.
-        :returns: ``True`` if exists.
+        Args:
+            child: Node to search.
+        Returns:
+            `True` if exists.
         """
         if child.prop.template != self.prop.template:
             return False
@@ -545,10 +544,7 @@ class Node:
             return False
 
 
-class GraphNode(Node):
-    """
-    :meta private:
-    """
+class _GraphNode(Node):
     @property
     def view(self):
         return self.entity.view

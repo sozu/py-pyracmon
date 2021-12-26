@@ -1,2 +1,0 @@
-Static typing support (TBD)
-===========================

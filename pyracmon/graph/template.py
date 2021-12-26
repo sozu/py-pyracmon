@@ -11,26 +11,20 @@ class GraphTemplate:
     Each template property can be obtained via an attribute of its name from the template.
 
     Applying shift operator between properties creates the parent-child relationship between them.
-    In next code, the template is composed of 4 properties where ``d`` is a child of ``c``, and ``b`` and ``c`` are children of ``a`` .
+    In next code, the template is composed of 4 properties where `d` is a child of `c`, and `b` and `c` are children of `a`.
 
     >>> template = GraphSpec().new_template(a=int, b=str, c=int, d=float)
     >>> template.a << [template.b, template.c]
     >>> template.c << template.d
 
-    Templates are merged when ``+`` is applied to them. The result has properties defined in both templates with keeping their relationships.
-    Merging of templates having properties of the same name fails by raising `ValueError` .
+    Templates are merged when `+` is applied to them. The result has properties defined in both templates with keeping their relationships.
+    Merging of templates having properties of the same name fails by raising `ValueError`.
 
     Use `GraphSpec.new_template` or other factory functions to create a template instead of using constructor directly.
     """
     class Property:
         """
         Template property which determines various behaviors of graph nodes.
-
-        :param template: Graph template this property belongs to.
-        :param name: Property name.
-        :param kind: Graph node bound to this property should have entity of this type.
-        :param policy: Policy of entity identification.
-        :param entity_filter: Entity filter function.
         """
         def __init__(
             self,
@@ -41,10 +35,15 @@ class GraphTemplate:
             entity_filter: Optional[Callable[[Any], bool]],
             origin = None,
         ):
+            #: Graph template this property belongs to.
             self.template = template
+            #: Property name.
             self.name = name
+            #: Graph node bound to this property should have entity of this type.
             self.kind = kind
+            #: Policy of entity identification.
             self.policy = policy
+            #: Entity filter function.
             self.entity_filter = entity_filter
             self._origin = origin
 
@@ -67,8 +66,6 @@ class GraphTemplate:
         def parent(self) -> Optional['GraphTemplate.Property']:
             """
             Returns parent property if exists.
-
-            :getter: Parent property if exists, otherwise `None`.
             """
             return next(filter(lambda r: r[0] == self, self.template._relations), (None, None))[1]
 
@@ -76,8 +73,6 @@ class GraphTemplate:
         def children(self) -> List['GraphTemplate.Property']:
             """
             Returns child properties.
-
-            :getter: Child properties.
             """
             return [r[0] for r in self.template._relations if r[1] == self]
 
@@ -107,10 +102,10 @@ class GraphTemplate:
             """
             Makes this property as a parent of child properties.
 
-            :param children: Property or properties to be children of this property.
-            :returns: The same object as the argument.
-
-            :meta public:
+            Args:
+                children: Property or properties to be children of this property.
+            Returns:
+                The same object as the argument.
             """
             targets = [children] if isinstance(children, GraphTemplate.Property) else children
             for c in targets:
@@ -122,10 +117,10 @@ class GraphTemplate:
             """
             Makes this property as a child of another property.
 
-            :param parent: A Property to be a parent of this property.
-            :returns: The same object as the argument.
-
-            :meta public:
+            Args:
+                parent: A Property to be a parent of this property.
+            Returns:
+                The same object as the argument.
             """
             parent._assert_canbe_parent(self)
             self.template._relations += [(self, parent)]
@@ -138,10 +133,10 @@ class GraphTemplate:
             """
             Reversed version of `__lshift__()` prepared to locate a list of properties on the left side.
 
-            :param children: Property or properties to be children of this property.
-            :returns: The same object as the argument.
-
-            :meta public:
+            Args:
+                children: Property or properties to be children of this property.
+            Returns:
+                The same object as the argument.
             """
             self.__lshift__(children)
             return self
@@ -150,7 +145,8 @@ class GraphTemplate:
         """
         Construct template with its properties.  Don't use this constructor directly.
 
-        :param definitions: Definitions of template properties.
+        Args:
+            definitions: Definitions of template properties.
         """
         self._properties = []
         self._relations = []
@@ -171,7 +167,8 @@ class GraphTemplate:
         """
         Iterates properties in parent-to-child order.
 
-        :returns: Property iterator.
+        Returns:
+            Property iterator.
         """
         return _sort_properties(self._properties)
 
@@ -179,8 +176,10 @@ class GraphTemplate:
         """
         Add another template to this template.
 
-        :param another: Another template.
-        :returns: This instance.
+        Args:
+            another: Another template.
+        Returns:
+            This instance.
         """
         for p in another._properties:
             prop = GraphTemplate.Property(self, p.name, p.kind, p.policy, p.entity_filter, origin=p)
@@ -195,8 +194,10 @@ class GraphTemplate:
         """
         Create new template by merging this template and another one.
 
-        :param another: Another template.
-        :returns: New template.
+        Args:
+            another: Another template.
+        Returns:
+            New template.
         """
         template = GraphTemplate([])
         template += self

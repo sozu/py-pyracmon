@@ -9,7 +9,8 @@ def testing_config(cfg: PyracmonConfiguration = default_config().derive()) -> Py
     """
     Returns a configuration used for testing.
 
-    :param cfg: Don't use this argument. This exists to locate global instance in private.
+    Args:
+        cfg: Don't use this argument. This exists to locate global instance in private.
     """
     return cfg
 
@@ -18,8 +19,9 @@ def truncate(db: Connection, *models: List['Model']):
     """
     Truncate tables in order.
 
-    :param db: DB connection.
-    :param tables: Models of tables to truncate.
+    Args:
+        db: DB connection.
+        tables: Models of tables to truncate.
     """
     if len(models) == 0:
         raise ValueError(f"No tables are specified. Did you forget to pass DB connection at the first argument?")
@@ -29,9 +31,6 @@ def truncate(db: Connection, *models: List['Model']):
 
 
 class Matcher:
-    """
-    :meta private:
-    """
     def __init__(self):
         self.invert = False
 
@@ -53,9 +52,6 @@ class Matcher:
 
 
 class CompositeMatcher(Matcher):
-    """
-    :meta private:
-    """
     def __init__(self, m1, m2, and_=True):
         super().__init__()
         self.m1 = m1
@@ -70,9 +66,6 @@ class CompositeMatcher(Matcher):
 
 
 class Near(Matcher):
-    """
-    :meta private:
-    """
     def __init__(self, expected, negative=None, positive=None, **kwargs):
         super().__init__()
         self.expected = expected
@@ -105,15 +98,17 @@ class Near(Matcher):
 
 def near(expected: Any, negative: Optional[Any] = None, positive: Optional[Any] = None, **kwargs: Any) -> Matcher:
     """
-    Create a matcher to check actual value is in a range.
+    Creates a matcher to check actual value is in a range.
 
     Comparison between the value and given range depends on its type.
 
-    :param expected: Expected value.
-    :param negative: Margin of negative direction.
-    :param positive: Margin of positive direction.
-    :param kwargs: Keyword arguments to create marginal values.
-    :returns: Created matcher.
+    Args:
+        expected: Expected value.
+        negative: Margin of negative direction.
+        positive: Margin of positive direction.
+        kwargs: Keyword arguments to create marginal values.
+    Returns:
+        Created matcher.
     """
     if isinstance(expected, datetime):
         if all(k not in kwargs for k in ('weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds', 'microseconds')):
@@ -124,10 +119,12 @@ def near(expected: Any, negative: Optional[Any] = None, positive: Optional[Any] 
 class let(Matcher):
     def __init__(self, pred: Callable[[Any], bool]) -> Matcher:
         """
-        Create a matcher which applies the predicate function to actual value and checks its returning value is ``True`` .
+        Creates a matcher which applies the predicate function to actual value and checks its returning value is ``True`` .
 
-        :param pred: A predicate function.
-        :returns: Created matcher.
+        Args:
+            pred: A predicate function.
+        Returns:
+            Created matcher.
         """
         super().__init__()
         self.pred = pred
@@ -139,10 +136,12 @@ class let(Matcher):
 class one_of(Matcher):
     def __init__(self, *candidates) -> Matcher:
         """
-        Create a matcher which checks whether the actual value matches one of candidate values.
+        Creates a matcher which checks whether the actual value matches one of candidate values.
 
-        :param candidates: Candidate values.
-        :returns: Created matcher.
+        Args:
+            candidates: Candidate values.
+        Returns:
+            Created matcher.
         """
         super().__init__()
         self.candidates = candidates

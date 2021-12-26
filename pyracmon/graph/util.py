@@ -1,3 +1,4 @@
+from itertools import chain
 from functools import partial, reduce
 from inspect import signature, Signature
 from typing import *
@@ -7,12 +8,7 @@ T = TypeVar('T')
 
 
 # type aliases.
-Serializer = Union[
-    Callable[['SerializationContext', 'Node', Callable[[Any], Any], Any], Any],
-    Callable[['Node', Callable[[Any], Any], Any], Any],
-    Callable[[Callable[[Any], Any], Any], Any],
-    Callable[[Any], Any],
-]
+Serializer = Callable[['NodeContext'], Any]
 
 TemplateProperty = Union[
     type,
@@ -21,32 +17,14 @@ TemplateProperty = Union[
 ]
 
 
-def as_is(x):
+def chain_serializers(serializers: List[Serializer]) -> Serializer:
     """
-    :meta private:
-    """
-    return x
+    Creates a serializer which chains given serializers.
 
-
-def wrap_serializer(f):
-    """
-    :meta private:
-    """
-    try:
-        sig = signature(f)
-        def g(cxt, node, base, value) -> sig.return_annotation:
-            ba = sig.bind(*(value, base, node, cxt)[len(sig.parameters)-1::-1])
-            return f(*ba.args)
-        return g
-    except:
-        def g(cxt, node, base, value):
-            return f(value)
-        return g
-
-
-def chain_serializers(serializers):
-    """
-    :meta private:
+    Args:
+        serializers: A list of serializers.
+    Returns:
+        Chained serializer.
     """
     def merge(fs):
         rt = Signature.empty
@@ -63,11 +41,9 @@ def chain_serializers(serializers):
                         return t
         return rt
 
-    funcs = [wrap_serializer(f) for f in serializers]
-    rt = merge(funcs)
-
-    def composed(cxt, node, base, value) -> rt:
-        base = [as_is, wrap_serializer(base)] if base else [as_is]
-        return reduce(lambda acc,f: partial(f, cxt, node, acc), base + funcs)(value)
+    rt = merge(serializers)
+    def composed(cxt) -> rt:
+        cxt._iterator = iter(serializers[::-1] + list(cxt._iterator))
+        return cxt.serialize()
 
     return composed

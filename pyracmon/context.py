@@ -20,8 +20,10 @@ class ConnectionContext:
         """
         Change configurations of this context.
 
-        :param configurations: Configurations. See `pyracmon.config` to knoe available keys.
-        :returns: This instance.
+        Args:
+            configurations: Configurations. See `pyracmon.config` to know available keys.
+        Returns:
+            This instance.
         """
         self.config.set(**configurations)
         return self
@@ -34,12 +36,14 @@ class ConnectionContext:
 
         This method is invoked from `ConnectionContext.execute` internally.
         When you intend to change behaviors of query executions,
-        inherit this class, overwrite this method and set factory method for that class by `Connection.use` .
+        inherit this class, overwrite this method and set factory method for the class by `Connection.use` .
 
-        :param cursor: Cursor object.
-        :param sql: Query string.
-        :param params: Query parameters.
-        :returns: Given cursor object. Internal state may be changed by the execution of the query.
+        Args:
+            cursor: Cursor object.
+            sql: Query string.
+            params: Query parameters.
+        Returns:
+            Given cursor object. Internal state may be changed by the execution of the query.
         """
         logger = _logger(self.config)
 

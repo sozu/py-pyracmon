@@ -583,12 +583,12 @@ class TestSerialize:
         graph.append(a=2, b=10, c=20, d=30)
         graph.append(a=2, b=11, c=21, d=30)
 
-        def ser(cxt, n, b, v):
-            return v * cxt[n].v
+        def ser(cxt):
+            return cxt.value * cxt.params.v
 
         gs = GraphSchema(
             spec, t,
-            a = S.each(ser).each(lambda b, v: {"A": b(v)}),
+            a = S.each(ser).each(lambda c: {"A": c.serialize()}),
             c = S.each(ser),
         )
 

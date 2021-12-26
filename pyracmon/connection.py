@@ -13,7 +13,7 @@ def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
     """
     Connects to DB by passing arguments to DB-API 2.0 module.
 
-    Every optional argument is passed to ``api.connect()`` and returns the `Connection` object which wraps obtained DB connection.
+    Every optional argument is passed to `api.connect` and returns the `Connection` object which wraps obtained DB connection.
 
     Here shows an example connecting to database and executing query.
 
@@ -23,10 +23,12 @@ def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
     >>> c = db.stmt().execute("SELECT 1")
     >>> assert c.fetchone()[0] == 1
 
-    :param api: DB-API 2.0 module which exports `connect()` function.
-    :param args: Arguments passed to ``api.connect()`` .
-    :param kwargs: Keyword arguments passed to ``api.connect()`` .
-    :returns: Wrapper of DB-API 2.0 connection.
+    Args:
+        api: DB-API 2.0 module which exports `connect` function.
+        args: Positional arguments passed to `api.connect`.
+        kwargs: Keyword arguments passed to `api.connect`.
+    Returns:
+        Wrapper of DB-API 2.0 connection.
     """
     return Connection(api, api.connect(*args, **kwargs), None)
 
@@ -40,6 +42,7 @@ class Connection:
     _characters = string.ascii_letters + string.digits + ".="
 
     def __init__(self, api, conn, context_factory=None):
+        #: A string which identifies a connection.
         self.identifier = self._gen_identifier()
         self.api = api
         self.conn = conn
@@ -79,9 +82,7 @@ class Connection:
     @property
     def context(self) -> ConnectionContext:
         """
-        Returns context object used for this connection.
-
-        :getter: Context object used for this connection.
+        Context object used for this connection.
         """
         if not self._context:
             self._context = (self.context_factory or ConnectionContext)()
@@ -94,8 +95,10 @@ class Connection:
 
         Use this method to use your custom context object.
 
-        :param factory: Function returning custom context object.
-        :returns: This instance.
+        Args:
+            factory: Function returning custom context object.
+        Returns:
+            This instance.
         """
         self.context_factory = factory
         return self
@@ -104,8 +107,10 @@ class Connection:
         """
         Creates new statement which provides methods to execute query.
 
-        :param context: Context object used in the statement. If `None`, the context of this connection is used.
-        :returns: Created statement.
+        Args:
+            context: Context object used in the statement. If `None`, the context of this connection is used.
+        Returns:
+            Created statement.
         """
         return Statement(self, context or self.context)
 
@@ -123,7 +128,7 @@ class Statement:
 
     Be sure to execute queries on this class to benefit from:
 
-    - Query formatting using unified marker ``$_``.
+    - Query formatting using unified marker `$_`.
     - Query logging.
     """
     def __init__(self, conn, context):
@@ -134,13 +139,14 @@ class Statement:
         """
         Generates formatted query and a list of parameters.
 
-        This method is invoked internally during `execute` to generate arguments for cursor object.
-        It's meaningless to use this method except for the debugging purpose.
+        This method is invoked internally from `execute` to generate actual query and parameters.
 
-        :param sql: Query template which can contain unified marker.
-        :param args: Positional parameters of query.
-        :param kwargs: Keyword parameters of query.
-        :returns: Formatted query and parameters.
+        Args:
+            sql: Query template which can contain unified marker.
+            args: Positional parameters of query.
+            kwargs: Keyword parameters of query.
+        Returns:
+            Formatted query and parameters.
         """
         paramstyle = self.context.config.paramstyle or self.conn.api.paramstyle
 
@@ -152,13 +158,15 @@ class Statement:
         """
         Executes a query and returns a cursor object.
 
-        Cursor is defined in DB-API 2.0 and it provides methods to access results of query execution (ex. ``fetchall`` ``fetchone`` ).
-        Those methods and other methods defined by using DB driver are available as they are.
+        Cursor is defined in DB-API 2.0 and it provides methods to access results of the query (ex. `fetchall` `fetchone`).
+        See [PEP249](https://www.python.org/dev/peps/pep-0249/#cursor-objects) and documentations of DB driver to know the detail of Cursor.
 
-        :param sql: Query template which can contain unified marker.
-        :param args: Positional parameters of query.
-        :param kwargs: Keyword parameters of query.
-        :returns: Cursor object used for the query execution.
+        Args:
+            sql: Query template which can contain unified marker.
+            args: Positional parameters of query.
+            kwargs: Keyword parameters of query.
+        Returns:
+            Cursor object used for the query execution.
         """
         sql, params = self.prepare(sql, *args, **kwargs)
 

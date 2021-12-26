@@ -1,5 +1,5 @@
 """
-This module exports types and functions used for ``SELECT`` queries.
+This module exports types and functions used for `SELECT` queries.
 
 Main purpose is providing a type which contains information of selecting columns,
 i.e. which columns are selected and how they are expressed in the query.
@@ -9,6 +9,7 @@ In most cases, classes of this module should not be used directly.
 The use of `SelectMixin.select` and `read_row` is sufficient way to benefit from this module.
 """
 from typing import *
+from .model import Model
 
 
 class Selection:
@@ -35,11 +36,13 @@ class Selection:
     >>>     assert isinstance(r.t1, table1)
     >>>     assert isinstance(r.t2, table2)
 
-    :param table: Model type.
-    :param alias: An alias string of this table.
-    :param columns: Names of columns to select.
+    Args:
+        table: Model type.
+        alias: An alias string of this table.
+    Returns:
+        columns: Names of columns to select.
     """
-    def __init__(self, table: 'Model', alias: str, columns: List[str]):
+    def __init__(self, table: Model, alias: str, columns: List[str]):
         self.table = table
         self.alias = alias
         self.columns = columns
@@ -48,8 +51,6 @@ class Selection:
     def name(self) -> str:
         """
         Returns alias or name of the table.
-
-        :getter: Alias or name of the table.
         """
         return self.alias if self.alias else self.table.name
 
@@ -70,8 +71,10 @@ class Selection:
         """
         Construct a model object from a row.
 
-        :param values: Values of row. The length must be equal to the number of columns in this.
-        :returns: Model object where column values obtained from the row are set. 
+        Args:
+            values: Values of row. The length must be equal to the number of columns in this.
+        Returns:
+            Model object where column values obtained from the row are set. 
         """
         return self.table(**dict([(c.name, v) for c, v in zip(self.columns, values)]))
 
@@ -80,8 +83,8 @@ class FieldExpressions:
     """
     The instance of this class works as the composition of selections.
 
-    ``+`` operation on `Selection` s creates an instance of `FieldExpressions`. Each selection is available via attributes of its name.
-    Also, `FieldExpression` can be extended by ``+=`` .
+    `+` operation on `Selection` s creates an instance of `FieldExpressions`. Each selection is available via attributes of its name.
+    Also, `FieldExpression` can be extended by `+=`.
 
     >>> exp = table1.select("t1", includes=["col11", "col12"]) + table2.select("t2")
     >>> c.execute(f"SELECT {exp} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
@@ -117,7 +120,7 @@ class FieldExpressions:
         elif isinstance(other, str):
             self.__selections.append(other)
             self.__keys[other] = other
-        elif other is ():
+        elif other == ():
             self.__selections.append(other)
         else:
             raise ValueError(f"Operand of + for FieldExpressions must be a Selection or FieldExpressions but {type(other)} is given.")
@@ -174,7 +177,8 @@ class RowValues:
     >>> r.table2
     ...
 
-    :param selections: List of selections which assign each value in row to a column.
+    Args:
+        selections: List of selections which assign each value in row to a column.
     """
     def __init__(self, selections: List[Union[Selection, str, Tuple[()]]]):
         self.key_map = dict([(s, i) for i, s in enumerate(map(self._key_of, selections)) if s is not None])
@@ -207,7 +211,8 @@ class RowValues:
         """
         Appends a value in the row.
 
-        :param value: A value in the row.
+        Args:
+            value: A value in the row.
         """
         self.values.append(value)
 
@@ -222,9 +227,11 @@ def read_row(row, *selections: Union[Selection, str, Tuple[()]], allow_redundanc
     - `Selection` consumes as many values as the number of columns in it and creates a model instance.
     - Empty tuple or a string consumes a value, which is stored in `RowValues` as it is.
 
-    :param selections: List of selections.
-    :param allow_redundancy: If ``False`` , `ValueError` is thrown when not all values in a row are consumed.
-    :returns: Values read from the row accoding to the selections.
+    Args:
+        selections: List of selections.
+        allow_redundancy: If `False`, `ValueError` is thrown when not all values in a row are consumed.
+    Returns:
+        Values read from the row accoding to the selections.
     """
     result = RowValues(selections)
 
@@ -253,10 +260,12 @@ class SelectMixin:
         """
         Default mixin class of every model type providing method to generate `Selection` by Selecting columns with alias.
 
-        :param alias: An alias string of this table.
-        :param includes: Column names to use. All columns are selected if empty.
-        :param excludes: Column names not to use.
-        :returns: Selection object.
+        Args:
+            alias: An alias string of this table.
+            includes: Column names to use. All columns are selected if empty.
+            excludes: Column names not to use.
+        Returns:
+            Selection object.
         """
         columns = [c for c in cls.columns if c.name not in excludes] \
             if not bool(includes) else \

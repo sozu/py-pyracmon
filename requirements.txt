@@ -1,6 +1,0 @@
-pytest
-psycopg2-binary
-PyMySQL
-
-sphinx
-sphinx-pdj-theme

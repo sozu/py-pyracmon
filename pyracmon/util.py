@@ -23,9 +23,11 @@ def key_to_index(values: Dict[Union[str, int], Any], ordered_keys: List[Union[st
     """
     Replace keys of a `dict` with its index in ordered list.
 
-    :param values: A dictionary.
-    :param ordered_keys: Ordered keys.
-    :returns: New dictionary where keys are replaced.
+    Args:
+        values: A dictionary.
+        ordered_keys: Ordered keys.
+    Returns:
+        New dictionary where keys are replaced.
     """
     def index(k):
         if isinstance(k, int):

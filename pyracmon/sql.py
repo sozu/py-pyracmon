@@ -7,13 +7,10 @@ class Sql:
     """
     Provides functionalities to render SQL string from the template containing placeholder markers.
 
-    SQL rendering is conform to the way of `string.Template` which replaces ``$`` prefixed variables with parameters.
-
-    :param marker: Marker used in the template.
-    :param template: SQL template.
+    SQL rendering is conform to the way of `string.Template` which replaces `$` prefixed variables with parameters.
     """
     class Substitute:
-        def __init__(self, marker):
+        def __init__(self, marker: Marker):
             self.marker = marker
 
         def __getitem__(self, key):
@@ -25,18 +22,22 @@ class Sql:
                 return self.marker(key)
 
     def __init__(self, marker: Marker, template: str):
+        #: Marker used in the template
         self.marker = marker
+        #: SQL template.
         self.template = template
 
-    def render(self, *args, **kwargs) -> Tuple[str, List[Any]]:
+    def render(self, *args: Any, **kwargs: Any) -> Tuple[str, List[Any]]:
         """
         Renders SQL and converts parameters into the form available for current database driver.
 
         Arguments type should be consistent to marker paramstyle, otherwise exception is raised.
 
-        :param args: Positional parameters.
-        :param kwargs: Keyed parameters.
-        :returns: SQL and parameters available in it.
+        Args:
+            args: Positional parameters.
+            kwargs: Keyed parameters.
+        Returns:
+            SQL and parameters available in it.
         """
         self.marker.reset()
 
