@@ -2,6 +2,7 @@ import pytest
 import logging
 import psycopg2
 from datetime import date, datetime, time, timedelta
+from typing import *
 from uuid import UUID
 from pyracmon.connection import connect
 from pyracmon.mixin import CRUDMixin
@@ -64,8 +65,8 @@ class TestReadSchema:
             dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="enum_", type=object, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="array_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="array_", type=List[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="deeparray_", type=List[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
@@ -94,8 +95,8 @@ class TestReadSchema:
             dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="enum_", type=object, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="array_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="array_", type=List[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="deeparray_", type=List[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
@@ -148,8 +149,8 @@ class TestReadSchema:
             dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="enum_", type=C, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="array_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="deeparray_", type=[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="array_", type=List[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="deeparray_", type=List[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])

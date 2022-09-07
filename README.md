@@ -59,7 +59,7 @@ Use them or some other library and tell it to pyracmon via `pyracmon.declare_mod
 ## Installation
 
 ```
-$ pip install pyracmon==1.0a0
+$ pip install pyracmon==1.0a1
 ```
 
 ## Grance of functionalities

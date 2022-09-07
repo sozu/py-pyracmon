@@ -67,7 +67,7 @@ def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> L
         cs = (constraint or "").split(',')
         seq = m.group(1) if m else None
         null = nullable == 'YES'
-        ptype = map_types(t, udt) if t != 'ARRAY' else [map_types(et, eudt)]
+        ptype = map_types(t, udt) if t != 'ARRAY' else List[map_types(et, eudt)]
         info = (t, udt) if t != 'ARRAY' else (et, eudt)
         return Column(n, ptype, info, 'PRIMARY KEY' in cs, Relations() if 'FOREIGN KEY' in cs else None, seq, null)
 
@@ -127,7 +127,7 @@ def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> L
         """, *params)
 
     def mv_column_of(n, not_null, udt, eudt, pos):
-        ptype = map_types(_map_alternates(udt), udt) if eudt is None else [map_types(_map_alternates(eudt), eudt)]
+        ptype = map_types(_map_alternates(udt), udt) if eudt is None else List[map_types(_map_alternates(eudt), eudt)]
         info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
         return Column(n, ptype, info, False, None, None, not not_null)
 

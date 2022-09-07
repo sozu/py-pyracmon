@@ -1,6 +1,9 @@
 import sys
 import psycopg2
 import pytest
+from datetime import date, datetime, time, timedelta
+from typing import List
+from uuid import UUID
 from tests import models as m
 from pyracmon import *
 from pyracmon import default_config
@@ -59,6 +62,7 @@ class TestModelGraph:
             t2 = m.t2,
             t3 = m.t3,
             num = int,
+            types = m.types,
         )
         template.t1 << [template.num >> template.t2, template.t3]
 
@@ -150,7 +154,10 @@ class TestModelGraph:
             t2 = S.of(),
             t3 = S.of(),
             num = S.doc("Num"),
+            types = S.of(),
         )
+
+        r["types"] = []
 
         assert r == gs.serialize(view)
         assert walk_schema(gs.schema, True) == {
@@ -170,6 +177,26 @@ class TestModelGraph:
                     ], ""),
                 },
             ], "T1"),
+            "types": ([
+                {
+                    "bool_": (bool, ""),
+                    "double_": (float, ""),
+                    "int_": (int, ""),
+                    "string_": (str, ""),
+                    "bytes_": (bytes, ""),
+                    "date_": (date, ""),
+                    "datetime_": (datetime, ""),
+                    "time_": (time, ""),
+                    "delta_": (timedelta, ""),
+                    "uuid_": (UUID, ""),
+                    "enum_": (object, ""),
+                    "record_": (object, ""),
+                    "array_": ([int], ""),
+                    "deeparray_": ([int], ""),
+                    "json_": (dict, ""),
+                    "jsonb_": (dict, ""),
+                }
+            ], ""),
         }
 
     def test_serializer(self):

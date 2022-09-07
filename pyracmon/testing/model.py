@@ -7,6 +7,7 @@ from typing import *
 from pyracmon.config import PyracmonConfiguration
 from pyracmon.connection import Connection
 from pyracmon.model import Model
+from pyracmon.graph.typing import issubgeneric
 from .util import Matcher, testing_config
 
 
@@ -177,6 +178,8 @@ def _generate_value(table, column, index, cfg):
         return timedelta(days=index+1)
     elif column.ptype is UUID:
         return str(uuid3(fixed_uuid, f"{table.name}-{column.name}-{index}"))
+    elif issubgeneric(column.ptype, List):
+        return []
     elif isinstance(column.ptype, type) and issubclass(column.ptype, Enum):
         return next(iter(column.ptype), None)
     else:

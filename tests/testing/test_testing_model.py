@@ -104,8 +104,8 @@ class TestFixture:
                 uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-{i+1}")),
                 enum_ = None,
                 record_ = None,
-                array_ = None,
-                deeparray_ = None,
+                array_ = [],
+                deeparray_ = [],
             )
 
     def test_values(self):
@@ -137,8 +137,8 @@ class TestFixture:
             uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-1")),
             enum_ = E.E1,
             record_ = None,
-            array_ = None,
-            deeparray_ = None,
+            array_ = [],
+            deeparray_ = [],
         )
 
     def test_nullable(self):
