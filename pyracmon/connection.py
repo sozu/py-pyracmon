@@ -1,12 +1,17 @@
+"""
+This module provides types and functions for DB connections.
+"""
+from collections.abc import Sequence
 import string
 import threading
 import types
-from typing import *
+from typing import Any, Callable, Optional, Union
+from typing_extensions import Self
 from datetime import datetime
-from .query import QueryHelper
+from . import dbapi
 from .sql import Sql
 from .marker import Marker
-from .context import ConnectionContext
+from .context import ConnectionContext, PARAMS
 
 
 def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
@@ -17,11 +22,13 @@ def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
 
     Here shows an example connecting to database and executing query.
 
+    ```python
     >>> import psycopg2
     >>> from pyracmon import connect
     >>> db = connect(psycopg2, host="localhost", port=5432, dbname="pyracmon", user="postgres", password="postgres")
     >>> c = db.stmt().execute("SELECT 1")
     >>> assert c.fetchone()[0] == 1
+    ```
 
     Args:
         api: DB-API 2.0 module which exports `connect` function.
@@ -33,7 +40,7 @@ def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
     return Connection(api, api.connect(*args, **kwargs), None)
 
 
-class Connection:
+class Connection(dbapi.Connection):
     """
     Wrapper class of DB-API 2.0 Connection.
 
@@ -41,7 +48,7 @@ class Connection:
     """
     _characters = string.ascii_letters + string.digits + ".="
 
-    def __init__(self, api, conn, context_factory=None):
+    def __init__(self, api, conn: dbapi.Connection, context_factory=None):
         #: A string which identifies a connection.
         self.identifier = self._gen_identifier()
         self.api = api
@@ -54,12 +61,12 @@ class Connection:
 
     def __enter__(self):
         if hasattr(self.conn, "__enter__"):
-            self.conn.__enter__()
+            self.conn.__enter__() # type: ignore
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         if hasattr(self.conn, "__exit__"):
-            self.conn.__exit__(exc_type, exc_value, traceback)
+            self.conn.__exit__(exc_type, exc_value, traceback) # type: ignore
         else:
             if exc_value is None:
                 self.conn.rollback()
@@ -89,7 +96,19 @@ class Connection:
             self._context.identifier = self.identifier
         return self._context
 
-    def use(self, factory: Callable[[], ConnectionContext]) -> 'Connection':
+    def close(self) -> None:
+        return self.conn.close()
+
+    def commit(self) -> None:
+        return self.conn.commit()
+
+    def rollback(self) -> None:
+        return self.conn.rollback()
+
+    def cursor(self) -> dbapi.Cursor:
+        return self.conn.cursor()
+
+    def use(self, factory: Callable[[], ConnectionContext]) -> Self:
         """
         Set factory function of `ConnectionContext`.
 
@@ -114,13 +133,6 @@ class Connection:
         """
         return Statement(self, context or self.context)
 
-    @property
-    def helper(self) -> QueryHelper:
-        """
-        .. deprecated:: 1.0.0
-        """
-        return QueryHelper(self.api, None)
-
 
 class Statement:
     """
@@ -131,11 +143,11 @@ class Statement:
     - Query formatting using unified marker `$_`.
     - Query logging.
     """
-    def __init__(self, conn, context):
+    def __init__(self, conn: Connection, context: ConnectionContext):
         self.conn = conn
         self.context = context
 
-    def prepare(self, sql: str, *args: Any, **kwargs: Any) -> Tuple[str, Union[List[Any], Dict[str, Any]]]:
+    def prepare(self, sql: str, *args: Any, **kwargs: Any) -> tuple[str, PARAMS]:
         """
         Generates formatted query and a list of parameters.
 
@@ -150,16 +162,11 @@ class Statement:
         """
         paramstyle = self.context.config.paramstyle or self.conn.api.paramstyle
 
-        sql = Sql(Marker.of(paramstyle), sql)
+        return Sql(Marker.of(paramstyle), sql).render(*args, **kwargs)
 
-        return sql.render(*args, **kwargs)
-
-    def execute(self, sql: str, *args: Any, **kwargs: Any) -> 'Cursor':
+    def execute(self, sql: str, *args: Any, **kwargs: Any) -> dbapi.Cursor:
         """
         Executes a query and returns a cursor object.
-
-        Cursor is defined in DB-API 2.0 and it provides methods to access results of the query (ex. `fetchall` `fetchone`).
-        See [PEP249](https://www.python.org/dev/peps/pep-0249/#cursor-objects) and documentations of DB driver to know the detail of Cursor.
 
         Args:
             sql: Query template which can contain unified marker.
@@ -173,3 +180,30 @@ class Statement:
         c = self.conn.cursor()
 
         return self.context.execute(c, sql, params)
+
+    def executemany(self, sql: str, seq_of_args: Sequence[PARAMS]) -> dbapi.Cursor:
+        """
+        Executes a query and returns a cursor object.
+
+        Args:
+            sql: Query template which can contain unified marker.
+            args: Positional parameters of query.
+            kwargs: Keyword parameters of query.
+        Returns:
+            Cursor object used for the query execution.
+        """
+        def prepare(ps: Union[list[Any], dict[str, Any]]):
+            args = list(ps) if isinstance(ps, (list, tuple)) else []
+            kwargs = ps if isinstance(ps, dict) else {}
+            return self.prepare(sql, *args, **kwargs)
+
+        rendered, params = prepare(seq_of_args[0])
+        seq_of_params: list[PARAMS] = [params]
+
+        for i, ps in enumerate(seq_of_args[1:]):
+            _, params = prepare(ps)
+            seq_of_params.append(params)
+
+        c = self.conn.cursor()
+
+        return self.context.executemany(c, rendered, seq_of_params)

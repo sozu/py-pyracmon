@@ -34,7 +34,7 @@ class TestNode:
         na.add_child(nb)
 
         assert na.children["b"].nodes == [nb]
-        assert na.children["b"].has(nb)
+        assert nb in na.children["b"]
         assert nb.parents == {na}
 
     def test_fail_add_not_child(self):
@@ -167,7 +167,7 @@ class TestNodeContainer:
             p = HierarchicalPolicy(lambda x:x)
         elif policy == 'always':
             p = AlwaysPolicy(lambda x:x)
-        elif policy == 'never':
+        else:
             p = NeverPolicy(lambda x:x)
 
         t = GraphTemplate([
@@ -184,7 +184,7 @@ class TestNodeContainer:
         container = NodeContainer(t.a)
         assert container.name == "a"
 
-    def _prepare(self, policy):
+    def _prepare(self, policy) -> tuple[NodeContainer, NodeContainer, list[Node], list[Node]]:
         t = self._template(policy)
         ca = NodeContainer(t.a); cb = NodeContainer(t.b)
         nas = [Node(t.a, i, i, i) for i in range(3)]
@@ -412,7 +412,7 @@ class TestGraphView:
             p = HierarchicalPolicy(lambda x:x)
         elif policy == 'always':
             p = AlwaysPolicy(lambda x:x)
-        elif policy == 'never':
+        else:
             p = NeverPolicy(lambda x:x)
 
         t = GraphTemplate([
@@ -455,7 +455,7 @@ class TestGraph:
             p = HierarchicalPolicy(lambda x:x)
         elif policy == 'always':
             p = AlwaysPolicy(lambda x:x)
-        elif policy == 'never':
+        else:
             p = NeverPolicy(lambda x:x)
 
         t = GraphTemplate([
@@ -615,7 +615,7 @@ class TestGraphAdd:
             p = HierarchicalPolicy(lambda x:x)
         elif policy == 'always':
             p = AlwaysPolicy(lambda x:x)
-        elif policy == 'never':
+        else:
             p = NeverPolicy(lambda x:x)
 
         t = GraphTemplate([
@@ -713,7 +713,7 @@ class TestGraphAdd:
 
         u = GraphTemplate([
             ("e", int, t.a.policy, None),
-            ("f", t.b),
+            ("f", t.b, None, None),
         ])
         u.f >> u.e
 
@@ -751,7 +751,7 @@ class TestGraphAdd:
 
         u = GraphTemplate([
             ("e", int, t.a.policy, None),
-            ("f", t),
+            ("f", t, None, None),
         ])
         u.f >> u.e
 

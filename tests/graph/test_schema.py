@@ -4,6 +4,10 @@ from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.graph import new_graph
 from pyracmon.graph.serialize import S
 from pyracmon.graph.schema import *
+from pyracmon.graph.typing import walk_schema, DynamicType
+
+
+T = TypeVar('T')
 
 
 class TestTypedDict:
@@ -35,7 +39,7 @@ class TestTypeable:
             def resolve(a, bound, arg, spec):
                 return (bound,)
 
-        assert Typeable.resolve(A[T], int, GraphSpec()) == (int,)
+        assert Typeable.resolve(A[T], int, GraphSpec()) == (int,) # type: ignore
 
     def test_fixed(self):
         class A(Typeable[T]):
@@ -55,7 +59,7 @@ class TestTypeable:
             def resolve(b, bound, arg, spec):
                 return (bound,arg)
 
-        assert Typeable.resolve(B[A[T]], int, GraphSpec()) == ((int,),int)
+        assert Typeable.resolve(B[A[T]], int, GraphSpec()) == ((int,),int) # type: ignore
 
 
 class TestAlter:
@@ -87,7 +91,7 @@ class TestAlter:
             v4: int
             v5: str
         def ext(v) -> EX:
-            return None
+            return EX(v4=0, v5="")
 
         t = spec.new_template(a=TD)
 
@@ -111,9 +115,9 @@ class TestAlter:
         class EX2(TypedDict):
             v5: float
         def ext1(v) -> EX1:
-            return None
+            return EX1(v4=0, v5="")
         def ext2(v) -> EX2:
-            return None
+            return EX2(v5=0)
 
         t = spec.new_template(a=TD)
 
@@ -178,9 +182,9 @@ class TestGraphSchema:
     def test_schema(self):
         class TDA(TypedDict):
             a1: int
-            a2: document_type(str, "A2")
+            a2: Annotated[str, "A2"]
         class TDC(TypedDict):
-            c1: document_type(int, "C1")
+            c1: Annotated[int, "C1"]
             c2: str
         class TDD(TypedDict):
             d1: int
@@ -235,9 +239,9 @@ class TestGraphSchema:
     def test_merge_root(self):
         class TDA(TypedDict):
             a1: int
-            a2: document_type(str, "A2")
+            a2: Annotated[str, "A2"]
         class TDC(TypedDict):
-            c1: document_type(int, "C1")
+            c1: Annotated[int, "C1"]
             c2: str
         class TDD(TypedDict):
             d1: int
@@ -324,12 +328,12 @@ class TestSerializer:
             def resolve(td2, bound, arg, spec):
                 t = bound.__annotations__["v"]
                 class Schema(TypedDict):
-                    u: document_type(t, "U")
+                    u: Annotated[t, "U"] # type: ignore
                 return Schema
 
         spec = GraphSpec()
         def base(x) -> TD2[T]:
-            return None
+            return TD2()
         spec.add_serializer(TD, base)
 
         t = spec.new_template(
@@ -374,17 +378,17 @@ class TestSerializer:
             @staticmethod
             def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
-                    u: document_type(bound, "U")
+                    u: Annotated[bound, "U"]
                 return Schema
 
         def ser0(x) -> int:
-            return None
+            return 0
         def ser1(x) -> str:
-            return None
+            return ""
         def ser2(x) -> TD2[T]:
-            return None
+            return TD2()
         def ser3(x) -> DynamicType[T]:
-            return None
+            return DynamicType()
 
         spec = GraphSpec()
 
@@ -402,17 +406,17 @@ class TestSerializer:
             @staticmethod
             def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
-                    u: document_type(bound, "U")
+                    u: Annotated[bound, "U"]
                 return Schema
 
         def ser0(x) -> int:
-            return None
+            return 0
         def ser1(x) -> str:
-            return None
+            return ""
         def ser2(x):
             return None
         def ser3(x) -> TD2[T]:
-            return None
+            return TD2()
 
         spec = GraphSpec()
 
@@ -462,12 +466,12 @@ class TestSerializer:
             def resolve(td2, bound, arg, spec):
                 t = bound.__annotations__["v"]
                 class Schema(TypedDict):
-                    u: document_type(t, "U")
+                    u: Annotated[t, "U"] # type: ignore
                 return Schema
 
         spec = GraphSpec()
         def base(x) -> TD2[T]:
-            return None
+            return TD2()
         spec.add_serializer(TD, base)
 
         t = spec.new_template(
@@ -483,7 +487,7 @@ class TestSerializer:
             @staticmethod
             def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
-                    u: document_type(bound, "U")
+                    u: Annotated[bound, "U"]
                 return Schema
 
         spec = GraphSpec()
@@ -494,11 +498,11 @@ class TestSerializer:
         )
 
         def ser0(x) -> int:
-            return None
+            return 0
         def ser1(x) -> TD3[T]:
-            return None
+            return TD3()
         def ser2(x) -> DynamicType[T]:
-            return None
+            return DynamicType()
 
         assert walk_schema(spec.to_schema(t, a=S.doc("A").each(ser0).each(ser1).each(ser2)).schema, True) == {"a": ([{"u": (int, "U")}], "A")}
 
@@ -512,7 +516,7 @@ class TestSerializer:
             def resolve(td3, bound, arg, spec):
                 t = bound.__annotations__["w"]
                 class Schema(TypedDict):
-                    u: document_type(t, "U")
+                    u: Annotated[t, "U"] # type: ignore
                 return Schema
 
         spec = GraphSpec()
@@ -525,9 +529,9 @@ class TestSerializer:
         )
 
         def ser0(x) -> TD3[T]:
-            return None
+            return TD3()
         def ser1(x) -> DynamicType[T]:
-            return None
+            return DynamicType()
 
         assert walk_schema(spec.to_schema(t, a=S.doc("A").each(ser0).each(ser1)).schema, True) == {"a": ([{"u": (str, "U")}], "A")}
 
@@ -540,19 +544,19 @@ class TestSerializer:
             def resolve(td2, bound, arg, spec):
                 t = bound.__annotations__["v"]
                 class Schema(TypedDict):
-                    w: document_type(t, "W")
+                    w: Annotated[t, "W"] # type: ignore
                 return Schema
         class TD3(Typeable[T]):
             @staticmethod
             def resolve(td3, bound, arg, spec):
                 t = bound.__annotations__["w"]
                 class Schema(TypedDict):
-                    u: document_type(t, "U")
+                    u: Annotated[t, "U"] # type: ignore
                 return Schema
 
         spec = GraphSpec()
         def base(x) -> TD2[T]:
-            return None
+            return TD2()
         spec.add_serializer(TD, base)
 
         t = spec.new_template(
@@ -560,9 +564,9 @@ class TestSerializer:
         )
 
         def ser0(x) -> TD3[T]:
-            return None
+            return TD3()
         def ser1(x) -> DynamicType[T]:
-            return None
+            return DynamicType()
 
         assert walk_schema(spec.to_schema(t, a=S.doc("A").each(ser0).each(ser1)).schema, True) == {"a": ([{"u": (int, "U")}], "A")}
 

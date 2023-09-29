@@ -7,7 +7,7 @@ from tests import models as m
 from pyracmon import *
 from pyracmon.dialect import postgresql
 from pyracmon.testing.model import *
-from pyracmon.testing.util import Near, truncate, one_of, testing_config
+from pyracmon.testing.util import Near, one_of, default_test_config
 
 
 def _connect():
@@ -19,6 +19,26 @@ def _connect():
         host = "postgres",
         port = 5432,
     )
+
+
+class TestTruncate:
+    def test_truncate(self):
+        db = _connect()
+
+        declare_models(postgresql, db, 'tests.models')
+
+        m.t1.inserts(db, [m.t1(c12=i, c13=f"a{i}") for i in range(5)])
+        m.t2.inserts(db, [m.t2(c21=i, c22=i, c23=f"a{i}") for i in range(5)])
+
+        assert m.t1.count(db) == 5
+        assert m.t2.count(db) == 5
+
+        truncate(db, m.t1, m.t2)
+
+        assert m.t1.count(db) == 0
+        assert m.t2.count(db) == 0
+
+        assert m.t1.insert(db, m.t1(c12=0, c13="")).c11 == 1
 
 
 class TestMatch:
@@ -79,34 +99,34 @@ class TestFixture:
 
         truncate(db, m.types)
 
-        cfg = testing_config().derive()
-        cfg.fixture_ignore_nullable = False
+        with default_test_config() as cfg:
+            cfg.fixture_ignore_nullable = False
 
-        today = date.today()
-        now = datetime.now().astimezone()
-        time = datetime.now().astimezone().time()
+            today = date.today()
+            now = datetime.now().astimezone()
+            time = datetime.now().astimezone().time()
 
-        models = m.types.by(1).fixture(db, 3, cfg=cfg)
+            models = m.types.by(1).fixture(db, 3, cfg=cfg)
 
-        assert m.types.count(db) == 3
+            assert m.types.count(db) == 3
 
-        for i,v in enumerate(models):
-            assert v.match(
-                bool_ = True,
-                double_ = (1.2, 2.3, 3.4)[i],
-                int_ = (1, 2, 3)[i],
-                string_ = f"string_-{i+1}",
-                bytes_ = f"bytes_-{i+1}".encode(),
-                date_ = Near(today, 0, 1, days=1),
-                datetime_ = Near(now, 0, 10, seconds=1),
-                time_ = ~one_of(None),
-                delta_ = timedelta(days=(2, 3, 4)[i]),
-                uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-{i+1}")),
-                enum_ = None,
-                record_ = None,
-                array_ = [],
-                deeparray_ = [],
-            )
+            for i,v in enumerate(models):
+                assert v.match(
+                    bool_ = True,
+                    double_ = (1.2, 2.3, 3.4)[i],
+                    int_ = (1, 2, 3)[i],
+                    string_ = f"string_-{i+1}",
+                    bytes_ = f"bytes_-{i+1}".encode(),
+                    date_ = Near(today, 0, 1, days=1),
+                    datetime_ = Near(now, 0, 10, seconds=1),
+                    time_ = ~one_of(None),
+                    delta_ = timedelta(days=(2, 3, 4)[i]),
+                    uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-{i+1}")),
+                    enum_ = None,
+                    record_ = None,
+                    array_ = [],
+                    deeparray_ = [],
+                )
 
     def test_values(self):
         class E(Enum):
@@ -116,30 +136,30 @@ class TestFixture:
         db = _connect()
         declare_models(postgresql, db, 'tests.models', mixins=[TestingMixin])
 
-        cfg = testing_config().derive()
-        cfg.fixture_ignore_nullable = False
+        with default_test_config() as cfg:
+            cfg.fixture_ignore_nullable = False
 
-        today = date.today()
-        now = datetime.now().astimezone()
+            today = date.today()
+            now = datetime.now().astimezone()
 
-        m.types.column.enum_.ptype = E
+            m.types.column.enum_.ptype = E
 
-        assert m.types.fixture(None, cfg=cfg)[0].match(
-            bool_ = True,
-            double_ = 1.2,
-            int_ = 1,
-            string_ = "string_-1",
-            bytes_ = "bytes_-1".encode(),
-            date_ = Near(today, 0, 1, days=1),
-            datetime_ = Near(now, 0, 10, seconds=1),
-            time_ = ~one_of(None),
-            delta_ = timedelta(days=2),
-            uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-1")),
-            enum_ = E.E1,
-            record_ = None,
-            array_ = [],
-            deeparray_ = [],
-        )
+            assert m.types.fixture(None, cfg=cfg)[0].match(
+                bool_ = True,
+                double_ = 1.2,
+                int_ = 1,
+                string_ = "string_-1",
+                bytes_ = "bytes_-1".encode(),
+                date_ = Near(today, 0, 1, days=1),
+                datetime_ = Near(now, 0, 10, seconds=1),
+                time_ = ~one_of(None),
+                delta_ = timedelta(days=2),
+                uuid_ = str(uuid3(fixed_uuid, f"types-uuid_-1")),
+                enum_ = E.E1,
+                record_ = None,
+                array_ = [],
+                deeparray_ = [],
+            )
 
     def test_nullable(self):
         class E(Enum):

@@ -1,7 +1,5 @@
 import pytest
 from pyracmon.query import *
-from pyracmon.marker import *
-from tests.db_api import PseudoAPI
 
 
 class TestConditional:
@@ -132,6 +130,16 @@ class TestQueryComposite:
         c = q.a.any("a = %s")
         assert (c.expression, c.params) == ("((a = %s) OR (a = %s)) OR (a = %s)", [1, 2, 3])
 
+    def test_all_empty(self):
+        q = Q(a = [])
+        c = q.a.all("a = %s")
+        assert (c.expression, c.params) == ("", [])
+
+    def test_any_empty(self):
+        q = Q(a = [])
+        c = q.a.any("a = %s")
+        assert (c.expression, c.params) == ("1 = 0", [])
+
     def test_all_convert(self):
         q = Q(a = [1,2,3])
         c = q.a.all("a = %s", lambda x: x*2)
@@ -189,9 +197,9 @@ class TestQueryMethod:
         c = q.a.in_("a", lambda x: [v*2 for v in x])
         assert (c.expression, c.params) == ("a IN ($_, $_, $_)", [2, 4, 6])
 
-    def test_positional_args(self):
+    def test_use_alias(self):
         q = Q(a = 1)
-        c = q.a.eq("a", _alias_="b")
+        c = q.a.eq("b.a")
         assert (c.expression, c.params) == ("b.a = $_", [1])
 
 
@@ -377,58 +385,3 @@ class TestWhere:
     def test_empty(self):
         c, p = where(Q.of("", 1, 2))
         assert (c, p) == ("", [])
-
-
-class TestOrderBy:
-    def test_single(self):
-        r = order_by(dict(a = True))
-        assert r == "ORDER BY a ASC"
-
-    def test_multiple(self):
-        r = order_by(dict(a = True, b = False))
-        assert r == "ORDER BY a ASC, b DESC"
-
-    def test_empty(self):
-        r = order_by({})
-        assert r == ""
-
-    def test_defaults(self):
-        r = order_by(dict(a=True, b=False), a=False, c=True)
-        assert r == "ORDER BY a ASC, b DESC, c ASC"
-
-
-class TestRangedBy:
-    def test_limit_offset(self):
-        c, p = ranged_by(10, 5)
-        assert (c, p) == ("LIMIT $_ OFFSET $_", [10, 5])
-
-    def test_limit(self):
-        c, p = ranged_by(10)
-        assert (c, p) == ("LIMIT $_", [10])
-
-    def test_offset(self):
-        c, p = ranged_by(None, 5)
-        assert (c, p) == ("OFFSET $_", [5])
-
-
-class TestHolders:
-    def test_by_length(self):
-        assert holders(3) == "${_}, ${_}, ${_}"
-
-    def test_by_keys(self):
-        assert holders(["a", 1, None]) == "${a}, ${_1}, ${_}"
-
-    def test_qualifier(self):
-        assert holders(3, {1: lambda h: f"__{h}__"}) == "${_}, __${_}__, ${_}"
-
-
-class TestValues:
-    def test_by_length(self):
-        assert values(3, 2) == "(${_}, ${_}, ${_}), (${_}, ${_}, ${_})"
-
-    def test_by_key_gens(self):
-        assert values([lambda i:f"a{i}", lambda i:i, lambda i:None], 2) == "(${a0}, ${_0}, ${_}), (${a1}, ${_1}, ${_})"
-
-    def test_qualifier(self):
-        assert values(3, 2, {1: lambda h: f"__{h}__"}) == "(${_}, __${_}__, ${_}), (${_}, __${_}__, ${_})"
-

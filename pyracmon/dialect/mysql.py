@@ -5,13 +5,15 @@ from itertools import groupby
 from decimal import Decimal
 from enum import Enum
 from datetime import date, datetime, time, timedelta
-from typing import *
+from typing import Optional
+from pyracmon.connection import Connection
 from pyracmon.model import Table, Column, Relations, ForeignKey
-from pyracmon.dialect.shared import MultiInsertMixin
-from pyracmon.query import Q, where, holders
+from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
+from pyracmon.query import Q, where
+from pyracmon.clause import holders
 
 
-def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> List[Table]:
+def read_schema(db, excludes: Optional[list[str]] = None, includes: Optional[list[str]] = None) -> list[Table]:
     """
     Collect tables in current database.
 
@@ -121,12 +123,12 @@ def _map_types(t):
         return object
 
 
-class MySQLMixin(MultiInsertMixin):
+class MySQLMixin(MultiInsertMixin, TruncateMixin):
     """
     Model mixin whose methods are available in MySQL.
     """
     @classmethod
-    def last_sequences(cls, db, num):
+    def last_sequences(cls, db: Connection, num: int) -> list[tuple[Column, int]]:
         cols = [c for c in cls.columns if c.incremental]
 
         if len(cols) > 1:
@@ -134,11 +136,16 @@ class MySQLMixin(MultiInsertMixin):
         elif len(cols) == 1:
             d = db.cursor()
             d.execute(f"SELECT LAST_INSERT_ID()")
-            sequence = d.fetchone()[0] + num - 1
+            sequence = d.fetchone()[0] + num - 1 # type: ignore
             d.close()
             return [(cols[0], sequence)]
         else:
             return []
+
+    @classmethod
+    def truncate(cls, db: Connection):
+        db.cursor().execute(f"DELETE FROM {cls.name}")
+        db.cursor().execute(f"ALTER TABLE {cls.name} auto_increment = 1")
 
 
 mixins = [MySQLMixin]

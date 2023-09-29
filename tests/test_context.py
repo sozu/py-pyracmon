@@ -26,8 +26,8 @@ class TestExecute:
         logger = PseudoLogger("test")
 
         cxt = ConnectionContext("a")
-        cxt.configure(logger=logger, sql_log_length=10)
 
+        cxt.configure(logger=logger, sql_log_length=10)
         c1 = cxt.execute(cursor, "SELECT", [1, 2, 3])
 
         cxt.configure(sql_log_length=4, parameter_log=True)
@@ -40,3 +40,26 @@ class TestExecute:
         assert cursor.conn.params_list == [[1, 2, 3], [4, 5, 6]]
 
         assert logger.messages == ["(a) SELECT", "(a) UPDA...", "(a) Parameters: [4, 5, 6]"]
+
+
+class TestExecuteMany:
+    def test_execute(self):
+        cursor = PseudoCursor(PseudoConnection(PseudoAPI()))
+        logger = PseudoLogger("test")
+
+        cxt = ConnectionContext("a")
+
+        cxt.configure(logger=logger, parameter_log=True)
+        c1 = cxt.executemany(cursor, "SELECT", [[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+
+        assert c1 is cursor
+
+        assert cursor.conn.query_list == ["SELECT", "SELECT", "SELECT"]
+        assert cursor.conn.params_list == [[1, 2, 3], [4, 5, 6], [7, 8, 9]]
+
+        assert logger.messages == [
+            "(a) SELECT",
+            "(a) Parameters: [1, 2, 3]",
+            "(a) Parameters: [4, 5, 6]",
+            "(a) Parameters: [7, 8, 9]",
+        ]

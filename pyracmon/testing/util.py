@@ -1,33 +1,17 @@
+from contextlib import AbstractContextManager
+from contextvars import ContextVar
 from datetime import datetime, date, time, timedelta
 from typing import *
 
 from pyracmon.connection import Connection
-from ..config import PyracmonConfiguration, default_config
+from ..config import PyracmonConfiguration, default_config, contextualConfiguration
 
 
-def testing_config(cfg: PyracmonConfiguration = default_config().derive()) -> PyracmonConfiguration:
-    """
-    Returns a configuration used for testing.
-
-    Args:
-        cfg: Don't use this argument. This exists to locate global instance in private.
-    """
-    return cfg
+config: ContextVar[PyracmonConfiguration] = ContextVar('config', default=contextualConfiguration(lambda: config, default_config()))
 
 
-def truncate(db: Connection, *models: List['Model']):
-    """
-    Truncate tables in order.
-
-    Args:
-        db: DB connection.
-        tables: Models of tables to truncate.
-    """
-    if len(models) == 0:
-        raise ValueError(f"No tables are specified. Did you forget to pass DB connection at the first argument?")
-
-    for m in models:
-        m.truncate(db)
+def default_test_config() -> PyracmonConfiguration:
+    return config.get()
 
 
 class Matcher:
@@ -112,12 +96,12 @@ def near(expected: Any, negative: Optional[Any] = None, positive: Optional[Any] 
     """
     if isinstance(expected, datetime):
         if all(k not in kwargs for k in ('weeks', 'days', 'hours', 'minutes', 'seconds', 'milliseconds', 'microseconds')):
-            kwargs.update(**testing_config().timedelta_unit)
+            kwargs.update(**default_test_config().timedelta_unit)
     return Near(expected, negative, positive, **kwargs)
 
 
 class let(Matcher):
-    def __init__(self, pred: Callable[[Any], bool]) -> Matcher:
+    def __init__(self, pred: Callable[[Any], bool]) -> None:
         """
         Creates a matcher which applies the predicate function to actual value and checks its returning value is ``True`` .
 
@@ -134,7 +118,7 @@ class let(Matcher):
 
 
 class one_of(Matcher):
-    def __init__(self, *candidates) -> Matcher:
+    def __init__(self, *candidates) -> None:
         """
         Creates a matcher which checks whether the actual value matches one of candidate values.
 

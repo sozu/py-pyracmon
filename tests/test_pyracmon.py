@@ -2,7 +2,7 @@ import sys
 import psycopg2
 import pytest
 from datetime import date, datetime, time, timedelta
-from typing import List
+from typing import Annotated
 from uuid import UUID
 from tests import models as m
 from pyracmon import *
@@ -220,7 +220,7 @@ class TestModelGraph:
         )
 
         class T2(TypedDict):
-            x1: document_type(int, "X1")
+            x1: Annotated[int, "X1"]
             x2: str
 
         def ex(cxt) -> T2:

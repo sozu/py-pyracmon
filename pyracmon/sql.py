@@ -1,5 +1,8 @@
+"""
+This module provides the type for query generation from a template string containing unified marker.
+"""
 from string import digits, Template
-from typing import *
+from typing import Any, Union
 from .marker import Marker
 
 
@@ -21,13 +24,13 @@ class Sql:
             else:
                 return self.marker(key)
 
-    def __init__(self, marker: Marker, template: str):
+    def __init__(self, marker: Marker, template: str) -> None:
         #: Marker used in the template
         self.marker = marker
         #: SQL template.
         self.template = template
 
-    def render(self, *args: Any, **kwargs: Any) -> Tuple[str, List[Any]]:
+    def render(self, *args: Any, **kwargs: Any) -> tuple[str, Union[list[Any], dict[str, Any]]]:
         """
         Renders SQL and converts parameters into the form available for current database driver.
 
@@ -43,6 +46,4 @@ class Sql:
 
         sub = Sql.Substitute(self.marker)
 
-        return Template(self.template).substitute(sub), self.marker.params(*args, **kwargs)
-
-
+        return Template(self.template).substitute(sub), self.marker.params(*args, **kwargs) # type: ignore

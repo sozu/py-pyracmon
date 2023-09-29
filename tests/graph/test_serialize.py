@@ -1,13 +1,20 @@
 from pyracmon.graph.spec import GraphSpec
 import pytest
-from typing import Generic, TypeVar, List, get_type_hints
+from typing import Generic, TypeVar, get_type_hints
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
 from pyracmon.graph.identify import HierarchicalPolicy
 from pyracmon.graph.serialize import *
-from pyracmon.graph.schema import T, Typeable, issubgeneric
+from pyracmon.graph.schema import Typeable, issubgeneric
 from pyracmon.graph.typing import TypedDict
+
+
+template = GraphTemplate([("x", object, None, None)])
+
+
+def node(v: Any) -> Node:
+    return Node(template.x, v, None, 0)
 
 
 class TestS:
@@ -55,19 +62,19 @@ class TestAggregator:
     def test_no_aggregator(self):
         ns = NodeSerializer()
         a = ns.aggregator
-        r = a([1, 2, 3])
+        r = a([node(1), node(2), node(3)])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == List[T]
-        assert r == [1, 2, 3]
+        assert signature(a).return_annotation == list[T] # type: ignore
+        assert [n.entity for n in r] == [1, 2, 3] # type: ignore
 
     def test_fold(self):
         ns = NodeSerializer()
-        def agg(vs: List[int]) -> int:
-            return vs[2]
+        def agg(vs: list[Node]) -> int:
+            return vs[2].entity
         ns.fold(agg)
         a = ns.aggregator
-        r = a([1, 2, 3])
+        r = a([node(1), node(2), node(3)])
 
         assert ns.be_singular
         assert signature(a).return_annotation is int
@@ -76,10 +83,10 @@ class TestAggregator:
     def test_fold_nosig(self):
         ns = NodeSerializer()
         def agg(vs):
-            return vs[2]
+            return vs[2].entity
         ns.fold(agg)
         a = ns.aggregator
-        r = a([1, 2, 3])
+        r = a([node(1), node(2), node(3)])
 
         assert ns.be_singular
         assert signature(a).return_annotation == T
@@ -87,15 +94,15 @@ class TestAggregator:
 
     def test_select(self):
         ns = NodeSerializer()
-        def agg(vs: List[int]) -> List[int]:
+        def agg(vs: list[Node]) -> list[Node]:
             return vs[0:2]
         ns.select(agg)
         a = ns.aggregator
-        r = a([1, 2, 3])
+        r = a([node(1), node(2), node(3)])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == List[int]
-        assert r == [1, 2]
+        assert signature(a).return_annotation == list[Node]
+        assert [n.entity for n in r] == [1, 2] # type: ignore
 
     def test_select_nosig(self):
         ns = NodeSerializer()
@@ -103,15 +110,15 @@ class TestAggregator:
             return vs[0:2]
         ns.select(agg)
         a = ns.aggregator
-        r = a([1, 2, 3])
+        r = a([node(1), node(2), node(3)])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == List[T]
-        assert r == [1, 2]
+        assert signature(a).return_annotation == list[T] # type: ignore
+        assert [n.entity for n in r] == [1, 2] # type: ignore
 
     def test_invalid_fold(self):
         ns = NodeSerializer()
-        def agg(vs: List[int]) -> List[int]:
+        def agg(vs: list[Node]) -> list[Node]:
             return vs[0:2]
 
         with pytest.raises(ValueError):
@@ -119,11 +126,11 @@ class TestAggregator:
 
     def test_invalid_select(self):
         ns = NodeSerializer()
-        def agg(vs: List[int]) -> int:
-            return vs[0:2]
+        def agg(vs: list[Node]) -> Node:
+            return vs[0]
 
         with pytest.raises(ValueError):
-            ns.select(agg)
+            ns.select(agg) # type: ignore
 
     def test_at(self):
         ns = NodeSerializer()
@@ -131,8 +138,8 @@ class TestAggregator:
         a = ns.aggregator
 
         assert ns.be_singular
-        assert a([1, 2, 3]) == 2
-        assert a([1]) == 100
+        assert a([node(1), node(2), node(3)]).entity == 2 # type: ignore
+        assert a([node(1)]) == 100
 
     def test_head(self):
         ns = NodeSerializer()
@@ -140,7 +147,7 @@ class TestAggregator:
         a = ns.aggregator
 
         assert ns.be_singular
-        assert a([1, 2, 3]) == 1
+        assert a([node(1), node(2), node(3)]).entity == 1 # type: ignore
         assert a([]) == 100
 
     def test_last(self):
@@ -149,16 +156,16 @@ class TestAggregator:
         a = ns.aggregator
 
         assert ns.be_singular
-        assert a([1, 2, 3]) == 3
+        assert a([node(1), node(2), node(3)]).entity == 3 # type: ignore
         assert a([]) == 100
 
 
 class TestEach:
-    def _context(self, entity):
+    def _context(self, entity) -> NodeContext:
         t = GraphTemplate([
             ("a", int, None, None),
         ])
-        return NodeContextFactory(None, [], {}).begin(Node(t.a, entity, None, 0), [])
+        return NodeContextFactory(SerializationContext({}, lambda t: []), [], {}).begin(Node(t.a, entity, None, 0), [])
 
     def test_no_serializer(self):
         s = NodeSerializer().serializer
@@ -229,7 +236,7 @@ class TestSub:
 
         u = GraphTemplate([
             ("a", int, None, None),
-            ("t", t),
+            ("t", t, None, None),
         ])
 
         return t, u
@@ -245,7 +252,7 @@ class TestSub:
 
         ns = NodeSerializer().sub(a=S.of(), b=S.of(), c=S.of(), d=S.of())
         s = ns.serializer
-        r = s(NodeContextFactory(None, [], {}).begin(Node(u.t, sub, None, 0), []))
+        r = s(NodeContextFactory(SerializationContext({}, lambda t: []), [], {}).begin(Node(u.t, sub, None, 0), []))
 
         assert ns.be_singular
         assert issubgeneric(signature(s).return_annotation, Typeable)
@@ -280,13 +287,13 @@ class TestAlter:
         t = GraphTemplate([
             ("a", str, None, None),
         ])
-        return NodeContextFactory(None, [], {}).begin(Node(t.a, entity, None, 0), [])
+        return NodeContextFactory(SerializationContext({}, lambda t: []), [], {}).begin(Node(t.a, entity, None, 0), [])
 
     def test_excludes(self):
-        def f(cxt) -> self.Base:
-            return {c:i for i, c in enumerate(cxt.value)}
-        def gen(cxt) -> self.Gen:
-            return dict(g1=10, g2="def")
+        def f(cxt) -> TestAlter.Base:
+            return TestAlter.Base(**{c:i for i, c in enumerate(cxt.value)})
+        def gen(cxt) -> TestAlter.Gen:
+            return TestAlter.Gen(g1=10, g2="def")
 
         s = NodeSerializer().each(f).alter(gen, ["b", "c"]).serializer
         r = s(self._context("abcde"))
@@ -296,10 +303,10 @@ class TestAlter:
         assert r == {"a": 0, "d": 3, "e": 4, "g1": 10, "g2": "def"}
 
     def test_includes(self):
-        def f(cxt) -> self.Base:
-            return {c:i for i, c in enumerate(cxt.value)}
-        def gen(cxt) -> self.Gen:
-            return dict(g1=10, g2="def")
+        def f(cxt) -> TestAlter.Base:
+            return TestAlter.Base(**{c:i for i, c in enumerate(cxt.value)})
+        def gen(cxt) -> TestAlter.Gen:
+            return TestAlter.Gen(g1=10, g2="def")
 
         s = NodeSerializer().each(f).alter(gen, includes=["b", "c", "g2"]).serializer
         r = s(self._context("abcde"))
@@ -361,6 +368,8 @@ class TestContext:
         ), lambda t: [])
         r = cxt.execute(self._graph())
 
+        print(r)
+
         assert r == {"a": [
             {"A": 0, "b": [{"B": 10, "d": [30, 31]}]},
             {"A": 1, "b": [{"B": 11, "d": [30]}, {"B": 12, "d": [30]}]},
@@ -395,6 +404,19 @@ class TestContext:
             {"A": 0, "B": 10},
             {"A": 1, "B": 11},
             {"A": 2, "B": 10},
+        ]}
+
+    def test_merge_empty(self):
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value}),
+            b=S.each(lambda cxt: {"B": cxt.value}).merge(),
+        ), lambda t: [])
+        graph = Graph(self._template())
+        graph.append(a=0, c=20, d=30)
+        r = cxt.execute(graph.view)
+
+        assert r == {"a": [
+            {"A": 0},
         ]}
 
     def test_merge_named(self):

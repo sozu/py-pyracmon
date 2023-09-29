@@ -1,21 +1,18 @@
 """
 This module provides graph specifications to deal with model types.
 
-Most of them are not used directly except for `ConfigurableSpec` which is a configurable attribute of `PyracmonConfiguration` .
+Most of them are not used directly except for `ConfigurableSpec` which is an attribute of `PyracmonConfiguration` .
 """
-from typing import *
-from itertools import takewhile
+from typing import Optional, Any, cast
 import inspect
-from .model import Model
-from .util import Configurable
+from .model import Model, Meta
 from .graph.spec import GraphSpec
-from .graph.schema import DynamicType, Shrink, document_type
-from .graph.serialize import T
+from .graph.typing import DynamicType, Shrink, document_type
+from .graph.serialize import T, Serializer
 from .graph.typing import TypedDict, issubgeneric
-from .graph.util import Serializer
 
 
-class GraphEntityMixin:
+class GraphEntityMixin(Meta):
     """
     Mixin class for model types which enables identity calculation and nullity check.
     """
@@ -56,6 +53,7 @@ class ModelSchema(DynamicType[T]):
     def fix(cls, bound, arg):
         class Schema(TypedDict):
             pass
+        bound = cast(type[Meta], bound)
         setattr(Schema, '__annotations__', {c.name:document_type(c.ptype, c.comment) for c in bound.columns})
         return Schema
 
@@ -66,10 +64,11 @@ class ExcludeFK(Shrink[T]):
     """
     @classmethod
     def select(cls, bound, arg):
+        arg = cast(type[Meta], arg)
         return {c.name for c in arg.columns if c.fk}, None
 
 
-class ConfigurableSpec(GraphSpec, Configurable):
+class ConfigurableSpec(GraphSpec):
     """
     Extension of `GraphSpec` prepared to integrate model types into graph specification.
 
@@ -88,7 +87,7 @@ class ConfigurableSpec(GraphSpec, Configurable):
         spec.add_entity_filter(GraphEntityMixin, lambda m: m and not type(m).is_null(m))
 
         def serialize(cxt) -> ModelSchema[T]:
-            return {c.name:v for c, v in cxt.value}
+            return cast(ModelSchema, {c.name:v for c, v in cxt.value})
         spec.add_serializer(GraphEntityMixin, serialize)
 
         return spec
@@ -99,7 +98,7 @@ class ConfigurableSpec(GraphSpec, Configurable):
         #: A flag which determines whether including foreign key columns in the result of graph serialization.
         self.include_fk = False
 
-    def clone(self):
+    def __deepcopy__(self, memo):
         spec = ConfigurableSpec(
             self.identifiers.copy(),
             self.entity_filters.copy(),
@@ -108,13 +107,7 @@ class ConfigurableSpec(GraphSpec, Configurable):
         spec.include_fk = self.include_fk
         return spec
 
-    def replace(self, another):
-        self.identifiers[:] = another.identifiers
-        self.entity_filters[:] = another.entity_filters
-        self.serializers[:] = another.serializers
-        self.include_fk = another.include_fk
-
-    def _model_serializer(self, bases: Callable[[Model], Any]) -> Serializer:
+    def _model_serializer(self, bases: list[Serializer]) -> list[Serializer]:
         """
         Generate configured serializer for model type.
 
@@ -126,7 +119,7 @@ class ConfigurableSpec(GraphSpec, Configurable):
             def serialize(cxt) -> ExcludeFK[T]:
                 fk = {c.name for c, _ in cxt.value if c.fk}
                 values = cxt.serialize()
-                return {c:v for c, v in values.items() if not c in fk}
+                return cast(ExcludeFK, {c:v for c, v in values.items() if not c in fk})
 
             pos = next(filter(lambda ib: issubgeneric(inspect.signature(ib[1]).return_annotation, ModelSchema), enumerate(bases)), None)
 
@@ -134,11 +127,10 @@ class ConfigurableSpec(GraphSpec, Configurable):
         else:
             return bases
 
-    def find_serializers(self, t) -> Optional[Serializer]:
+    def find_serializers(self, t) -> list[Serializer]:
         bases = super(ConfigurableSpec, self).find_serializers(t)
 
         if issubclass(t, GraphEntityMixin):
             return self._model_serializer(bases)
         else:
             return bases
-

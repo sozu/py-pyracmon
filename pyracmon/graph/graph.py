@@ -1,10 +1,41 @@
-from typing import *
-from .identify import neverPolicy
+"""
+This module exports types representing graphs.
+"""
+from typing import TypeVar, Generic, Protocol, Union, Optional, Any, overload, cast
+from typing_extensions import Self
+from collections.abc import MutableMapping, Iterable, Iterator
+from typing import Any
+from .identify import IdentifyPolicy, neverPolicy
 from .template import GraphTemplate
+from .protocol import *
 
 
-class GraphView:
-    pass
+T = TypeVar('T', covariant=True)
+
+
+class GraphView(Protocol):
+    """
+    The interface of the view of graph.
+    """
+    def __call__(self) -> 'Graph': ...
+    def __iter__(self) -> Iterator[tuple[str, 'ContainerView[NodeContainer]']]:
+        """
+        Iterates root container views.
+
+        Returns:
+            Iterator of pairs of name and container view.
+        """
+        ...
+    def __getattr__(self, name: str) -> 'ContainerView':
+        """
+        Returns a container view by its name.
+
+        Args:
+            name: Container name. i.e. template property name for the node container.
+        Returns:
+            Container view.
+        """
+        ...
 
 
 class Graph:
@@ -13,6 +44,7 @@ class Graph:
 
     The structure is determined by `GraphTemplate`. Use `new_graph` Instead of constructor to create new graph instance.
 
+    ```python
     >>> template = GraphSpac().new_template(
     >>>     a = (int, lambda x:x),
     >>>     b = (str, lambda x:x),
@@ -20,52 +52,59 @@ class Graph:
     >>> )
     >>> template.a << template.b << template.c
     >>> graph = new_graph(template)
+    ```
+
+    In above code, a graph which has 3 properties ( `a` `b` `c` ) and a structure where `a` is parent of `b` and `b` is parent of `c` is created.
 
     `append` ( `replace` ) is a method to store entities in the graph with tying them each other according to the structure.
     Entites are encapsulated by `Node` which can have an edge to parent node.
 
+    ```python
     >>> graph.append(a=1, b="a", c="x").append(a=2, b="b", c="y")
+    ```
 
     In `append`, entities are first sorted in descending order, and then:
 
     - Search a node whose entity is *identical* to the first entity from the corresponding node container.
         - If found, new node is not created and the *identical* node is set to next parent.
         - Otherwise, new node is appended and it is set to next parent.
-    - Repeat above to following entities. A difference is that *identical* node is searched from the parent set in previous operation.
+    - Apply this to following entities in order. A difference is that *identical* node is searched from the sequence of parents in the session.
 
-    In example here, the identification is done by entity value itself. Next code is the example where *identical* nodes are found.
+    In example here, the identification is done by entity value itself ( `lambda x:x` ). Next code is the example where *identical* nodes are found.
 
+    ```python
     >>> graph.append(a=1, b="a", c="z").append(a=2, b="c", c="y")
+    ```
 
     In the first `append`, `a` and `b` has its *identical* node and `a` is *identical* in the second.
-    `c` in the second one is not *identical* to any node because parent node `b="c"` is added as new node.
+    `c` in the second one is not *identical* to any node because parent node `b="c"` is already added as new node.
 
-    Due to the identification mechanism, repeatin `append` is sufficient to reconstruct entity relationships in the graph.
+    Due to the identification mechanism, entity relationships in the graph is guaranteed after repeating `append` .
     """
     def __init__(self, template: GraphTemplate):
         #: Graph template.
-        self.template = template
+        self.template: GraphTemplate = template
         #: A `dict` containing node containers by their names.
-        self.containers = {p.name:self._to_container(p) for p in template._properties}
+        self.containers: dict[str, NodeContainer] = {p.name:self._to_container(p) for p in template}
         self._view = None
 
-    def _to_container(self, prop):
+    def _to_container(self, prop: GraphTemplate.Property) -> 'NodeContainer':
         if isinstance(prop.kind, GraphTemplate):
             return _GraphNodeContainer(prop)
         else:
             return NodeContainer(prop)
 
-    def _container_of(self, prop):
-        cands = [c for c in self.containers.values() if c.prop.is_compatible(prop)]
-        if len(cands) > 1:
+    def _container_of(self, prop: GraphTemplate.Property) -> Optional['NodeContainer']:
+        candidates = [c for c in self.containers.values() if c.prop.is_compatible(prop)]
+        if len(candidates) > 1:
             raise ValueError(f"Container can't be determined from property '{prop.name}'.")
-        return cands[0] if cands else None
+        return candidates[0] if candidates else None
 
-    def __add__(self, another: Union['Graph', GraphView]) -> 'Graph':
+    def __add__(self, another: Union[Self, GraphView]) -> Self:
         """
         Create new graph by adding this graph and another graph.
 
-        New graph has the same template as this graph'S.
+        New graph has the same template as this graph's.
         On the other hand, because this method depends on `__iadd__()`, another graph must not have the same template.
 
         Args:
@@ -80,11 +119,10 @@ class Graph:
 
         return graph
 
-    def __iadd__(self, another: Union['Graph', GraphView]) -> 'Graph':
+    def __iadd__(self, another: Union[Self, GraphView]) -> Self:
         """
         Append nodes from another graph.
 
-        Templates of this graph and another graph must not be the same.
         Nodes of another graph are traversed from its root and appended to compatible containers each other.
 
         Args:
@@ -94,9 +132,7 @@ class Graph:
         """
         another = another if isinstance(another, Graph) else another()
 
-        roots_ = filter(lambda c: c.prop.parent is None, another.containers.values())
-
-        def add(n, anc):
+        def add(n: Node, anc: dict[str, list[Node]]):
             c = self._container_of(n.prop)
             if c:
                 c.append(n.entity, anc)
@@ -104,24 +140,27 @@ class Graph:
                 for m in ch_.nodes:
                     add(m, anc.copy())
 
-        for c_ in roots_:
+        for c_ in another.roots:
             for n_ in c_.nodes:
                 add(n_, {})
 
         return self
 
     @property
+    def roots(self) -> Iterable['NodeContainer']:
+        """
+        Returns root node containers.
+        """
+        return filter(lambda c: c.prop.parent is None, self.containers.values())
+
+    @property
     def view(self) -> GraphView:
         """
         Returns an unmodifiable view of this graph.
 
-        The view object works as the accessor to graph components.
+        The view object works as the accessor to graph nodes.
 
-        - Returns a graph instance when invoked as callable object.
-        - The attribute of a container name returns the container view.
-        - In iteration context, it iterates views of root containers.
-            - Root container is the container which has no parent.
-
+        ```python
         >>> template = GraphSpac().new_template(a=int, b=str, c=str)
         >>> template.a << template.b
         >>> graph = new_graph(template)
@@ -129,23 +168,24 @@ class Graph:
         >>> assert view() is graph                        # invocation
         >>> assert view.a is graph.containers["a"].view   # attribute
         >>> assert [c().name for c in view] == ["a", "c"] # iteration
+        ```
         """
         if self._view is None:
             graph = self
             class _GraphView:
-                def __call__(self):
+                def __call__(self) -> Graph:
                     """Returns the greph of this view."""
                     return graph
-                def __iter__(self):
+                def __iter__(self) -> Iterator[tuple[str, ContainerView[NodeContainer]]]:
                     """Iterates views of root containers."""
                     return map(lambda c: (c.name, c.view), filter(lambda c: c.prop.parent is None, graph.containers.values()))
-                def __getattr__(self, name):
+                def __getattr__(self, name: str) -> ContainerView:
                     """Returns a view of a container of the name."""
                     return graph.containers[name].view
             self._view = _GraphView()
         return self._view
 
-    def _append(self, to_replace, entities):
+    def _append(self, to_replace: bool, entities: dict[str, Any]) -> Self:
         props = [p for p in self.template if p.name in entities]
 
         filtered = set()
@@ -160,7 +200,7 @@ class Graph:
 
         return self
 
-    def append(self, **entities: Any) -> 'Graph':
+    def append(self, **entities: Any) -> Self:
         """
         Append entities with associated property names.
 
@@ -171,7 +211,7 @@ class Graph:
         """
         return self._append(False, entities)
 
-    def replace(self, **entities: Any) -> 'Graph':
+    def replace(self, **entities: Any) -> Self:
         """
         Works similarly to `append`, but entities of identical nodes are replaced with given entities.
 
@@ -203,34 +243,43 @@ def new_graph(template: GraphTemplate, *bases: Graph) -> Graph:
     return graph
 
 
-class _EmptyNodeView:
-    def __init__(self, prop, result):
-        self.prop = prop
-        self.result = result
+class ContainerView(Protocol, Generic[T]):
+    """
+    The interface of the view of a node set, i.e. `NodeContainer` and `Node.Children` .
+    """
+    def __bool__(self) -> bool:
+        """Returns whether this container is not empty."""
+        ...
+    def __call__(self) -> T:
+        """Returns a base container."""
+        ...
+    def __len__(self) -> int:
+        """Returns the number of nodes."""
+        ...
+    def __iter__(self) -> Iterator['NodeView']:
+        """Iterates views of nodes."""
+        ...
+    @overload
+    def __getitem__(self, index: int) -> 'NodeView': ...
+    @overload
+    def __getitem__(self, index: slice) -> Iterable['NodeView']: ...
+    def __getitem__(self, index: Union[int, slice]) -> Union['NodeView', Iterable['NodeView']]:
+        """Returns a view of a node at the index."""
+        ...
+    def __getattr__(self, key) -> 'ContainerView':
+        """Returns a view of the first node or empty container view if it does not exist."""
+        ...
 
-    def __call__(self, alt=None):
-        return self.result
 
-    def __iter__(self):
-        return iter([])
-
-    def __getattr__(self, key):
-        child = next(filter(lambda c: c.name == key, self.prop.children), None)
-        if child:
-            return _EmptyContainerView(child)
-        else:
-            raise KeyError(f"Graph property '{self.prop.name}' does not have a child property '{key}'.")
-
-
-class _EmptyContainerView:
+class _EmptyContainerView(ContainerView[None]):
     def __init__(self, prop):
         self.prop = prop
 
     def __bool__(self):
         return False
 
-    def __call__(self):
-        return []
+    def __call__(self) -> None:
+        return None
 
     def __iter__(self):
         return iter([])
@@ -252,19 +301,15 @@ class _EmptyContainerView:
             raise KeyError(f"Graph property '{self.prop.name}' does not have a child property '{key}'.")
 
 
-class ContainerView:
-    pass
-
-
 class NodeContainer:
     """
-    This class represents a node container of a template property.
+    This class represents a container of nodes for a template property.
     """
     def __init__(self, prop: GraphTemplate.Property):
-        self.nodes = []
-        self.keys = {}
         #: Template property.
         self.prop = prop
+        self.nodes: list[Node] = []
+        self.keys: dict[Any, list[int]] = {}
         self._view = None
 
     @property
@@ -275,18 +320,13 @@ class NodeContainer:
         return self.prop.name
 
     @property
-    def view(self) -> ContainerView:
+    def view(self) -> ContainerView['NodeContainer']:
         """
         Returns an unmodifiable view of this container.
 
         The view object works as the accessor to container components.
 
-        - Returns a container instance when invoked as callable object.
-        - The attribute of a child name returns the child container view of the first node in this container.
-        - Index access returns the view of node at the index.
-        - In iteration context, it iterates views of nodes.
-        - The number of nodes is returned by being applied to `len` .
-
+        ```python
         >>> template = GraphSpac().new_template(a=int, b=str, c=str)
         >>> template.a << template.b
         >>> graph = new_graph(template).append(a=1, b="a").append(a=1, b="b").append(a=2, b="c")
@@ -297,14 +337,15 @@ class NodeContainer:
         >>> assert view[1] is container.nodes[1].view              # index
         >>> assert [n() for n in view] == [1, 2]                   # iteration
         >>> assert len(view) == 2                                  # length
+        ```
         """
         if self._view is None:
             container = self
-            class _ContainerView(ContainerView):
+            class _ContainerView:
                 def __bool__(self):
                     """Returns whether this container is not empty."""
                     return len(container.nodes) != 0
-                def __call__(self):
+                def __call__(self) -> NodeContainer:
                     """Returns a base container."""
                     return container
                 def __len__(self):
@@ -313,13 +354,17 @@ class NodeContainer:
                 def __iter__(self):
                     """Iterates views of nodes."""
                     return map(lambda n: n.view, container.nodes)
-                def __getitem__(self, index):
+                @overload
+                def __getitem__(self, index: int) -> 'NodeView': ...
+                @overload
+                def __getitem__(self, index: slice) -> Iterable['NodeView']: ...
+                def __getitem__(self, index: Union[int, slice]) -> Union['NodeView', Iterable['NodeView']]:
                     """Returns a view of a node at the index."""
                     if isinstance(index, slice):
                         return [n.view for n in container.nodes[index]]
                     else:
                         return container.nodes[index].view
-                def __getattr__(self, key):
+                def __getattr__(self, key) -> ContainerView:
                     """Returns a view of the first node or empty container view if it does not exist."""
                     child = next(filter(lambda c: c.name == key, container.prop.children), None)
                     if child:
@@ -329,7 +374,7 @@ class NodeContainer:
             self._view = _ContainerView()
         return self._view
 
-    def append(self, entity: Any, ancestors: Dict[str, List['Node']], to_replace: bool = False):
+    def append(self, entity: Any, ancestors: MutableMapping[str, list['Node']], to_replace: bool = False):
         """
         Add an entity to this container.
 
@@ -341,10 +386,7 @@ class NodeContainer:
             ancestors: Parent nodes mapped by property names.
             to_replace: If `True`, the entity of identical node is replaced. Otherwise, it is not changed.
         """
-        def get_nodes(k):
-            return [self.nodes[i] for i in self.keys.get(k, [])]
-
-        policy = self.prop.policy or neverPolicy()
+        policy: IdentifyPolicy = self.prop.policy or neverPolicy()
 
         key = policy.get_identifier(entity)
 
@@ -352,7 +394,7 @@ class NodeContainer:
 
         new_nodes = identicals.copy()
 
-        for p in parents:
+        for pn in parents:
             index = len(self.nodes)
 
             node = Node(self.prop, entity, key, index)
@@ -361,8 +403,8 @@ class NodeContainer:
                 self.keys.setdefault(key, []).append(index)
             new_nodes.append(node)
 
-            if p is not None:
-                p.add_child(node)
+            if pn is not None:
+                pn.add_child(node)
 
         if to_replace:
             for n in identicals:
@@ -372,30 +414,33 @@ class NodeContainer:
 
 
 class _GraphNodeContainer(NodeContainer):
-    def append(self, entity, ancestors, to_replace):
+    """
+    NodeContainer which contains graph instances.
+    """
+    def append(self, entity: Any, ancestors: MutableMapping[str, Iterable['Node']], to_replace: bool = False):
         if not isinstance(entity, (dict, Graph)):
             raise ValueError(f"Node of graph only accepts dict or Graph object.")
 
         policy = self.prop.policy or neverPolicy()
 
-        parents, _ = policy.identify(self.prop, [], ancestors)
+        parents, _ = policy.identify(self.prop, cast(list[Node], []), ancestors)
 
-        for p in parents:
+        for pn in parents:
             index = len(self.nodes)
 
             graphs = []
 
-            if p is None or len(p.children[self.name].nodes) == 0:
-                g = Graph(self.prop.kind)
+            if pn is None or len(pn.children[self.name].nodes) == 0:
+                g = Graph(cast(GraphTemplate, self.prop.kind))
                 node = _GraphNode(self.prop, g, None, index)
                 self.nodes.append(node)
 
-                if p is not None:
-                    p.add_child(node)
+                if pn is not None:
+                    pn.add_child(node)
 
                 graphs.append(g)
             else:
-                graphs.extend([n.entity for n in p.children[self.name].nodes])
+                graphs.extend([n.entity for n in pn.children[self.name].nodes])
 
             for g in graphs:
                 if isinstance(entity, dict):
@@ -405,11 +450,15 @@ class _GraphNodeContainer(NodeContainer):
 
 
 class NodeView:
-    pass
-
-
-class NodeChildrenView:
-    pass
+    def __call__(self, alt: Any = None) -> Any:
+        """Returns an entity of this node."""
+        ...
+    def __getattr__(self, key: str) -> ContainerView:
+        """Returns a view of child nodes by its name."""
+        ...
+    def __iter__(self) -> Iterator[tuple[str, ContainerView]]:
+        """Iterate key-value pairs of child nodes."""
+        ...
 
 
 class Node:
@@ -421,17 +470,27 @@ class Node:
         This class represents a child nodes of a node.
         """
         def __init__(self, prop: GraphTemplate.Property):
-            self.nodes = []
-            self.keys = set()
             #: Template property.
             self.prop = prop
+            self.nodes: list[Node] = []
+            self.keys = set()
             self._view = None
 
         @property
-        def view(self) -> NodeChildrenView:
+        def name(self) -> str:
+            """
+            Returns the name of corresponding template property.
+            """
+            return self.prop.name
+
+        @property
+        def view(self) -> ContainerView['Node.Children']:
+            """
+            Returns an unmodifiable view of child nodes.
+            """
             if self._view is None:
                 base = self
-                class _ChildrenView(NodeChildrenView):
+                class _ChildrenView:
                     def __bool__(self):
                         """Returns whether this container is not empty."""
                         return len(base.nodes) != 0
@@ -444,6 +503,10 @@ class Node:
                     def __len__(self):
                         """Returns the number of child nodes."""
                         return len(base.nodes)
+                    @overload
+                    def __getitem__(self, index: int) -> 'NodeView': ...
+                    @overload
+                    def __getitem__(self, index: slice) -> Iterable['NodeView']: ...
                     def __getitem__(self, index):
                         """Returns a view of child node at the index."""
                         if isinstance(index, slice):
@@ -460,8 +523,11 @@ class Node:
                 self._view = _ChildrenView()
             return self._view
 
-        def has(self, node):
+        def __contains__(self, node: 'Node') -> bool:
             return node in self.keys
+
+        def __iter__(self) -> Iterator['Node']:
+            return iter(self.nodes)
 
         def append(self, node):
             if node not in self.keys:
@@ -475,9 +541,12 @@ class Node:
         self.entity = entity
         self.key = key
         self.parents = set()
-        self.children = {c.name: Node.Children(c) for c in prop.children}
+        self.children: dict[str, Node.Children] = {c.name: Node.Children(c) for c in prop.children}
         self._index = index
         self._view = None
+
+    def __contains__(self, key: str) -> bool:
+        return key in self.children
 
     @property
     def name(self) -> str:
@@ -491,28 +560,24 @@ class Node:
         """
         Returns an unmodifiable view of this node.
 
-        The view object works as the accessor to container components.
-
-        - Returns a node instance when invoked as callable object.
-        - The attribute of a child name returns the child container view.
-        - In iteration context, it iterates pairs of child conainter name and its view.
+        The view object works as the accessor to entity and child nodes.
         """
         if self._view is None:
             node = self
             class _NodeView(NodeView):
-                def __call__(self, alt=None):
+                def __call__(self, alt: Any = None) -> Any:
                     """Returns an entity of this node."""
                     return node.entity
-                def __getattr__(self, name):
+                def __getattr__(self, key: str) -> ContainerView:
                     """Returns a view of child nodes by its name."""
-                    return node.children[name].view
-                def __iter__(self):
+                    return node.children[key].view
+                def __iter__(self) -> Iterator[tuple[str, ContainerView]]:
                     """Iterate key-value pairs of child nodes."""
                     return map(lambda nc: (nc[0], nc[1].view), node.children.items())
             self._view = _NodeView()
         return self._view
 
-    def add_child(self, child: 'Node') -> 'Node':
+    def add_child(self, child: 'Node') -> Self:
         """
         Adds a child node.
 

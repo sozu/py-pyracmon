@@ -1,5 +1,5 @@
 import pytest
-from pyracmon.model import Table, Column, define_model
+from pyracmon.model import Table, Column, define_model, COLUMN
 from pyracmon.select import *
 
 
@@ -8,15 +8,18 @@ table1 = Table("t1", [
     Column("c2", int, None, False, None, None, False),
     Column("c3", int, None, False, None, None, True),
 ])
+class T1(Model, SelectMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
 
 table2 = Table("t2", [
     Column("c1", int, None, True, None, "seq", False),
     Column("c2", int, None, True, None, None, True),
     Column("c3", int, None, False, None, None, False),
 ])
+class T2(Model, SelectMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
 
-model1 = define_model(table1, [SelectMixin])
-model2 = define_model(table2, [SelectMixin])
+
+model1 = define_model(table1, [SelectMixin], model_type=T1)
+model2 = define_model(table2, [SelectMixin], model_type=T2)
 
 
 class TestSelection:
@@ -136,7 +139,7 @@ class TestFieldExpressions:
 
         exp += "b"; exp += "a2"
 
-        assert (exp.a1, exp.a2, exp.t1, exp.b) == (a1, "a2", a3, "b")
+        assert (exp.a1, exp["a2"], exp.t1, exp["b"]) == (a1, "a2", a3, "b")
         assert list(exp) == [a1, a2, a3, "b", "a2"]
         assert str(exp) == "a1.c1, a1.c2, a1.c3, a2.c2, c1, c2, c3, b, a2"
         assert str(exp(b="b1.c1", a2="d2")) == "a1.c1, a1.c2, a1.c3, a2.c2, c1, c2, c3, b1.c1, d2"
@@ -157,7 +160,7 @@ class TestFieldExpressions:
     def test_mixture(self):
         exp = model1.select("a1", ["c1", "c2"]) + "b" + () + model1.select("a2", ["c1", "c2", "c3"]) + "d"
 
-        assert all([hasattr(exp, k) for k in ["a1", "b", "a2", "d"]])
+        assert (exp.a1.alias, exp["b"], exp.a2.alias, exp["d"]) == ("a1", "b", "a2", "d")
         assert len(list(exp)) == 5
         assert str(exp("c", b="b1.c1", d="d2")) == "a1.c1, a1.c2, b1.c1, c, a2.c1, a2.c2, a2.c3, d2"
 
@@ -238,3 +241,41 @@ class TestReadRow:
         assert isinstance(rv.a2, model2) and (rv[3] is rv.a2) and rv.a2.c1 == 5 and rv.a2.c2 == 6 and rv.a2.c3 == 7
         assert (rv[4] is rv.d) and rv.d == 8
         assert rv[5] == 9
+
+
+class TestAliasedColumn:
+    def test_column(self):
+        ac = AliasedColumn("a", table1.columns[0])
+        assert ac.name == "a.c1"
+
+    def test_expression(self):
+        ac = AliasedColumn("a", "abc")
+        assert ac.name == "a.abc"
+
+    def test_no_alias_column(self):
+        ac = AliasedColumn("", table1.columns[0])
+        assert ac.name == "c1"
+
+    def test_no_alias_expression(self):
+        ac = AliasedColumn("", "abc")
+        assert ac.name == "abc"
+
+    def test_eq(self):
+        ac = AliasedColumn("a", table1.columns[0])
+        c = ac.eq(3)
+        assert (c.expression, c.params) == ("a.c1 = $_", [3])
+
+    def test_in(self):
+        ac = AliasedColumn("a", table1.columns[0])
+        c = ac.in_([1, 2, 3])
+        assert (c.expression, c.params) == ("a.c1 IN ($_, $_, $_)", [1, 2, 3])
+
+
+class TestAliased:
+    def test_select(self):
+        a = Aliased("t", model1)
+        s = a.select(["c1", "c3"])
+        assert str(s) == "t.c1, t.c3"
+        v = s.consume([1, 3])
+        assert isinstance(v, model1)
+        assert (v.c1, v.c3) == (1, 3)
