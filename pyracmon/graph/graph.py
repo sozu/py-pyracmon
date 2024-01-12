@@ -223,7 +223,7 @@ class Graph:
         return self._append(True, entities)
 
 
-def new_graph(template: GraphTemplate, *bases: Graph) -> Graph:
+def new_graph(template: GraphTemplate, *bases: Union[Graph, GraphView]) -> Graph:
     """
     Create a graph from a template.
 

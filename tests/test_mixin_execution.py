@@ -53,15 +53,14 @@ last_dialect: Optional[str] = None
 #@pytest.fixture(params=["mysql"])
 def db(request):
     global last_dialect
-    match request.param:
-        case "postgresql":
-            db = _connect_postgresql()
-            dialect = postgresql
-        case "mysql":
-            db = _connect_mysql()
-            dialect = mysql
-        case x:
-            raise ValueError(f"Unexpected DBMS: {x}")
+    if request.param == "postgresql":
+        db = _connect_postgresql()
+        dialect = postgresql
+    elif request.param == "mysql":
+        db = _connect_mysql()
+        dialect = mysql
+    else:
+        raise ValueError(f"Unexpected DBMS: {request.param}")
 
     if 't1' not in dir(m) or last_dialect != request.param:
         declare_models(dialect, db, 'tests.models')

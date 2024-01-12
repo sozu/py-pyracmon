@@ -197,4 +197,3 @@ class TestLastSequences:
         )
 
         assert [(m.columns[0], 3)] == m.last_sequences(db, 3)
-

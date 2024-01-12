@@ -1,9 +1,7 @@
-from contextlib import AbstractContextManager
+from collections.abc import Callable
 from contextvars import ContextVar
 from datetime import datetime, date, time, timedelta
-from typing import *
-
-from pyracmon.connection import Connection
+from typing import Any, Optional
 from ..config import PyracmonConfiguration, default_config, contextualConfiguration
 
 

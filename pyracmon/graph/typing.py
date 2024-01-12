@@ -1,5 +1,15 @@
+from dataclasses import is_dataclass, fields
 from inspect import Signature
-from typing import Any, TypeVar, Generic, Optional, TypedDict, Annotated, Union, get_args, get_origin, is_typeddict, get_type_hints, cast
+from typing import Any, TypeVar, Generic, Optional, TypedDict, Annotated, Union, get_args, get_origin, get_type_hints, cast
+try:
+    from typing import is_typeddict
+except:
+    from typing_extensions import is_typeddict
+try:
+    # > python3.10
+    from types import UnionType
+except:
+    UnionType = None
 
 
 T = TypeVar('T')
@@ -19,7 +29,7 @@ def issubgeneric(t: Any, p: type) -> bool:
         return issubclass(t, p)
     else:
         origin = get_origin(t)
-        return origin is not None and issubclass(origin, p)
+        return isinstance(origin, type) and issubclass(origin, p)
 
 
 def issubtype(t: type, p: type) -> bool:
@@ -36,6 +46,123 @@ def issubtype(t: type, p: type) -> bool:
         return is_typeddict(t) and set(t.__annotations__.items()) >= set(p.__annotations__.items())
     else:
         return issubclass(t, p)
+
+
+def is_optional(t: Any) -> Optional[Any]:
+    """
+    Checks if the given annotation corresponds to an optional type and returns the inner type.
+
+    Args:
+        t: Annotation value.
+    Returns:
+        Optional type if the annotation is optional, otherwise `None` .
+    """
+    org = get_origin(t)
+
+    if org == Optional:
+        return get_args(t)[0]
+    elif org == Union or org == UnionType:
+        args = get_args(t)
+        return args[0] if len(args) == 2 and args[1] == type(None) else None
+    else:
+        return None
+
+
+def replace_optional_typevar(t: Any, actual: Any) -> Any:
+    """
+    Replaces the first type variable in annotation value with actual type.
+
+    This function is designed to deal with only optional types whose inner structure depends on python version and code style.
+
+    Args:
+        t: Annotation value.
+    Returns:
+        Annotation value with replaced type variable.
+    """
+    if t == Signature.empty or isinstance(t, TypeVar):
+        return actual
+
+    org = get_origin(t)
+    args = get_args(t)
+
+    def replace(gen: Any, targs: list[Any]) -> Any:
+        var_found = False
+        rargs: list[Any] = []
+
+        for a in targs:
+            if not var_found and isinstance(a, TypeVar):
+                var_found = True
+                rargs.append(replace_optional_typevar(a, actual))
+            else:
+                rargs.append(a)
+
+        if get_origin(rargs[0]) == Annotated:
+            # Move Annotated to the outermost.
+            # Optional[Annotated[int, "ann"]] -> Annotated[Optional[int], "ann"]
+            # Union[Annotated[int, "ann"], None] -> Annotated[Union[int, None], "ann"]
+            ann_args = get_args(rargs[0])
+            res = Annotated[replace(gen, [ann_args[0]] + rargs[1:]), ann_args[1]]
+            for a in ann_args[2:]:
+                res = Annotated[res, a]
+        elif len(rargs) == 1:
+            res = gen[rargs[0]]
+        else:
+            res = gen[rargs[0], rargs[1]]
+            for a in rargs[2:]:
+                res = gen[res, a]
+
+        return res
+
+    if org == Optional:
+        return Optional[replace_optional_typevar(args[0], actual)]
+    elif org == Union or org == UnionType:
+        return replace(Union, list(args))
+    elif org == Annotated:
+        return replace(Annotated, list(args))
+    else:
+        return t
+
+
+def to_typeddict(t: Any, strict: bool) -> type[TypedDict]:
+    """
+    Convert an annotation `t` into `TypedDict` type.
+
+    Args:
+        t: Any kind of annotation.
+        strict: If `True` , `TypeError` will be raised when `t` is neither a `TypeDict` nor a dataclass.
+    Returns:
+        `TypedDict` type which represents `t` .
+    """
+    if is_typeddict(t):
+        return t
+    elif is_dataclass(t):
+        return TypedDict(t.__name__, {f.name:f.type for f in fields(t)}) # type: ignore
+    else:
+        if strict:
+            raise TypeError(f"Type parameter must be resolved to TypedDict but {t}.")
+        else:
+            return TypedDict
+
+
+def to_rawdict(v: Any, strict: bool) -> dict:
+    """
+    Convert a value into builtin `dict` .
+
+    Args:
+        v: Any value.
+        strict: If `True` , `TypeError` will be raised when `v` is an instance of neither a `dict` nor a dataclass.
+    Returns:
+        Converted `dict` .
+    """
+    if isinstance(v, dict):
+        return v
+    elif is_dataclass(v):
+        return {f.name:getattr(v, f.name) for f in fields(v)}
+    else:
+        if strict:
+            raise TypeError(f"The value must be a dict or dataclass instance but {type(v)}.")
+        else:
+            return {}
 
 
 def generate_schema(annotations: dict[str, Any], base: Optional[type[TypedDict]] = None) -> type[TypedDict]:
@@ -168,9 +295,8 @@ class Shrink(Typeable[T]):
         """
         if bound == Signature.empty:
             return TypedDict
-        if not is_typeddict(bound):
-            raise TypeError(f"Type parameter for Shrink must be resolved to TypedDict but {bound}.")
-        bound = cast(type[TypedDict], bound)
+
+        bound = to_typeddict(bound, True)
 
         exc, inc = shrink.select(bound, arg)
         annotations = {n:t for n, t in get_type_hints(bound, include_extras=True).items() if (not inc or n in inc) and (n not in exc)}
@@ -210,16 +336,16 @@ class Extend(Typeable[T]):
         """
         if bound == Signature.empty:
             return TypedDict
-        if not is_typeddict(bound):
-            raise TypeError(f"Type parameter for Shrink must be resolved to TypedDict but {bound}.")
-        bound = cast(type[TypedDict], bound)
+
+        bound = to_typeddict(bound, True)
 
         ext = extend.schema(bound, arg)
+        td = to_typeddict(ext, False)
 
-        return generate_schema(ext.__annotations__ if is_typeddict(ext) else {}, bound)
+        return generate_schema(td.__annotations__, bound)
 
     @classmethod
-    def schema(cls, bound: type[TypedDict], arg: type) -> Union[TypedDict, Signature.empty]:
+    def schema(cls, bound: type[TypedDict], arg: type) -> Any:
         """
         Creates a `TypedDict` representing a schema of adding keys and their types.
 
@@ -287,8 +413,12 @@ def walk_schema(td, with_doc=False) -> dict[str, Union[type, Annotated]]:
 
         t, conv = expand(t)
 
+        opt_type = is_optional(t)
+
         if is_typeddict(t):
             put(k, conv(walk_schema(t, with_doc)), doc)
+        elif opt_type is not None and is_typeddict(opt_type):
+            put(k, conv(walk_schema(opt_type, with_doc)), doc)
         else:
             put(k, conv(t), doc)
     

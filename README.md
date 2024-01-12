@@ -4,7 +4,7 @@
 
 This library provides functionalities to refine codes executing DB operations. The main peculiar concepts are *model declaration* and *relational graph*.
 
-*Model* is the class representing a table and its instance corresponds to a record. This library provides a way to declare model classes by reverse-engineering from actual tables. Once you connect DB, model classes are importable from a module you specified. Those classes have various methods executing simple operations on a table.
+*Model* is the class representing a table and its instance corresponds to a record. This library provides a way to declare model classes by reverse-engineering from actual tables. Once you connect DB, model classes becomes importable from a module you specified. Those classes have various methods executing simple operations on a table.
 
 *Graph* is composed of *node*s and *edge*s, where each node contains a model object or any kind of value. An edge between nodes represents their relation, such as foreign key constraint between records. *Graph*s are designed to store results of queries with straight-forward codes, which makes you free from suffering from the reconstruction of data structure. Additionally, *graph view* provides intuitive interfaces to traverse it and *graph serialization* feature enables conversion from a *graph* into a `dict` with keeping its structure and applying flexible representation to each node.
 
@@ -40,11 +40,11 @@ This library provides the functionality to get the schema of serialized graph st
 
 Experimental.
 
-Testing DB operations is an important but difficult task. `pyracmon.testing` provides interfaces to reduce the difficulty. One of them is the generation of fixture by minimal declaration of column values. Feeding values only on columns in interest generates rows by complementing other columns with automatically generated values. Others are in experimental stage and will be changed or removed in future version.
+Testing DB operations is an important but frastrating task. `pyracmon.testing` provides interfaces to reduce the difficulty. One of them is the generation of fixture by minimal declaration of column values. Feeding values only on columns in interest generates rows by complementing other columns with automatically generated values. Others are in experimental stage and will be changed or removed in future version.
 
 ## Prerequisite
 
-Pyracmon requires python 3.6 or higher.
+Pyracmon requires python 3.9 or higher.
 
 Static typing functionalities are highly affected by python version.
 Because of frequent update of python `typing` package, syntax assumed in this library might already have got deprecated.
@@ -59,7 +59,7 @@ Use them or some other library and tell it to pyracmon via `pyracmon.declare_mod
 ## Installation
 
 ```
-$ pip install pyracmon==1.0a1
+$ pip install pyracmon==1.0.0
 ```
 
 ## Grance of functionalities
@@ -182,7 +182,6 @@ print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.cont
 # Fetch records by condition.
 # sql: SELECT id, blog_id, title, content FROM post WHERE blog_id = %s ORDER BY title ASC limit %s OFFSET %s
 # parameters: 2, 10, 20
-m = db.helper.marker()
 for p in post.fetch_where(db, Q.eq(blog_id = 2), orders = dict(title = True), limit = 10, offset = 20):
     print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.content}")
 
@@ -209,7 +208,7 @@ limit, offset = ...
 
 # 1. Columns with aliases to select from each table.
 # b.id, b.title, p.title, p.content
-exp = blog.select("b"), post.select("p", ["title", "content"])
+exp = blog.select("b") + post.select("p", ["title", "content"])
 
 # 2. WHERE clause and parameters.
 # WHERE b.id IN (?, ?, ...)
@@ -225,7 +224,7 @@ c = db.stmt().execute(f"""
         INNER JOIN post AS p ON b.id = p.blog_id
     {w}
     LIMIT $_ OFFSET $_
-    """, *params, *[limit, offset])
+    """, *params, limit, offset)
 
 # 4. Model objects obtained from each row.
 for row in c.fetchall():
@@ -402,11 +401,13 @@ Some behaviors can be changed at serialization stage via class methods of `S` as
 
 ```
 from pyracmon import S, graph_dict
+from typing import TypedDict
 
-def add_thumbnail(s, v):
-    r = s(v)
-    r['thumbnail'] = f"{r['url']}/thumbnail"
-    return r
+class Thumbnail(TypedDict):
+    thumbnail: str
+
+def with_thumbnail(cxt) -> Thumbnail:
+    return dict(thumbnail=f"{cxt.value.url}/thumbnail")
 
 result = graph_dict(
     fetch_blogs(),
@@ -414,7 +415,7 @@ result = graph_dict(
     recent_posts = S.name("posts"),
     total_posts = S.head(),
     categories = S.of(),
-    images = S.each(add_thumbnail),
+    images = S.alter(with_thumbnail),
     recent_comments = S.name("comments"),
     most_liked_comment = S.head(),
     total_comments = S.head(),
@@ -442,7 +443,7 @@ schema = graph_schema(
     recent_posts = S.name("posts"),
     total_posts = S.head(),
     categories = S.of(),
-    images = S.each(add_thumbnail),
+    images = S.alter(with_thumbnail),
     recent_comments = S.name("comments"),
     most_liked_comment = S.head(),
     total_comments = S.head(),

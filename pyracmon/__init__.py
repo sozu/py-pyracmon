@@ -6,7 +6,6 @@ Base module of pyracmon exporting commonly used objects.  Use `*` simply to impo
 import sys
 import types
 from typing import Union, Optional, Any, TypeVar, TYPE_CHECKING
-from typing_extensions import Unpack
 from pyracmon.config import default_config
 from pyracmon.connection import connect, Connection
 from pyracmon.context import ConnectionContext
@@ -16,13 +15,14 @@ from pyracmon.select import read_row
 from pyracmon.model import define_model, Table, Column
 from pyracmon.model_graph import GraphEntityMixin
 from pyracmon.query import Q, Expression, Conditional, escape_like, where
+from pyracmon.query_graph import append_rows
 from pyracmon.clause import order_by, ranged_by, holders, values
 from pyracmon.stub import output_stub
 from pyracmon.graph import new_graph, S
 from pyracmon.graph.graph import Graph, GraphView, NodeContainer, ContainerView, Node, NodeView
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.schema import TypedDict, document_type, Typeable, GraphSchema
+from pyracmon.graph.schema import document_type, Typeable, GraphSchema
 from pyracmon.graph.serialize import NodeContext
 from pyracmon.graph.typing import walk_schema
 from pyracmon.testing import TestingMixin
@@ -30,7 +30,7 @@ from pyracmon.testing import TestingMixin
 
 if TYPE_CHECKING:
     from pyracmon.model import Model as _Model
-    class Model(_Model, CRUDMixin, GraphEntityMixin):
+    class Model(_Model):
         pass
 else:
     from pyracmon.model import Model
@@ -49,6 +49,7 @@ __all__ = [
     "Expression",
     "Conditional",
     "where",
+    "append_rows",
     "escape_like",
     "order_by",
     "ranged_by",
@@ -62,7 +63,6 @@ __all__ = [
     "ContainerView",
     "Node",
     "NodeView",
-    "TypedDict",
     "document_type",
     "Typeable",
     "walk_schema",
@@ -108,15 +108,15 @@ def declare_models(
     tables = dialect.read_schema(db, excludes, includes)
     models = []
     mod = module if isinstance(module, types.ModuleType) else sys.modules[module]
-    base_mixins = [CRUDMixin, GraphEntityMixin]
+    base_mixins = [CRUDMixin, GraphEntityMixin, model_type]
     if testing:
         base_mixins[0:0] = [TestingMixin]
     for t in tables:
-        m = define_model(t, mixins + dialect.mixins + [CRUDMixin, GraphEntityMixin])
+        m = define_model(t, mixins + dialect.mixins + base_mixins)
         mod.__dict__[t.name] = m
         models.append(m)
     if write_stub:
-        output_stub(None, mod, models, dialect, mixins)
+        output_stub(None, mod, models, dialect, mixins, testing=testing)
     return models
 
 

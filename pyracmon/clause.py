@@ -1,8 +1,12 @@
 """
 This module provides functions to generate miscellaneous clauses in query.
 """
-from collections.abc import Mapping, Sequence
-from typing import Any, Union, TypeAlias, Optional, Callable
+from collections.abc import Mapping, Sequence, Callable
+from typing import Any, Union, Optional
+try:
+    from typing import TypeAlias
+except:
+    from typing_extensions import TypeAlias
 from .select import AliasedColumn
 from .query import Expression
 from .util import Qualifier

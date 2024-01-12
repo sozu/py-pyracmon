@@ -10,6 +10,7 @@ from typing_extensions import dataclass_transform
 from pyracmon.model import Model
 from pyracmon.mixin import CRUDMixin
 from pyracmon.model_graph import GraphEntityMixin
+from pyracmon.testing import TestingMixin
 
 
 default_imports = [
@@ -30,6 +31,7 @@ def render_models(
     models: list[type[Model]],
     dialect: types.ModuleType,
     mixins: list[type],
+    testing: bool = False,
 ) -> list[str]:
     """
     Generate lines of type stub file (.pyi).
@@ -63,7 +65,10 @@ def render_models(
     for mod, names in (default_imports + [(m,list(ns)) for m, ns in additional_imports.items()]):
         lines.append(f"from {mod} import {', '.join(names)}")
 
-    super_types.extend([CRUDMixin.__name__, GraphEntityMixin.__name__, ModelTransform.__name__])
+    base_mixins = [CRUDMixin, GraphEntityMixin, ModelTransform, Model]
+    if testing:
+        base_mixins[0:0] = [TestingMixin]
+    super_types.extend([m.__name__ for m in base_mixins])
 
     def coltype(t: type) -> str:
         org = get_origin(t)
@@ -99,6 +104,7 @@ def output_stub(
     models: list[type[Model]],
     dialect: types.ModuleType,
     mixins: list[type],
+    testing: bool = False,
 ):
     """
     Output type stub file (.pyi) into the specified location.
@@ -124,7 +130,7 @@ def output_stub(
 
     path = path.joinpath(f"{modpath[-1]}.pyi")
 
-    pyi = render_models(models, dialect, mixins)
+    pyi = render_models(models, dialect, mixins, testing)
 
     with open(path, "w") as f:
         for line in pyi:

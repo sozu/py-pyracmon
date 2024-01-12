@@ -3,7 +3,11 @@ This module provides the context type which controls query execution as configur
 """
 from collections.abc import Sequence
 import logging
-from typing import Any, Union, Optional, Literal, TypeAlias, overload
+from typing import Any, Union, Optional, Literal, overload
+try:
+    from typing import TypeAlias
+except:
+    from typing_extensions import TypeAlias
 from .config import default_config
 from . import dbapi
 

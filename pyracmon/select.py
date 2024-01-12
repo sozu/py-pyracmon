@@ -9,7 +9,7 @@ In most cases, classes of this module should not be used directly.
 The use of `SelectMixin.select` and `read_row` is sufficient way to benefit from this module.
 """
 from collections.abc import Iterator
-from typing import Any, Union, Callable, TypeVar, Generic, Optional, cast
+from typing import Any, Union, TypeVar, Generic, Optional, Literal, Protocol, cast, overload
 from typing_extensions import Self
 from .model import Model, Column
 from .query import Q, Queryable
@@ -28,7 +28,7 @@ class AliasedColumn(Queryable[Any]): # type: ignore
 
     ```python
     >>> c = AliasedColumn("t", "col")
-    >>> e.eq(3)
+    >>> c.eq(3)
     Condition: 't.col = $_' -- [3]
     ```
     """
@@ -98,7 +98,47 @@ class Aliased(Generic[M]):
         return cast(Selection[M], Selection(self.model, self.alias, columns))
 
 
-class Selection(Generic[S]):
+class Consumable:
+    def __len__(self) -> int: ...
+    @property
+    def name(self) -> Optional[str]: ...
+    def consume(self, values: list[Any]) -> Any: ...
+
+
+class StrConsumable(Consumable):
+    def __init__(self, key: str) -> None:
+        self.key = key
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, StrConsumable) and self.key == other.key
+
+    def __len__(self) -> int:
+        return 1
+
+    @property
+    def name(self) -> Optional[str]:
+        return self.key
+
+    def consume(self, values: list[Any]) -> Any:
+        return values[0]
+
+
+class EmptyConsumable(Consumable):
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, EmptyConsumable)
+
+    def __len__(self) -> int:
+        return 1
+
+    @property
+    def name(self) -> Optional[str]:
+        return None
+
+    def consume(self, values: list[Any]) -> Any:
+        return values[0]
+
+
+class Selection(Consumable, Generic[S]):
     """
     A representation of table and its columns used in query.
 
@@ -198,7 +238,7 @@ class FieldExpressions:
     ```
     """
     def __init__(self):
-        self.__selections: list[Union[Selection, str, tuple[()]]] = []
+        self.__selections: list[Consumable] = []
         self.__keys = {}
 
     def __add__(self, other) -> Self:
@@ -215,25 +255,22 @@ class FieldExpressions:
             self.__selections += other.__selections
             self.__keys.update(other.__keys)
         elif isinstance(other, str):
-            self.__selections.append(other)
-            self.__keys[other] = other
+            cons = StrConsumable(other)
+            self.__selections.append(cons)
+            self.__keys[other] = cons
         elif other == ():
-            self.__selections.append(other)
+            self.__selections.append(EmptyConsumable())
         else:
             raise ValueError(f"Operand of + for FieldExpressions must be a Selection or FieldExpressions but {type(other)} is given.")
         return self
 
-    def __getitem__(self, key: str) -> Union[Selection, str, tuple[()]]:
+    def __getitem__(self, index: int) -> Consumable:
+        return self.__selections[index]
+
+    def __getattr__(self, key: str) -> Consumable:
         return self.__keys[key]
 
-    def __getattr__(self, key: str) -> Selection:
-        s = self.__keys[key]
-        if isinstance(s, Selection):
-            return s
-        else:
-            raise KeyError(f"{key} is not a key for Selection object.")
-
-    def __iter__(self) -> Iterator[Union[Selection, str, tuple[()]]]:
+    def __iter__(self) -> Iterator[Consumable]:
         return iter(self.__selections)
 
     class Instance:
@@ -244,12 +281,12 @@ class FieldExpressions:
 
         def __repr__(self):
             args = list(self.args)
-            def _repr(s: Union[Selection, str, tuple[()]]) -> str:
+            def _repr(s: Consumable) -> str:
                 if isinstance(s, Selection):
                     return s.__repr__()
-                elif isinstance(s, str):
-                    return self.kwargs.get(s, s)
-                elif s == ():
+                elif isinstance(s, StrConsumable):
+                    return self.kwargs.get(s.key, s.key)
+                elif isinstance(s, EmptyConsumable):
                     return args.pop(0)
                 else:
                     raise ValueError(f"Unexpected expression type: {s}")
@@ -290,17 +327,9 @@ class RowValues:
     Args:
         selections: List of selections which assign each value in row to a column.
     """
-    def __init__(self, selections: list[Union[Selection, str, tuple[()]]]):
-        self._key_map = dict([(s, i) for i, s in enumerate(map(self._key_of, selections)) if s is not None])
+    def __init__(self, selections: list[Consumable]):
+        self._key_map = dict([(s.name, i) for i, s in enumerate(selections) if s.name is not None])
         self._values = []
-
-    def _key_of(self, s):
-        if isinstance(s, Selection):
-            return s.name
-        elif isinstance(s, str):
-            return s
-        else:
-            return None
 
     def __len__(self):
         return len(self._values)
@@ -327,7 +356,7 @@ class RowValues:
         self._values.append(value)
 
 
-def read_row(row, *selections: Union[Selection, str, tuple[()]], allow_redundancy: bool = False) -> RowValues:
+def read_row(row, *selections: Consumable, allow_redundancy: bool = False) -> RowValues:
     """
     Read values in a row according to given selections.
 
@@ -346,17 +375,8 @@ def read_row(row, *selections: Union[Selection, str, tuple[()]], allow_redundanc
     result = RowValues(list(selections))
 
     for s in selections:
-        if isinstance(s, Selection):
-            result.append(s.consume(row))
-            row = row[len(s):]
-        elif callable(s):
-            result.append(s(row[0]))
-            row = row[1:]
-        elif s == () or isinstance(s, str):
-            result.append(row[0])
-            row = row[1:]
-        else:
-            raise ValueError("Unavailable value is given to read_row().")
+        result.append(s.consume(row))
+        row = row[len(s):]
 
     if not allow_redundancy and len(row) > 0:
         raise ValueError("Not all elements in row is consumed.")
@@ -365,8 +385,14 @@ def read_row(row, *selections: Union[Selection, str, tuple[()]], allow_redundanc
 
 
 class SelectMixin:
+    @overload
     @classmethod
-    def select(cls, alias: str = "", includes: list[str] = [], excludes: list[str] = []) -> Selection[Self]:
+    def select(cls, alias: str = "", includes: list[str] = [], excludes: list[str] = [], single: Literal[False] = False) -> FieldExpressions: ...
+    @overload
+    @classmethod
+    def select(cls, alias: str = "", includes: list[str] = [], excludes: list[str] = [], single: Literal[True] = True) -> Selection[Self]: ...
+    @classmethod
+    def select(cls, alias: str = "", includes: list[str] = [], excludes: list[str] = [], single: bool = False):
         """
         Default mixin class of every model type providing method to generate `Selection` by Selecting columns with alias.
 
@@ -377,4 +403,7 @@ class SelectMixin:
         Returns:
             Selection object.
         """
-        return Aliased(alias, cast(type, cls)).select(includes, excludes)
+        if single:
+            return Aliased(alias, cast(type, cls)).select(includes, excludes)
+        else:
+            return FieldExpressions() + Aliased(alias, cast(type, cls)).select(includes, excludes)

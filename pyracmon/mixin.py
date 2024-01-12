@@ -106,7 +106,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         s = cls.select()
         c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}", *wp)
         row = c.fetchone()
-        return read_row(row, s)[0] if row else None
+        return read_row(row, *s)[0] if row else None
 
     @classmethod
     def fetch_many(cls, db: Connection, seq_pks: Sequence[PKS], lock: Optional[Any] = None, /, per_page: int = 1000) -> list[Self]:
@@ -142,7 +142,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
             c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}", *wp)
 
             record_map = {}
-            for r in [read_row(row, s)[0] for row in c.fetchall()]:
+            for r in [read_row(row, *s)[0] for row in c.fetchall()]:
                 pk_values = {c.name:v for c, v in r if c.pk}
                 record_map[tuple([v for _, v in check_columns(cls, pk_values, lambda c: c.pk, True)])] = r
 
@@ -183,7 +183,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         rc, rp = ranged_by(limit, offset)
         s = cls.select()
         c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(order_by(orders))}{_spacer(rc)}{_spacer(lock)}", *(wp + rp))
-        return [read_row(row, s)[0] for row in c.fetchall()]
+        return [read_row(row, *s)[0] for row in c.fetchall()]
 
     @classmethod
     def fetch_one(
@@ -221,7 +221,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
 
     @classmethod
     def _insert_sql(cls, record: Union[Self, dict[str, Any]], qualifier: Mapping[str, Qualifier] = {}) -> tuple[str, list[str], list[Any]]:
-        model: Self = record if isinstance(record, cls) else cls(**cast(dict, record))
+        model: Self = cast(Self, record) if isinstance(record, cls) else cls(**cast(dict, record))
         value_dict = model_values(cls, model)
         check_columns(cls, value_dict)
         cols, vals = list(value_dict.keys()), list(value_dict.values())
@@ -275,14 +275,14 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         Returns:
             Model of inserted record.
         """
-        model: Self = record if isinstance(record, cls) else cls(**cast(dict, record))
+        model: Self = cast(Self, record) if isinstance(record, cls) else cls(**cast(dict, record))
         sql, _, vals = cls._insert_sql(record, qualifier)
 
         if returning:
             if cls.support_returning(db):
                 c = db.stmt().execute(f"{sql} RETURNING *", *vals)
                 s = cls.select()
-                return read_row(c.fetchone(), s)[0]
+                return read_row(c.fetchone(), *s)[0]
             else:
                 # REVIEW
                 # Inserted row can't be specified from the table where no primary keys are defined .
@@ -329,7 +329,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         if len(records) == 0:
             return []
 
-        models: list[Self] = [r if isinstance(r, cls) else cls(**cast(dict, r)) for r in records]
+        models: list[Self] = [cast(Self, r) if isinstance(r, cls) else cls(**cast(dict, r)) for r in records]
 
         seq_of_params = []
 
@@ -553,7 +553,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
             if cls.support_returning(db):
                 c = db.stmt().execute(f"{sql} RETURNING *", *params)
                 s = cls.select()
-                return [read_row(row, s)[0] for row in c.fetchall()]
+                return [read_row(row, *s)[0] for row in c.fetchall()]
             else:
                 raise NotImplementedError(f"RETURNING is not supported and there is no way to fetch updated rows exactly.")
         else:
@@ -675,7 +675,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         if returning:
             if cls.support_returning(db):
                 c = db.stmt().execute(f"{sql} RETURNING *", *wp)
-                return [read_row(row, cls.select())[0] for row in c.fetchall()]
+                return [read_row(row, *cls.select())[0] for row in c.fetchall()]
             else:
                 current = cls.fetch_where(db, condition)
                 c = db.stmt().execute(sql, *wp)

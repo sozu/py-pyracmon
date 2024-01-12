@@ -36,7 +36,7 @@ class PyracmonConfiguration:
     """Flag to log query parameters also."""
     paramstyle: Optional[str] = None
     """Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module."""
-    type_mapping: Optional[Callable[[str], type]] = None
+    type_mapping: Optional[Callable[[str], Optional[type]]] = None
     """Function estimating python type from type name in database and optional DBMS dependent keys."""
     graph_spec: ConfigurableSpec = ConfigurableSpec.create()
     """Graph specification used as default."""
@@ -88,7 +88,7 @@ class PyracmonConfiguration:
 
 def contextualConfiguration(
     config_var: Callable[[], ContextVar[PyracmonConfiguration]],
-    base: PyracmonConfiguration | None = None
+    base: Optional[PyracmonConfiguration] = None
 ) -> PyracmonConfiguration:
     @dataclass
     class contextual(PyracmonConfiguration):

@@ -2,6 +2,7 @@
 This module provides types and functions for DB connections.
 """
 from collections.abc import Sequence
+import secrets
 import string
 import threading
 import types
@@ -75,16 +76,7 @@ class Connection(dbapi.Connection):
             self.conn.close()
 
     def _gen_identifier(self):
-        t = int(datetime.now().timestamp() * 1000)
-
-        def gen(x):
-            base = len(Connection._characters)
-            while x >= base:
-                x, r = divmod(x, base)
-                yield Connection._characters[r]
-            yield Connection._characters[x]
-
-        return threading.current_thread().name + "-" + ''.join(gen(t))[::-1]
+        return threading.current_thread().name + "-" + secrets.token_hex(4)
 
     @property
     def context(self) -> ConnectionContext:
@@ -110,21 +102,22 @@ class Connection(dbapi.Connection):
 
     def use(self, factory: Callable[[], ConnectionContext]) -> Self:
         """
-        Set factory function of `ConnectionContext`.
+        Sets factory function of `ConnectionContext` to use custom context.
 
-        Use this method to use your custom context object.
+        When the context is already set, it will be replaced with new one.
 
         Args:
-            factory: Function returning custom context object.
+            factory: Function returning custom context.
         Returns:
             This instance.
         """
         self.context_factory = factory
+        self._context = None
         return self
 
     def stmt(self, context: Optional[ConnectionContext] = None) -> 'Statement':
         """
-        Creates new statement which provides methods to execute query.
+        Creates new `Statement` which executes queries on this connection.
 
         Args:
             context: Context object used in the statement. If `None`, the context of this connection is used.

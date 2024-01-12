@@ -9,7 +9,7 @@ class IdentifyPolicy:
 
     Identification mechanism is based on the equality of identification keys extracted by entities.
     """
-    def __init__(self, identifier: Callable[[Any], Any] | None):
+    def __init__(self, identifier: Optional[Callable[[Any], Any]]):
         #: A function to extract the identification key from an entity.
         self.identifier = identifier
 

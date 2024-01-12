@@ -155,17 +155,29 @@ class GraphSpec:
         elif isinstance(definition, type):
             return definition, self._make_policy(definition, None), self.get_entity_filter(definition)
         elif isinstance(definition, tuple):
-            match definition:
-                case (k, ident, ef):
-                    kind = k; identifier = ident; entity_filter = ef
-                case (k, ident):
-                    kind = k; identifier = ident; entity_filter = None
-                case (k,):
-                    kind = k; identifier = None; entity_filter = None
-                case ():
-                    kind = object; identifier = None; entity_filter = None
-                case _:
-                    raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
+            # python < 3.10
+            if len(definition) == 3:
+                kind, identifier, entity_filter = definition
+            elif len(definition) == 2:
+                kind, identifier, entity_filter = definition + (None,)
+            elif len(definition) == 1:
+                kind, identifier, entity_filter = definition + (None, None)
+            elif len(definition) == 0:
+                kind, identifier, entity_filter = (object, None, None)
+            else:
+                raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
+            # python >= 3.10
+            #match definition:
+            #    case (k, ident, ef):
+            #        kind = k; identifier = ident; entity_filter = ef
+            #    case (k, ident):
+            #        kind = k; identifier = ident; entity_filter = None
+            #    case (k,):
+            #        kind = k; identifier = None; entity_filter = None
+            #    case ():
+            #        kind = object; identifier = None; entity_filter = None
+            #    case _:
+            #        raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
             return kind, self._make_policy(kind, identifier), entity_filter or self.get_entity_filter(kind)
         else:
             raise ValueError(f"Invalid value was found in keyword arguments of new_template().")

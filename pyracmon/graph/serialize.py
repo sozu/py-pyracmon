@@ -1,13 +1,13 @@
 from collections.abc import Iterator, Iterable
 from inspect import signature, Signature, getmembers, isfunction
-from typing import Any, Mapping, Optional, Union, Callable, Protocol, TypeVar, TypeAlias, cast
+from typing import Any, Mapping, Optional, Union, Callable, Protocol, TypeVar, cast
 try:
-    from typing import ParamSpec
+    from typing import ParamSpec, TypeAlias
 except:
-    from typing_extensions import ParamSpec
+    from typing_extensions import ParamSpec, TypeAlias
 from .template import GraphTemplate
 from .graph import Node, NodeContainer, GraphView
-from .typing import Shrink, Extend, Typeable, issubgeneric
+from .typing import Shrink, Extend, Typeable, issubgeneric, to_rawdict
 
 
 T = TypeVar('T')
@@ -110,6 +110,7 @@ class NodeSerializer(NodeSerializing):
         self._namer = namer
         self._aggregator = aggregator
         self._serializers = list(serializers)
+        self._be_merged = False
         self._doc = ""
         self._doc_options = {}
 
@@ -156,7 +157,7 @@ class NodeSerializer(NodeSerializing):
         """
         Returns whether the converted value will be merged into parent.
         """
-        return callable(self._namer)
+        return self._be_merged
 
     @property
     def be_singular(self) -> bool:
@@ -218,6 +219,7 @@ class NodeSerializer(NodeSerializing):
         if not isinstance(name, str):
             raise ValueError(f"The name of node must be a string but {type(name)} is given.")
         self._namer = name
+        self._be_merged = False
         return self
 
     def merge(self, namer: Optional[Callable[[str], str]] = None) -> 'NodeSerializer':
@@ -235,6 +237,7 @@ class NodeSerializer(NodeSerializing):
         if namer and not callable(namer):
             raise ValueError(f"The method merging a node into its parent node must be callable or None.")
         self._namer = namer or (lambda x:x)
+        self._be_merged = True
         if not self.be_singular:
             self.head()
         return self
@@ -252,7 +255,10 @@ class NodeSerializer(NodeSerializing):
         Returns:
             This instance.
         """
-        return self.fold(lambda vs: vs[index] if len(vs) > index else alt)
+        def agg(vs: list[T]) -> (Optional[T] if alt is None else T):
+            return vs[index] if len(vs) > index else alt
+        #return self.fold(lambda vs: vs[index] if len(vs) > index else alt)
+        return self.fold(agg)
 
     def head(self, alt: Any = None) -> 'NodeSerializer':
         """
@@ -274,7 +280,10 @@ class NodeSerializer(NodeSerializing):
         Returns:
             This instance.
         """
-        return self.fold(lambda vs: vs[-1] if len(vs) > 0 else alt)
+        def agg(vs: list[T]) -> (Optional[T] if alt is None else T):
+            return vs[-1] if len(vs) > 0 else alt
+        #return self.fold(lambda vs: vs[-1] if len(vs) > 0 else alt)
+        return self.fold(agg)
 
     def fold(self, aggregator: Callable[[list[Node]], Any]) -> 'NodeSerializer':
         """
@@ -385,7 +394,7 @@ class NodeSerializer(NodeSerializing):
         def convert(cxt) -> EachShrink[EachExtend[T]]:
             ext = generator(cxt) if generator else {}
             vv = cxt.serialize()
-            vv.update(**ext)
+            vv.update(**to_rawdict(ext, True))
             return {k:v for k, v in vv.items() if (not includes or k in includes) and k not in excludes} # type: ignore
 
         self._serializers.append(convert)

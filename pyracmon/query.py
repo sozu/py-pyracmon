@@ -15,7 +15,7 @@ Due to that, query operation code can be divided into condition construction pha
 from collections.abc import Sequence, Mapping
 from functools import reduce
 from itertools import chain
-from typing import Any, Callable, Union, Generic, Optional, Protocol, TypeAlias, TypeVar, TypedDict, TYPE_CHECKING
+from typing import Any, Callable, Union, Generic, Optional, Protocol, TYPE_CHECKING
 from typing_extensions import Self, TypeVarTuple, Unpack, NotRequired
 
 
@@ -372,7 +372,7 @@ class Q:
     @classmethod
     def match(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
-        Works like `eq`, but applies `LIKE`. Given parameters will be passed to query without being modified.
+        Works like `eq`, but applies `LIKE`. Given parameters will be passed to query without being escaped or enclosed.
 
         Args:
             _alias_: Table alias.

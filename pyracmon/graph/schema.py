@@ -5,12 +5,16 @@ Schema is a `TypedDict` type estimated by template property and type hinting ann
 It is obtained statically, thus it is available for, for example, documentation such as JsonSchema.
 """
 from collections.abc import Iterator
-from typing import Type, TypeVar, Any, Optional, Union, Annotated, TypedDict, get_args, get_origin, is_typeddict, get_type_hints, cast
+from typing import Type, TypeVar, Any, Optional, Union, Annotated, TypedDict, get_args, get_origin, get_type_hints, cast
+try:
+    from typing import is_typeddict
+except:
+    from typing_extensions import is_typeddict
 from inspect import signature, Signature
 from .graph import GraphView
 from .template import GraphTemplate
 from .serialize import NodeSerializer, chain_serializers
-from .typing import Typeable, issubgeneric, generate_schema, document_type, decompose_document
+from .typing import Typeable, issubgeneric, replace_optional_typevar, generate_schema, document_type, decompose_document
 
 
 def _templateType(t):
@@ -82,15 +86,26 @@ class GraphSchema:
                 if args:
                     # origin is generics.
                     type_params = list(filter(lambda ia: isinstance(ia[1], TypeVar), enumerate(args)))
-                    match len(type_params):
-                        case 0:
-                            return origin
-                        case 1:
-                            # Replace type parameter
-                            param = resolve(it)
-                            return origin[param] # type: ignore
-                        case _:
-                            return Signature.empty
+                    # python < 3.10
+                    param_num = len(type_params)
+                    if param_num == 0:
+                        return origin
+                    elif param_num == 1:
+                        # Replace type parameter
+                        param = resolve(it)
+                        return origin[param] # type: ignore
+                    else:
+                        return Signature.empty
+                    # python >= 3.10
+                    #match len(type_params):
+                    #    case 0:
+                    #        return origin
+                    #    case 1:
+                    #        # Replace type parameter
+                    #        param = resolve(it)
+                    #        return origin[param] # type: ignore
+                    #    case _:
+                    #        return Signature.empty
                 else:
                     return origin
 
@@ -123,8 +138,12 @@ class GraphSchema:
                     if not issubclass(t, dict):
                         raise ValueError(f"Property '{c.name}' is not configured to be serialized into dict.")
                     annotations.update(**{ns.namer(k):t for k, t in get_type_hints(t, include_extras=True).items()})
+                elif ns.be_singular:
+                    rt = signature(ns.aggregator).return_annotation
+                    rt = replace_optional_typevar(rt, cs)
+                    annotations[ns.namer(c.name)] = rt
                 else:
-                    annotations[ns.namer(c.name)] = cs if ns.be_singular else document_type(list[t], d)
+                    annotations[ns.namer(c.name)] = document_type(list[t], d)
 
             td_type: Optional[type[TypedDict]] = cast(type[TypedDict], return_type) if is_typeddict(return_type) else None
 
@@ -150,8 +169,7 @@ class GraphSchema:
                 annotations.update(**{ns.namer(k):t_ for k, t_ in get_type_hints(t, include_extras=True).items()})
             elif ns.be_singular:
                 rt = signature(ns.aggregator).return_annotation
-                if rt == Signature.empty or isinstance(rt, TypeVar):
-                    rt = dt
+                rt = replace_optional_typevar(rt, dt)
                 annotations[ns.namer(p.name)] = rt
             else:
                 t, d = decompose_document(dt)

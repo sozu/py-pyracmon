@@ -1,4 +1,5 @@
 import pytest
+from dataclasses import dataclass
 from typing import Generic, TypeVar
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.graph import new_graph
@@ -88,6 +89,30 @@ class TestAlter:
             v2: str
             v3: float
         class EX(TypedDict):
+            v4: int
+            v5: str
+        def ext(v) -> EX:
+            return EX(v4=0, v5="")
+
+        t = spec.new_template(a=TD)
+
+        gs = GraphSchema(
+            spec, t,
+            a = S.alter(ext),
+        )
+
+        assert walk_schema(gs.schema) == {"a": [{"v1": int, "v2": str, "v3": float, "v4": int, "v5": str}]}
+
+    def test_extend_dataclass(self):
+        spec = GraphSpec()
+
+        @dataclass
+        class TD:
+            v1: int
+            v2: str
+            v3: float
+        @dataclass
+        class EX:
             v4: int
             v5: str
         def ext(v) -> EX:
@@ -211,7 +236,7 @@ class TestGraphSchema:
             "a": [
                 {
                     "a1": int, "a2": str,
-                    "b": str,
+                    "b": Optional[str],
                     "__c__": [
                         {
                             "c1": int, "c2": str,
@@ -225,7 +250,7 @@ class TestGraphSchema:
             "a": ([
                 {
                     "a1": (int, ""), "a2": (str, "A2"),
-                    "b": (str, "B"),
+                    "b": (Optional[str], "B"),
                     "__c__": ([
                         {
                             "c1": (int, "C1"), "c2": (str, ""),
@@ -266,7 +291,7 @@ class TestGraphSchema:
 
         assert walk_schema(schema.schema) == {
             "a1": int, "a2": str,
-            "b": str,
+            "b": Optional[str],
             "__c__": [
                 {
                     "c1": int, "c2": str,

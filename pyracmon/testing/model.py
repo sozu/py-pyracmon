@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid1, uuid3
-from typing import Optional, Union, TypeVar, Any, TYPE_CHECKING
+from typing import Optional, Union, TypeVar, Any, overload, TYPE_CHECKING
 from typing_extensions import Self
 from pyracmon.config import PyracmonConfiguration
 from pyracmon.connection import Connection
@@ -10,18 +10,18 @@ from pyracmon.mixin import CRUDMixin
 from pyracmon.model import Model
 from pyracmon.graph.typing import issubgeneric
 from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
-from .util import Matcher, default_test_config
+from .util import default_test_config, Matcher
 
 
 if TYPE_CHECKING:
-    class TestingModel(MultiInsertMixin, CRUDMixin, Model):
+    class TestingModel(MultiInsertMixin, CRUDMixin):
         pass
 else:
     class TestingModel():
         pass
 
 
-M = TypeVar('M', bound=Model)
+M = TypeVar('M', bound=TestingModel)
 
 
 class TestingState:
@@ -47,7 +47,7 @@ class TestingMixin(TestingModel):
     Mixin class for model types providing methods designed for testing.
     """
     @classmethod
-    def by(cls, index: int) -> type:
+    def by(cls, index: int) -> Self:
         """
         Set current fixture index.
 
@@ -57,13 +57,67 @@ class TestingMixin(TestingModel):
             This type.
         """
         TestingState.set_index(cls, index)
-        return cls
+        return cls # type: ignore
 
+    @overload
     @classmethod
     def fixture(
         cls,
-        db: Connection,
-        variable: Optional[Union[int, dict[str, Any], Model, list[dict[str, Any]], list[Model]]] = None,
+        db: Optional[Connection],
+        variable: None = None,
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> list[Self]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: int,
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> list[Self]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: Self,
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> Self: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: dict[str, Any],
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> Self: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: list[Self],
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> list[Self]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: list[dict[str, Any]],
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> list[Self]: ...
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: Optional[Union[int, dict[str, Any], Self, list[dict[str, Any]], list[Self]]] = None,
         index: Optional[int] = None,
         cfg: Optional[PyracmonConfiguration] = None,
     ) -> Union[Self, list[Self]]:

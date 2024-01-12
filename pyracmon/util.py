@@ -2,7 +2,11 @@
 Utility types and functions for internal use.
 """
 from collections.abc import Mapping, Sequence, Callable
-from typing import Any, Union, TypeVar, TypeAlias
+from typing import Any, Union, TypeVar
+try:
+    from typing import TypeAlias
+except:
+    from typing_extensions import TypeAlias
 
 
 T = TypeVar('T')
@@ -12,7 +16,6 @@ T = TypeVar('T')
 # Utility Types
 #----------------------------------------------------------------
 Qualifier: TypeAlias = Callable[[str], str]
-"""Qualifier function."""
 
 PKS = Union[Any, dict[str, Any]]
 """Primary key(s)."""

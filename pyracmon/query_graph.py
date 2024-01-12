@@ -1,11 +1,11 @@
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import Any, Union
 from pyracmon.dbapi import Cursor
-from pyracmon.select import Selection, FieldExpressions, RowValues, read_row
+from pyracmon.select import Selection, Consumable, RowValues, read_row
 from pyracmon.graph import Graph
 
 
-def add_all(cursor: Cursor, exp: FieldExpressions, graph: Graph, /, **assign: Union[Selection, Any]) -> Graph:
+def append_rows(cursor: Cursor, exp: Iterable[Union[Consumable, Any]], graph: Graph, /, **assign: Union[Selection, Any]) -> Graph:
     """
     Adds all rows in cursor into the graph.
 
@@ -27,18 +27,15 @@ def add_all(cursor: Cursor, exp: FieldExpressions, graph: Graph, /, **assign: Un
     Returns:
         The same graph as passed one. 
     """
-    prop_exp: dict[str, Callable[[RowValues], Any]] = {}
-    for k, v in assign.items():
-        if isinstance(v, Selection):
-            if getattr(exp, v.name) is v:
-                prop_exp[k] = lambda r: getattr(r, v.name)
-            else:
-                raise ValueError(f"Passed selection is not contained in passed FieldExpression.")
+    def get(k: str) -> Any:
+        v = assign[k]
+        if isinstance(v, Consumable):
+            return getattr(r, v.name)
         else:
-            prop_exp[k] = lambda r: v
+            return v
 
     for row in cursor.fetchall():
         r = read_row(row, *exp)
-        graph.append(**{k:f(r) for k, f in prop_exp.items()})
+        graph.append(**{k:get(k) for k in assign.keys()})
 
     return graph

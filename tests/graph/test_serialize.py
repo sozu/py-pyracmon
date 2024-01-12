@@ -1,5 +1,6 @@
 from pyracmon.graph.spec import GraphSpec
 import pytest
+from dataclasses import dataclass
 from typing import Generic, TypeVar, get_type_hints
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
@@ -458,6 +459,22 @@ class TestContext:
     def test_alter_extend(self):
         cxt = SerializationContext(dict(
             a=S.each(lambda cxt: {"A": cxt.value, "B": cxt.value+1, "C": cxt.value+2}).alter(lambda cxt: {"D": cxt.value*3}),
+        ), lambda t: [])
+        r = cxt.execute(self._graph())
+
+        assert r == {"a": [
+            {"A": 0, "B": 1, "C": 2, "D": 0},
+            {"A": 1, "B": 2, "C": 3, "D": 3},
+            {"A": 2, "B": 3, "C": 4, "D": 6},
+        ]}
+
+    def test_alter_dataclass(self):
+        @dataclass
+        class DT:
+            D: int
+
+        cxt = SerializationContext(dict(
+            a=S.each(lambda cxt: {"A": cxt.value, "B": cxt.value+1, "C": cxt.value+2}).alter(lambda cxt: DT(cxt.value*3)),
         ), lambda t: [])
         r = cxt.execute(self._graph())
 
