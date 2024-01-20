@@ -100,7 +100,7 @@ class Graph:
             raise ValueError(f"Container can't be determined from property '{prop.name}'.")
         return candidates[0] if candidates else None
 
-    def __add__(self, another: Union[Self, GraphView]) -> Self:
+    def __add__(self, another: Union[Self, GraphView]) -> 'Graph':
         """
         Create new graph by adding this graph and another graph.
 
@@ -130,7 +130,7 @@ class Graph:
         Returns:
             This graph.
         """
-        another = another if isinstance(another, Graph) else another()
+        graph = another if isinstance(another, Graph) else another()
 
         def add(n: Node, anc: dict[str, list[Node]]):
             c = self._container_of(n.prop)
@@ -140,7 +140,7 @@ class Graph:
                 for m in ch_.nodes:
                     add(m, anc.copy())
 
-        for c_ in another.roots:
+        for c_ in graph.roots:
             for n_ in c_.nodes:
                 add(n_, {})
 

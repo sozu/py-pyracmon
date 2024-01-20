@@ -28,7 +28,7 @@ class IdentifyPolicy:
         self,
         prop: NodePropType,
         candidates: Iterable[MN],
-        ancestors: Mapping[str, Iterable[MapNodeType[MapNodeType[MN, MN], str]]],
+        ancestors: Mapping[str, Iterable[MapNodeType[MapNodeType[MN, str], str]]],
     ) -> tuple[list[Optional[MN]], list[MN]]:
         """
         Select parent nodes and identical nodes of a new entity.
@@ -58,7 +58,7 @@ class HierarchicalPolicy(IdentifyPolicy):
         self,
         prop: NodePropType,
         candidates: Iterable[MN],
-        ancestors: Mapping[str, Iterable[MapNodeType[MapNodeType[MN, MN], str]]],
+        ancestors: Mapping[str, Iterable[MapNodeType[MapNodeType[MN, str], str]]],
     ):
         parents = sum((list(ancestors[p.name]) for p in prop.parents if p.name in ancestors), [])
 

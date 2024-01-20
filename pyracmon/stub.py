@@ -1,6 +1,7 @@
 """
 This module exports functions to output type stub of model types.
 """
+from keyword import iskeyword
 import inspect
 import os
 from pathlib import Path
@@ -93,7 +94,10 @@ def render_models(
             ct = coltype(c.ptype)
             if c.nullable:
                 ct = f"Optional[{ct}]"
-            lines.append(f"    {c.name}: {ct} = ...")
+            if c.name.isidentifier() and not iskeyword(c.name):
+                lines.append(f"    {c.name}: {ct} = ...")
+            else:
+                lines.append(f"#    {c.name}: {ct} = ...")
 
     return lines
 
