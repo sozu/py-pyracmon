@@ -3,39 +3,12 @@ services:
   pyracmon:
     build:
       context: ./Dockerfiles
-      dockerfile: python3.7
+      dockerfile: python3.10
     image: pyracmon:develop
     tty: true
     volumes:
       - .:/home/pyracmon
     container_name: pyracmon
-  pyracmon3.6:
-    build:
-      context: ./Dockerfiles
-      dockerfile: python3.6
-    image: pyracmon3.6:develop
-    tty: true
-    volumes:
-      - .:/home/pyracmon
-    container_name: pyracmon-3.6
-  pyracmon3.8:
-    build:
-      context: ./Dockerfiles
-      dockerfile: python3.8
-    image: pyracmon3.8:develop
-    tty: true
-    volumes:
-      - .:/home/pyracmon
-    container_name: pyracmon-3.8
-  pyracmon3.9:
-    build:
-      context: ./Dockerfiles
-      dockerfile: python3.9
-    image: pyracmon3.9:develop
-    tty: true
-    volumes:
-      - .:/home/pyracmon
-    container_name: pyracmon-3.9
   postgres:
     image: postgres:10
     ports:

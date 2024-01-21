@@ -149,7 +149,7 @@ class TestNewTemplate:
         )
 
         assert list(t) == [t.a, t.b, t.c, t.d]
-        assert (t.a.name, t.a.kind, t.a.policy.identifier, t.a.entity_filter) == ("a", None, None, None)
+        assert (t.a.name, t.a.kind, t.a.policy.identifier, t.a.entity_filter) == ("a", object, None, None)
         assert (t.b.name, t.b.kind, t.b.policy.identifier, t.b.entity_filter) == ("b", int, None, None)
         assert (t.c.name, t.c.kind, t.c.policy.identifier, t.c.entity_filter) == ("c", float, ident, ef)
         assert (t.d.name, t.d.kind, t.d.policy.identifier, t.d.entity_filter) == ("d", str, len, efd)

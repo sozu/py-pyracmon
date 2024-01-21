@@ -4,7 +4,7 @@
 
 This library provides functionalities to refine codes executing DB operations. The main peculiar concepts are *model declaration* and *relational graph*.
 
-*Model* is the class representing a table and its instance corresponds to a record. This library provides a way to declare model classes by reverse-engineering from actual tables. Once you connect DB, model classes are importable from a module you specified. Those classes have various methods executing simple operations on a table.
+*Model* is the class representing a table and its instance corresponds to a record. This library provides a way to declare model classes by reverse-engineering from actual tables. Once you connect DB, model classes becomes importable from a module you specified. Those classes have various methods executing simple operations on a table.
 
 *Graph* is composed of *node*s and *edge*s, where each node contains a model object or any kind of value. An edge between nodes represents their relation, such as foreign key constraint between records. *Graph*s are designed to store results of queries with straight-forward codes, which makes you free from suffering from the reconstruction of data structure. Additionally, *graph view* provides intuitive interfaces to traverse it and *graph serialization* feature enables conversion from a *graph* into a `dict` with keeping its structure and applying flexible representation to each node.
 
@@ -18,7 +18,7 @@ On the other hand, this library does NOT support following features which are co
 
 **DB-API 2.0**
 
-This library works as a wrapper of any kind of DB driver compliant with DB-API 2.0 such as *psycopg2* or *PyMySQL*. DB operations are passed to the driver so that any functionality it provides is also available. 
+This library works as a wrapper of any kind of DB driver compliant with DB-API 2.0 such as *psycopg* or *PyMySQL*. DB operations are passed to the driver so that any functionality it provides is also available. 
 
 **Automatic declaration of model types**
 
@@ -34,32 +34,30 @@ While this library mainly focuses on the use of SQL, not DSL, it exports functio
 
 **Static typing support**
 
-This library provides the functionality to get the schema of serialized graph statically. For example in RESTful applications, the schema can be used for documentation of HTTP response. Because the schema reflects flexible change on data structure (ex. adding computed values, removing keys from a dictionary) in serialization phase, it no longer necessary to declare a type only to represent response structure. Note that the state of this functionality is still unstable becasue static typing support of python is changing frequently.
+This library provides the functionality to get the schema of serialized graph statically. For example in RESTful applications, the schema can be used for documentation of HTTP response. Because the schema accepts flexible change on data structure (ex. adding computed values, removing keys from a dictionary) in serialization phase, it no longer necessary to declare a type only to represent response structure. Note that the state of this functionality is still unstable becasue static typing support of python is changing frequently.
 
 **Testing support**
 
 Experimental.
 
-Testing DB operations is an important but difficult task. `pyracmon.testing` provides interfaces to reduce the difficulty. One of them is the generation of fixture by minimal declaration of column values. Feeding values only on columns in interest generates rows by complementing other columns with automatically generated values. Others are in experimental stage and will be changed or removed in future version.
+Testing DB operations is an important but frastrating task. `pyracmon.testing` provides interfaces to reduce the difficulty. One of them is the generation of fixture by minimal declaration of column values. Feeding values only on columns in interest generates rows by complementing other columns with automatically generated values. Others are in experimental stage and will be changed or removed in future version.
 
 ## Prerequisite
 
-Pyracmon requires python 3.6 or higher.
+Pyracmon requires python 3.9 or higher.
 
-Static typing functionalities are highly affected by python version.
-Because of frequent update of python `typing` package, syntax assumed in this library might already have got deprecated.
-Those functionalities will be left not completely conforming to specifications of the package while they are unstable.
+The static typing is the main feature sensitive to python version.
+It is mainly written in the style ordinary in python 3.9 but some parts depend on newer objects imported by `typing_extensions` .
 
 Currently supported DBMS are PostgreSQL (>= 10.0) and MySQL (>= 8.0).
 
-Although pyracmon does not require any libraries for use by itself, it needs DB driver which conforms to DB-API 2.0.
-[psycopg2](https://pypi.org/project/psycopg2/) (for PostgreSQL) and [PyMySQL](https://pypi.org/project/PyMySQL/)_ are used in development.
-Use them or some other library and tell it to pyracmon via `pyracmon.declare_models`.
+DB driver compliant with DB-API 2.0 is required. 
+[psycopg2](https://pypi.org/project/psycopg2/) (for PostgreSQL) and [PyMySQL](https://pypi.org/project/PyMySQL/) (for MySQL) are used in development respectively.
 
 ## Installation
 
 ```
-$ pip install pyracmon==1.0a1
+$ pip install pyracmon==1.0.0
 ```
 
 ## Grance of functionalities
@@ -104,7 +102,7 @@ CREATE TABLE post_comment (
 
 ### Create connection
 
-All operations start with creating connection object. This library works as a wrapper of other DB-API 2.0 compliant DB drivers, thereby arguments given to `connect()` are passed through to `connect()` API of specified DB driver. Next code is an example using `psycopg2`.
+All operations start with creating connection object. This library works as a wrapper of other DB-API 2.0 compliant DB drivers, thereby arguments given to `connect()` are passed through to `connect()` API of the driver. In addition to the arguments, you have to pass driver module to `connect()` at the first argument.
 
 ```
 import psycopg2
@@ -113,7 +111,7 @@ from pyracmon import connect
 db = connect(psycopg2, dbname="example", user="postgres", password="postgres")
 ```
 
-Returned object `db` is a wrapped `Connection` object which also conforms to DB-API 2.0's `Connection`.
+`db` is a wrapped `Connection` object which also conforms to DB-API 2.0's `Connection`.
 
 ### Declarations of model types
 
@@ -182,7 +180,6 @@ print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.cont
 # Fetch records by condition.
 # sql: SELECT id, blog_id, title, content FROM post WHERE blog_id = %s ORDER BY title ASC limit %s OFFSET %s
 # parameters: 2, 10, 20
-m = db.helper.marker()
 for p in post.fetch_where(db, Q.eq(blog_id = 2), orders = dict(title = True), limit = 10, offset = 20):
     print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.content}")
 
@@ -209,7 +206,7 @@ limit, offset = ...
 
 # 1. Columns with aliases to select from each table.
 # b.id, b.title, p.title, p.content
-exp = blog.select("b"), post.select("p", ["title", "content"])
+exp = blog.select("b") + post.select("p", ["title", "content"])
 
 # 2. WHERE clause and parameters.
 # WHERE b.id IN (?, ?, ...)
@@ -225,7 +222,7 @@ c = db.stmt().execute(f"""
         INNER JOIN post AS p ON b.id = p.blog_id
     {w}
     LIMIT $_ OFFSET $_
-    """, *params, *[limit, offset])
+    """, *params, limit, offset)
 
 # 4. Model objects obtained from each row.
 for row in c.fetchall():
@@ -240,7 +237,7 @@ Above code shows the basic flow of execution of SELECT query.
     - As well as *models*, raw expressions like `COUNT(*)` are also available.
 2. Creates `Conditional` object, and then obtatins conditional clause starting with `WHERE` and parameters used in it.
     - There are many functions to create `Conditional` object like `Q.in_()`.
-3. Executs SQL on `Statement` object. Range condition and its parameters are added in both SQL and parameter list.
+3. Executs SQL on `Statement` object. Parameters should be passed as positional arguments.
 4. Obtains *model objects* from each row. `read_row()` parses a row and returns an object which exposes *model objects* via its attributes named by the alias given to `select()`.
 
 See API documentation for further information.
@@ -296,7 +293,7 @@ Suppose you want a structured list of blogs like below.
 }
 ```
 
-Each blog entry contains various kinds of values which possibly should be obtained by multiple queries. First of all, you should declare `GraphTemplate` representing graph structure covering required values.
+Each blog entry contains various kinds of values which possibly should be obtained by multiple queries. First of all, you should declare `GraphTemplate` representing graph structure.
 
 ```
 from pyracmon import graph_template
@@ -316,7 +313,7 @@ t.blogs << [t.categories, t.total_posts, t.recent_posts]
 t.recent_posts << [t.images, t.recent_comments, t.most_liked_comment, t.total_comments]
 ```
 
-In each keyword argument, key denotes the kind of nodes and value denotes the type of node value; `blogs` specifies the container of nodes each of which contains `blog` *model object*. Relationships between nodes are declared by shift operators; category, total number of posts and recent post are children of each blog.
+In each keyword argument, key denotes the name of nodes and value denotes the type of node value; `blogs` specifies the container of nodes each of which contains `blog` *model object*. Relationships between nodes are declared by shift operators; category, total number of posts and recent post are children of each blog.
 
 Next example shows the query execution and `Graph` creation which contains the result of the query (actual queries are not written to save spaces).
 
@@ -402,11 +399,13 @@ Some behaviors can be changed at serialization stage via class methods of `S` as
 
 ```
 from pyracmon import S, graph_dict
+from typing import TypedDict
 
-def add_thumbnail(s, v):
-    r = s(v)
-    r['thumbnail'] = f"{r['url']}/thumbnail"
-    return r
+class Thumbnail(TypedDict):
+    thumbnail: str
+
+def with_thumbnail(cxt) -> Thumbnail:
+    return dict(thumbnail=f"{cxt.value.url}/thumbnail")
 
 result = graph_dict(
     fetch_blogs(),
@@ -414,7 +413,7 @@ result = graph_dict(
     recent_posts = S.name("posts"),
     total_posts = S.head(),
     categories = S.of(),
-    images = S.each(add_thumbnail),
+    images = S.alter(with_thumbnail),
     recent_comments = S.name("comments"),
     most_liked_comment = S.head(),
     total_comments = S.head(),
@@ -427,7 +426,7 @@ result = graph_dict(
 - `head()` uses a value of the first node in the container instead of a list of values.
 - When the function is given by `each()`, it is applied to each node to generate the value in resulting `dict`.
 
-`S` provides some more class methods to control the serialization mechanism. Additionally, their arguments have variations. See API documentation for further information.
+`S` provides some more class methods to control the serialization mechanism. See API documentation for further information.
 
 ### Static typing
 
@@ -442,7 +441,7 @@ schema = graph_schema(
     recent_posts = S.name("posts"),
     total_posts = S.head(),
     categories = S.of(),
-    images = S.each(add_thumbnail),
+    images = S.alter(with_thumbnail),
     recent_comments = S.name("comments"),
     most_liked_comment = S.head(),
     total_comments = S.head(),

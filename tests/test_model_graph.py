@@ -1,11 +1,14 @@
 import pytest
+from copy import deepcopy
 import inspect
-from pyracmon.model import Table, Column, Relations, define_model
+from typing import Annotated
+from pyracmon.model import Table, Column, Relations, define_model, COLUMN
 from pyracmon.model_graph import *
 from pyracmon.graph.graph import Node
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.schema import walk_schema, Typeable, TypedDict, document_type
-from pyracmon.graph.serialize import chain_serializers, S, NodeContextFactory
+from pyracmon.graph.schema import Typeable, TypedDict
+from pyracmon.graph.typing import walk_schema
+from pyracmon.graph.serialize import chain_serializers, S, NodeContextFactory, SerializationContext
 
 
 table1 = Table("t1", [
@@ -13,6 +16,7 @@ table1 = Table("t1", [
     Column("c2", int, None, False, Relations(), None, False, "c2 in t1"),
     Column("c3", int, None, False, None, None, True, "c3 in t1"),
 ])
+class T1(Model): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
 
 
 table2 = Table("t2", [
@@ -37,9 +41,9 @@ class TestConfigurableSpec:
         assert spec.get_entity_filter(GraphEntityMixin) is not None
         assert len(spec.find_serializers(GraphEntityMixin)) == 2
 
-    def test_clone(self):
+    def test_deepcopy(self):
         spec = ConfigurableSpec.create()
-        clone = spec.clone()
+        clone = deepcopy(spec)
 
         clone.add_identifier(int, lambda x:x)
         clone.add_entity_filter(int, lambda x:True)
@@ -55,14 +59,6 @@ class TestConfigurableSpec:
         assert len(spec.find_serializers(int)) == 0
         assert spec.include_fk is False
 
-        spec.replace(clone)
-
-        assert (len(spec.identifiers), len(spec.entity_filters), len(spec.serializers)) == (2, 2, 2)
-        assert spec.get_identifier(int) is not None
-        assert spec.get_entity_filter(int) is not None
-        assert len(spec.find_serializers(int)) == 1
-        assert spec.include_fk is True
-
 
 class TestIdentity:
     def test_pk(self):
@@ -71,8 +67,9 @@ class TestIdentity:
         v = m(c1=1, c2=None, c3=None)
 
         spec = ConfigurableSpec.create()
+        ident = spec.get_identifier(type(v))
 
-        assert spec.get_identifier(type(v))(v) == (1,)
+        assert ident and ident(v) == (1,)
 
     def test_not_set(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -80,8 +77,9 @@ class TestIdentity:
         v = m(c2=2, c3=None)
 
         spec = ConfigurableSpec.create()
+        ident = spec.get_identifier(type(v))
 
-        assert spec.get_identifier(type(v))(v) is None
+        assert ident and ident(v) is None
 
     def test_pks(self):
         m = define_model(table2, [GraphEntityMixin])
@@ -89,8 +87,9 @@ class TestIdentity:
         v = m(c1=1, c2=2, c3=None)
 
         spec = ConfigurableSpec.create()
+        ident = spec.get_identifier(type(v))
 
-        assert spec.get_identifier(type(v))(v) == (1, 2)
+        assert ident and ident(v) == (1, 2)
 
     def test_no_pk(self):
         m = define_model(table3, [GraphEntityMixin])
@@ -98,8 +97,9 @@ class TestIdentity:
         v = m(c1=1, c2=2, c3=None)
 
         spec = ConfigurableSpec.create()
+        ident = spec.get_identifier(type(v))
 
-        assert spec.get_identifier(type(v))(v) is None
+        assert ident and ident(v) is None
 
 
 class TestNull:
@@ -109,8 +109,9 @@ class TestNull:
         v = m(c1=None, c2=None, c3=None)
 
         spec = ConfigurableSpec.create()
+        ef = spec.get_entity_filter(type(v))
 
-        assert spec.get_entity_filter(type(v))(v) is False
+        assert ef and ef(v) is False
 
     def test_partial_none(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -118,8 +119,9 @@ class TestNull:
         v = m(c1=1, c2=None, c3=None)
 
         spec = ConfigurableSpec.create()
+        ef = spec.get_entity_filter(type(v))
 
-        assert spec.get_entity_filter(type(v))(v) is True
+        assert ef and ef(v) is True
 
     def test_no_column(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -127,8 +129,9 @@ class TestNull:
         v = m()
 
         spec = ConfigurableSpec.create()
+        ef = spec.get_entity_filter(type(v))
 
-        assert spec.get_entity_filter(type(v))(v) is False
+        assert ef and ef(v) is False
 
 
 class TestFK:
@@ -136,7 +139,7 @@ class TestFK:
         t = GraphTemplate([
             ("a", type(model), None, None),
         ])
-        return NodeContextFactory(None, [], {}).begin(Node(t.a, model, None, 0), [])
+        return NodeContextFactory(SerializationContext({}, lambda x:[]), [], {}).begin(Node(t.a, model, None, 0), [])
 
     def test_excludes(self):
         m = define_model(table1, [GraphEntityMixin])
@@ -198,13 +201,13 @@ class TestSchema:
         assert walk_schema(Typeable.resolve(rt, m, spec), True) == {"c1": (int, "c1 in t1")}
 
     def test_add_fk_schema(self):
-        m = define_model(table1, [GraphEntityMixin])
+        m = define_model(table1, [GraphEntityMixin], model_type=T1)
 
         class Ex(TypedDict):
-            c2: document_type(int, "fk")
+            c2: Annotated[int, "fk"]
 
-        def ex(model: m) -> Ex:
-            return Ex(c2 = m.c2)
+        def ex(cxt) -> Ex:
+            return Ex(c2 = cxt.value.c2)
 
         spec = ConfigurableSpec.create()
         spec.add_serializer(m, S.alter(ex, excludes={"c3"}))

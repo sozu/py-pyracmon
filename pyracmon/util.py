@@ -1,25 +1,30 @@
 """
 Utility types and functions for internal use.
 """
-from typing import *
+from collections.abc import Mapping, Sequence, Callable
+from typing import Any, Union, TypeVar
+try:
+    from typing import TypeAlias
+except:
+    from typing_extensions import TypeAlias
 
 
-# type aliases
-Qualifier = Dict[str, Callable[[str], str]]
+T = TypeVar('T')
 
 
-class Configurable:
-    """
-    Interface for classes of configuration objects.
-    """
-    def clone(self):
-        raise NotImplementedError()
+#----------------------------------------------------------------
+# Utility Types
+#----------------------------------------------------------------
+Qualifier: TypeAlias = Callable[[str], str]
 
-    def replace(self, another):
-        raise NotImplementedError()
+PKS = Union[Any, dict[str, Any]]
+"""Primary key(s)."""
 
 
-def key_to_index(values: Dict[Union[str, int], Any], ordered_keys: List[Union[str, int]]) -> Dict[int, Any]:
+#----------------------------------------------------------------
+# Utility Functions
+#----------------------------------------------------------------
+def key_to_index(values: Mapping[str, T], ordered_keys: Sequence[str]) -> dict[int, T]:
     """
     Replace keys of a `dict` with its index in ordered list.
 

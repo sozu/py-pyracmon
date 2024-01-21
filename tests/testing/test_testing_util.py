@@ -7,37 +7,6 @@ from pyracmon.dialect import postgresql
 from pyracmon.testing.util import *
 
 
-def _connect():
-    return connect(
-        psycopg2,
-        dbname = "pyracmon_test",
-        user = "postgres",
-        password = "postgres",
-        host = "postgres",
-        port = 5432,
-    )
-
-
-class TestTruncate:
-    def test_truncate(self):
-        db = _connect()
-
-        declare_models(postgresql, db, 'tests.models')
-
-        m.t1.inserts(db, [m.t1(c12=i, c13=f"a{i}") for i in range(5)])
-        m.t2.inserts(db, [m.t2(c21=i, c22=i, c23=f"a{i}") for i in range(5)])
-
-        assert m.t1.count(db) == 5
-        assert m.t2.count(db) == 5
-
-        truncate(db, m.t1, m.t2)
-
-        assert m.t1.count(db) == 0
-        assert m.t2.count(db) == 0
-
-        assert m.t1.insert(db, m.t1(c12=0, c13="")).c11 == 1
-
-
 class TestNear:
     def test_string(self):
         n = Near("abc")
@@ -92,8 +61,8 @@ class TestNear:
     def test_update_config(self):
         exp = datetime(2020, 1, 1, 0, 0, 0)
 
-        try:
-            testing_config().set(timedelta_unit=dict(minutes=1))
+        with default_test_config() as cfg:
+            cfg.timedelta_unit = dict(minutes=1)
 
             n = near(exp, -1, 1)
 
@@ -102,8 +71,6 @@ class TestNear:
             assert n.match(datetime(2020, 1, 1, 0, 0, 0))
             assert n.match(datetime(2020, 1, 1, 0, 1, 0))
             assert not n.match(datetime(2020, 1, 1, 0, 1, 1))
-        finally:
-            testing_config().set(timedelta_unit=dict(seconds=1))
 
 
 class TestLet:

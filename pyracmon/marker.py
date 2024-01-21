@@ -7,7 +7,7 @@ This library adopts unified marker `$_` instead of the styles to make things sim
 
 Everything in this module is used internally in most cases, thus user does not need to know the detail.
 """
-from typing import *
+from typing import Any, Optional, Union
 
 
 class Marker:
@@ -92,7 +92,7 @@ class Marker:
         """
         pass
 
-    def params(self, *args: Any, **kwargs: Any) -> Union[List[Any], Dict[str, Any]]:
+    def params(self, *args: Any, **kwargs: Any) -> Union[list[Any], dict[str, Any]]:
         """
         Generates parameters in the form which is available for query execution.
 

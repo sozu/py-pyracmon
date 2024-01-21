@@ -1,5 +1,6 @@
+from collections.abc import Sequence
 import logging
-from pyracmon.query import QueryHelper
+from typing import Any, Optional
 from pyracmon.connection import Connection
 
 
@@ -15,15 +16,18 @@ class PseudoAPI:
 
 class PseudoConnection(Connection):
     class Inner:
-        def close(self):
-            pass
+        def close(self): pass
+        def commit(self): pass
+        def rollback(self): pass
+        def cursor(self) -> 'PseudoCursor': ...
 
     def __init__(self, api, **kwargs):
         super().__init__(api, PseudoConnection.Inner(), **kwargs)
         self.query_list = []
         self.params_list = []
-        self.rows_list = []
+        self.rows_list: list[Sequence[Any]] = []
         self.closed = False
+        self.rowcount = -1
 
     def reserve(self, rows):
         if not isinstance(rows, list):
@@ -37,7 +41,7 @@ class PseudoConnection(Connection):
         self.params_list = []
         self.rows_list = []
 
-    def cursor(self):
+    def cursor(self) -> 'PseudoCursor':
         return PseudoCursor(self)
 
     def close(self):
@@ -46,23 +50,37 @@ class PseudoConnection(Connection):
 
 
 class PseudoCursor:
-    def __init__(self, conn):
+    def __init__(self, conn: PseudoConnection):
         self.conn = conn
 
-    def execute(self, query, params = []):
-        self.conn.query_list.append(query)
-        self.conn.params_list.append(params)
+    @property
+    def description(self): return "PseudoCursor"
+    @property
+    def rowcount(self): return self.conn.rowcount
+    @property
+    def arraysize(self): return 0
 
-    def fetchone(self):
+    def close(self): pass
+    def setinputsizes(self, sizes: Sequence[Any]): pass
+    def setoutputsize(self, size: int, column: int): pass
+
+    def execute(self, operation: str, *args, **kwargs) -> Any:
+        self.conn.query_list.append(operation)
+        self.conn.params_list.append(args[0])
+
+    def executemany(self, operation: str, seq_of_parameters: Sequence[Any]) -> Any:
+        for ps in seq_of_parameters:
+            self.execute(operation, ps)
+
+    def fetchone(self) -> Optional[Sequence[Any]]:
         rows = self.conn.rows_list.pop(0)
         return rows[0] if len(rows) > 0 else None
 
-    def fetchall(self):
-        return self.conn.rows_list.pop(0)
+    def fetchmany(self, size: int = 0) -> Sequence[Sequence[Any]]:
+        return self.fetchall()
 
-    @property
-    def rowcount(self):
-        return -1
+    def fetchall(self) -> Sequence[Sequence[Any]]:
+        return self.conn.rows_list.pop(0) if self.conn.rows_list else []
 
 
 class PseudoLogger(logging.Logger):

@@ -2,13 +2,26 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid1, uuid3
-from typing import *
-
+from typing import Optional, Union, TypeVar, Any, overload, TYPE_CHECKING
+from typing_extensions import Self
 from pyracmon.config import PyracmonConfiguration
 from pyracmon.connection import Connection
+from pyracmon.mixin import CRUDMixin
 from pyracmon.model import Model
 from pyracmon.graph.typing import issubgeneric
-from .util import Matcher, testing_config
+from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
+from .util import default_test_config, Matcher
+
+
+if TYPE_CHECKING:
+    class TestingModel(MultiInsertMixin, CRUDMixin):
+        pass
+else:
+    class TestingModel():
+        pass
+
+
+M = TypeVar('M', bound=TestingModel)
 
 
 class TestingState:
@@ -29,12 +42,12 @@ class TestingState:
         cls.indexes[model] = index
 
 
-class TestingMixin:
+class TestingMixin(TestingModel):
     """
     Mixin class for model types providing methods designed for testing.
     """
     @classmethod
-    def by(cls, index: int) -> type:
+    def by(cls, index: int) -> Self:
         """
         Set current fixture index.
 
@@ -44,16 +57,70 @@ class TestingMixin:
             This type.
         """
         TestingState.set_index(cls, index)
-        return cls
+        return cls # type: ignore
 
+    @overload
     @classmethod
     def fixture(
         cls,
-        db: Connection,
-        variable: Optional[Union[int, Dict[str, Any], Model, List[Dict[str, Any]], List[Model]]] = None,
+        db: Optional[Connection],
+        variable: None = None,
         index: Optional[int] = None,
         cfg: Optional[PyracmonConfiguration] = None,
-    ) -> Union[Model, List[Model]]:
+    ) -> list[Self]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: int,
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> list[Self]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: Self,
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> Self: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: dict[str, Any],
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> Self: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: list[Self],
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> list[Self]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: list[dict[str, Any]],
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> list[Self]: ...
+    @classmethod
+    def fixture(
+        cls,
+        db: Optional[Connection],
+        variable: Optional[Union[int, dict[str, Any], Self, list[dict[str, Any]], list[Self]]] = None,
+        index: Optional[int] = None,
+        cfg: Optional[PyracmonConfiguration] = None,
+    ) -> Union[Self, list[Self]]:
         """
         Inserts record(s) with auto-generated column values.
 
@@ -115,7 +182,22 @@ class TestingMixin:
         return True
 
 
-def _generate_model(model, index, model_or_dict, cfg):
+def truncate(db: Connection, *models: type[TruncateMixin]):
+    """
+    Truncate tables in order.
+
+    Args:
+        db: DB connection.
+        tables: Models of tables to truncate.
+    """
+    if len(models) == 0:
+        raise ValueError(f"No tables are specified. Did you forget to pass DB connection at the first argument?")
+
+    for m in models:
+        m.truncate(db)
+
+
+def _generate_model(model: type[M], index, model_or_dict, cfg) -> M:
     values = {}
 
     if isinstance(model_or_dict, TestingMixin):
@@ -142,7 +224,7 @@ def _generate_value(table, column, index, cfg):
     Returns:
         Generated value.
     """
-    cfg = cfg or testing_config()
+    cfg = cfg or default_test_config()
 
     mapping = cfg.fixture_mapping
     if mapping:
@@ -178,7 +260,7 @@ def _generate_value(table, column, index, cfg):
         return timedelta(days=index+1)
     elif column.ptype is UUID:
         return str(uuid3(fixed_uuid, f"{table.name}-{column.name}-{index}"))
-    elif issubgeneric(column.ptype, List):
+    elif issubgeneric(column.ptype, list):
         return []
     elif isinstance(column.ptype, type) and issubclass(column.ptype, Enum):
         return next(iter(column.ptype), None)

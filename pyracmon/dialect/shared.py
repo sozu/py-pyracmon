@@ -1,14 +1,17 @@
 """
 This module exports model mixin types having model methods available in some RDBMS.
 """
-from typing import *
+from collections.abc import Sequence
+from typing import Union, Any
+from typing_extensions import Self
 from ..connection import Connection
-from ..query import values
-from ..model import *
+from ..clause import values
+from ..model import model_values, check_columns
+from ..mixin import CRUDInternalMeta
 from ..util import key_to_index, Qualifier
 
 
-class MultiInsertMixin:
+class MultiInsertMixin(CRUDInternalMeta):
     """
     This class provides methods to execute queries which is not standard SQL but common to some RDBMS.
     """
@@ -16,8 +19,8 @@ class MultiInsertMixin:
     def inserts(
         cls,
         db: Connection,
-        rows: List[Union['Model', Dict[str, Any]]],
-        qualifier: Qualifier = {},
+        rows: Sequence[Union[Self, dict[str, Any]]],
+        qualifier: dict[str, Qualifier] = {},
         rows_per_insert: int = 1000,
     ) -> int:
         """
@@ -40,19 +43,19 @@ class MultiInsertMixin:
             check_columns(cls, v)
 
         cols = list(dict_rows[0].keys())
-        qualifier = key_to_index(qualifier, cols)
+        ordered_qs = key_to_index(qualifier, cols)
 
         offset = 0
         remainders = dict_rows
 
-        sql_full = f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), rows_per_insert, qualifier)}"
+        sql_full = f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), rows_per_insert, ordered_qs)}"
 
         def insert(targets, index):
             num = len(targets)
             vals = sum([list(t.values()) for t in targets], [])
 
             sql = sql_full if num == rows_per_insert else \
-                f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), num, qualifier)}"
+                f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), num, ordered_qs)}"
 
             db.stmt().execute(sql, *vals)
 
@@ -70,3 +73,9 @@ class MultiInsertMixin:
             insert(remainders, offset)
 
         return len(rows)
+
+
+class TruncateMixin:
+    @classmethod
+    def truncate(cls, db: Connection):
+        raise NotImplementedError()

@@ -6,16 +6,18 @@ from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 from uuid import UUID
 from itertools import groupby
-from typing import *
+from typing import Optional
+from pyracmon.connection import Connection
 from pyracmon.model import Table, Column, ForeignKey, Relations
-from pyracmon.dialect.shared import MultiInsertMixin
-from pyracmon.query import Q, where, holders
+from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
+from pyracmon.query import Q, where
+from pyracmon.clause import holders
 
 
 SequencePattern = re.compile(r"nextval\(\'([a-zA-Z0-9_]+)\'(\:\:regclass)?\)")
 
 
-def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> List[Table]:
+def read_schema(db: Connection, excludes: Optional[list[str]] = None, includes: Optional[list[str]] = None) -> list[Table]:
     """
     Collect tables in current database.
 
@@ -67,7 +69,7 @@ def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> L
         cs = (constraint or "").split(',')
         seq = m.group(1) if m else None
         null = nullable == 'YES'
-        ptype = map_types(t, udt) if t != 'ARRAY' else List[map_types(et, eudt)]
+        ptype = map_types(t, udt) if t != 'ARRAY' else list[map_types(et, eudt)]
         info = (t, udt) if t != 'ARRAY' else (et, eudt)
         return Column(n, ptype, info, 'PRIMARY KEY' in cs, Relations() if 'FOREIGN KEY' in cs else None, seq, null)
 
@@ -127,7 +129,7 @@ def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> L
         """, *params)
 
     def mv_column_of(n, not_null, udt, eudt, pos):
-        ptype = map_types(_map_alternates(udt), udt) if eudt is None else List[map_types(_map_alternates(eudt), eudt)]
+        ptype = map_types(_map_alternates(udt), udt) if eudt is None else list[map_types(_map_alternates(eudt), eudt)]
         info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
         return Column(n, ptype, info, False, None, None, not not_null)
 
@@ -157,12 +159,11 @@ def read_schema(db, excludes: List[str] = None, includes: List[str] = None) -> L
 
     for t in tables:
         cc = db.stmt().execute(f"SELECT col_description($_, 0)", *[table_oids[t.name]])
-        t.comment = cc.fetchone()[0] or ""
+        t.comment = cc.fetchone()[0] or "" # type: ignore
 
         for i, col in enumerate(t.columns):
-            m = db.helper.marker()
             cc = db.stmt().execute(f"SELECT col_description($_, $_)", *[table_oids[t.name], column_positions[t.name][col.name]])
-            col.comment = cc.fetchone()[0] or ""
+            col.comment = cc.fetchone()[0] or "" # type: ignore
 
         cc.close()
 
@@ -227,12 +228,12 @@ def _map_alternates(n):
         return n
 
 
-class PostgreSQLMixin(MultiInsertMixin):
+class PostgreSQLMixin(MultiInsertMixin, TruncateMixin):
     """
     Model mixin whose methods are available in PostgreSQL.
     """
     @classmethod
-    def last_sequences(cls, db, num):
+    def last_sequences(cls, db: Connection, num: int) -> list[tuple[Column, int]]:
         cols = [c for c in cls.columns if c.incremental]
 
         if len(cols) > 0:
@@ -240,14 +241,18 @@ class PostgreSQLMixin(MultiInsertMixin):
             d = db.cursor()
             for c in cols:
                 d.execute(f"SELECT currval('{c.incremental}')")
-                sequences.append((c, d.fetchone()[0]))
+                sequences.append((c, d.fetchone()[0])) # type: ignore
             d.close()
             return sequences
         else:
             return []
 
     @classmethod
-    def truncate(cls, db):
+    def support_returning(cls, db: Connection) -> bool:
+        return True
+
+    @classmethod
+    def truncate(cls, db: Connection):
         db.cursor().execute(f"TRUNCATE {cls.name} RESTART IDENTITY CASCADE")
 
 

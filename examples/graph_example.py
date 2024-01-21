@@ -1,6 +1,7 @@
 import psycopg2
-from pyracmon import connect, declare_models, graph_template, new_graph, read_row, graph_dict, S
+from pyracmon import *
 from pyracmon.dialect import postgresql
+from pyracmon.stub import render_models
 
 db = connect(
     psycopg2,
@@ -12,7 +13,8 @@ db = connect(
 )
 
 import models
-declare_models(postgresql, db, models)
+#ms = declare_models(postgresql, db, models, write_stub=True)
+ms = declare_models(postgresql, db, models)
 
 from models import *
 
@@ -63,14 +65,11 @@ def fetch_blogs():
     # Create graph instance.
     graph = new_graph(t)
 
-    c = db.cursor()
-    m = db.helper.marker()
-
     # Execute query to fetch blogs with their categories and total number of posts
     # In this query, blog and category are joined and the total number of posts are counted for each blog.
     exp = blog.select("b") + blog_category.select("c")
 
-    c.execute(f"""\
+    c = db.stmt().execute(f"""\
         SELECT
             {exp.b}, {exp.c}, bp.posts
         FROM
@@ -82,11 +81,11 @@ def fetch_blogs():
                     INNER JOIN post AS p ON b.id = p.blog_id
                 GROUP BY
                     b.id
-                LIMIT {m()} OFFSET {m()}
+                LIMIT $_ OFFSET $_
             ) AS bp
             INNER JOIN blog AS b ON bp.id = b.id
             INNER JOIN blog_category AS c ON b.id = c.blog_id
-        """, [10, 0])
+        """, 10, 0)
     for row in c.fetchall():
         r = read_row(row, *exp, "posts")
         graph.append(
@@ -100,7 +99,7 @@ def fetch_blogs():
     blog_ids = [b().id for b in graph.view.blogs]
     exp = post.select("p") + image.select("i")
 
-    c.execute(f"""\
+    c = db.stmt().execute(f"""\
         SELECT
             {exp.p}, {exp.i}, q.comments
         FROM
@@ -117,13 +116,13 @@ def fetch_blogs():
                     INNER JOIN post_comment AS pc ON p.id = pc.post_id
                 WHERE
                     p.rank <= 3
-                    AND p.blog_id IN ({db.helper.holders(len(blog_ids))})
+                    AND p.blog_id IN ({holders(len(blog_ids))})
                 GROUP BY
                     p.id
             ) AS q
             INNER JOIN post AS p ON q.id = p.id
             INNER JOIN image AS i ON q.id = i.post_id
-        """, blog_ids)
+        """, *blog_ids)
     for row in c.fetchall():
         r = read_row(row, *exp, "comments")
         graph.append(
@@ -137,7 +136,7 @@ def fetch_blogs():
     # In this query, post and post_comments are joined.
     post_ids = [p().id for p in graph.view.recent_posts]
     pc_ = post_comment.select("pc")
-    c.execute(f"""\
+    c = db.stmt().execute(f"""\
         SELECT
             {pc_}, q.liked = 1, q.recent <= 3
         FROM
@@ -149,12 +148,12 @@ def fetch_blogs():
                 FROM
                     post_comment
                 WHERE
-                    post_id IN ({db.helper.holders(len(post_ids))})
+                    post_id IN ({holders(len(post_ids))})
             ) AS q
             INNER JOIN post_comment AS pc ON q.id = pc.id
         WHERE
             q.liked = 1 OR q.recent <= 3
-        """, post_ids)
+        """, *post_ids)
     for row in c.fetchall():
         r = read_row(row, pc_, "liked", "recent")
         graph.append(
@@ -171,19 +170,19 @@ def fetch_blogs():
     # Return view of the graph.
     return graph.view
 
-def add_thumbnail(s, v):
-    r = s(v)
+def add_thumbnail(cxt: NodeContext):
+    r = cxt.serialize()
     r['thumbnail'] = f"{r['url']}/thumbnail"
     return r
 
 result = graph_dict(
     fetch_blogs(),
-    blogs = (),
-    recent_posts = ("posts",),
+    blogs = S.of(),
+    recent_posts = S.name("posts"),
     total_posts = S.head(),
-    categories = (),
+    categories = S.of(),
     images = S.each(add_thumbnail),
-    recent_comments = ("comments",),
+    recent_comments = S.name("comments"),
     most_liked_comment = S.head(),
     total_comments = S.head(),
     total = S.head(),

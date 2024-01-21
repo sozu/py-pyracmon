@@ -7,7 +7,7 @@ class TestCreateGraphTemplate:
     def test_empty(self):
         t = GraphTemplate([])
 
-        assert t._properties == []
+        assert t._properties == {}
         assert t._relations == []
 
     def test_create(self):
@@ -44,7 +44,7 @@ class TestCopiedProperty:
         t.a << t.b << t.c
 
         u = GraphTemplate([
-            ("d", t.b),
+            ("d", t.b, None, None),
             ("e", int, None, None),
             ("f", int, None, None),
         ])
@@ -65,7 +65,7 @@ class TestCopiedProperty:
         t.a << t.b << t.c
 
         u = GraphTemplate([
-            ("d", t),
+            ("d", t, None, None),
             ("e", int, None, None),
             ("f", int, None, None),
         ])
@@ -153,7 +153,7 @@ class TestShift:
     def test_fail_graph_property(self):
         t = self._template()
         u = GraphTemplate([
-            ("t", t),
+            ("t", t, None, None),
             ("d", int, None, None),
         ])
         with pytest.raises(ValueError):

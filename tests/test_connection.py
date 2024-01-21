@@ -1,6 +1,4 @@
 import pytest
-import re
-import threading
 from functools import reduce
 from pyracmon.connection import *
 from pyracmon.context import ConnectionContext
@@ -56,3 +54,17 @@ class TestStatement:
         assert isinstance(cursor, PseudoCursor)
         assert cursor.conn.query_list == ["abc ? ? ? ?"]
         assert cursor.conn.params_list == [[1, 3, 2, 4]]
+
+    def test_executemany(self):
+        conn = PseudoConnection(PseudoAPI())
+
+        stmt = conn.stmt()
+
+        c1 = stmt.executemany("abc $_ $_", [[1, 2], [3, 4], [5, 6]])
+        c2 = stmt.executemany("def $a $b", [dict(a=7, b=8), dict(a=9, b=10)])
+
+        assert isinstance(c1, PseudoCursor)
+        assert isinstance(c2, PseudoCursor)
+
+        assert c1.conn.query_list == ["abc ? ?", "abc ? ?", "abc ? ?", "def ? ?", "def ? ?"]
+        assert c1.conn.params_list == [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]]

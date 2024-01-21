@@ -5,25 +5,38 @@ Base module of pyracmon exporting commonly used objects.  Use `*` simply to impo
 """
 import sys
 import types
-from typing import *
-from pyracmon.config import pyracmon, default_config
+from typing import Union, Optional, Any, TypeVar, TYPE_CHECKING
+from pyracmon.config import default_config
 from pyracmon.connection import connect, Connection
 from pyracmon.context import ConnectionContext
 from pyracmon.graph.serialize import NodeSerializer
 from pyracmon.mixin import CRUDMixin
 from pyracmon.select import read_row
-from pyracmon.model import define_model, Table, Column, Model
+from pyracmon.model import define_model, Table, Column
 from pyracmon.model_graph import GraphEntityMixin
-from pyracmon.query import Q, Expression, Conditional, escape_like, where, order_by, ranged_by
+from pyracmon.query import Q, Expression, Conditional, escape_like, where
+from pyracmon.query_graph import append_rows
+from pyracmon.clause import order_by, ranged_by, holders, values
+from pyracmon.stub import output_stub
 from pyracmon.graph import new_graph, S
-from pyracmon.graph.graph import Graph, GraphView, NodeContainer, ContainerView, Node, NodeView, NodeChildrenView
+from pyracmon.graph.graph import Graph, GraphView, NodeContainer, ContainerView, Node, NodeView
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.schema import TypedDict, document_type, Typeable, walk_schema, GraphSchema
+from pyracmon.graph.schema import document_type, Typeable, GraphSchema
+from pyracmon.graph.serialize import NodeContext
+from pyracmon.graph.typing import walk_schema
+from pyracmon.testing import TestingMixin
+
+
+if TYPE_CHECKING:
+    from pyracmon.model import Model as _Model
+    class Model(_Model):
+        pass
+else:
+    from pyracmon.model import Model
 
 
 __all__ = [
-    "pyracmon",
     "connect",
     "Connection",
     "ConnectionContext",
@@ -36,9 +49,12 @@ __all__ = [
     "Expression",
     "Conditional",
     "where",
+    "append_rows",
     "escape_like",
     "order_by",
     "ranged_by",
+    "holders",
+    "values",
     "new_graph",
     "S",
     "Graph",
@@ -47,12 +63,11 @@ __all__ = [
     "ContainerView",
     "Node",
     "NodeView",
-    "NodeChildrenView",
-    "TypedDict",
     "document_type",
     "Typeable",
     "walk_schema",
     "GraphSchema",
+    "NodeContext",
     "Model",
     "declare_models",
     "graph_template",
@@ -61,14 +76,21 @@ __all__ = [
 ]
 
 
+M = TypeVar('M', bound=Model)
+
+
 def declare_models(
     dialect: types.ModuleType,
     db: Connection,
     module: Union[types.ModuleType, str] = __name__,
-    mixins: List[type] = [],
-    excludes: List[str] = None,
-    includes: List[str] = None,
-) -> List[Type[Model]]:
+    mixins: list[type] = [],
+    excludes: Optional[list[str]] = None,
+    includes: Optional[list[str]] = None,
+    *,
+    testing: bool = False,
+    model_type: type[M] = Model,
+    write_stub: bool = False,
+) -> list[type[M]]:
     """
     Declare model types read from database into the specified module.
 
@@ -76,7 +98,7 @@ def declare_models(
         dialect: A module exporting `read_schema` function and `mixins` classes.
             `pyracmon.dialect.postgresql` and `pyracmon.dialect.mysql` are available.
         db: Connection already connected to database.
-        module: A module or module name where the declarations are located.
+        module: A module or module name where the declarations will be located.
         mixins: Additional mixin classes for declaring model types.
         excludes: Excluding table names.
         includes: Including table names. When this argument is omitted, all tables except for specified in `excludes` are declared.
@@ -85,19 +107,22 @@ def declare_models(
     """
     tables = dialect.read_schema(db, excludes, includes)
     models = []
+    mod = module if isinstance(module, types.ModuleType) else sys.modules[module]
+    base_mixins = [CRUDMixin, GraphEntityMixin, model_type]
+    if testing:
+        base_mixins[0:0] = [TestingMixin]
     for t in tables:
-        m = define_model(t, mixins + dialect.mixins + [CRUDMixin, GraphEntityMixin, Model])
-        if isinstance(module, types.ModuleType):
-            module.__dict__[t.name] = m
-        else:
-            sys.modules[module].__dict__[t.name] = m
+        m = define_model(t, mixins + dialect.mixins + base_mixins)
+        mod.__dict__[t.name] = m
         models.append(m)
+    if write_stub:
+        output_stub(None, mod, models, dialect, mixins, testing=testing)
     return models
 
 
 def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
     """
-    Create a graph template on the default `GraphSpec` predefined to handle model object in appropriate ways.
+    Create a graph template on the default `GraphSpec` which handles model object in appropriate ways.
 
     See `pyracmon.graph.GraphSpec.new_template` for the detail of definitions.
 
@@ -110,33 +135,30 @@ def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
     return default_config().graph_spec.new_template(*bases, **definitions)
 
 
-def graph_dict(graph: GraphView, **settings: NodeSerializer) -> Dict[str, Any]:
+def graph_dict(graph: GraphView, **settings: NodeSerializer) -> dict[str, Any]:
     """
-    Serialize a graph into a `dict` under the default specification.
+    Serialize a graph into a `dict` under the default `GraphSpec` .
 
     See `pyracmon.graph.GraphSpec.to_dict` for the detail of serialization settings.
 
     Args:
         graph: A view of the graph.
-        settings: Serialization settings.
+        settings: Serialization settings where each key denotes a node name.
     Returns:
         Serialization result.
     """
-    return default_config().graph_spec.to_dict(graph, **settings)
+    return default_config().graph_spec.to_dict(graph, {}, **settings)
 
 
 def graph_schema(template: GraphTemplate, **settings: NodeSerializer) -> GraphSchema:
     """
-    Creates `GraphSchema` under the default specifications.
-
-    `GraphSchema` represents the structure of `dict` serialized a graph of the template with given serialization settings.
-    Use this, for example, to document REST API which responds serialized graph in JSON format. 
+    Creates `GraphSchema` under the default `GraphSpec` .
 
     See `pyracmon.graph.GraphSpec.to_schema` for the detail of serialization settings.
 
     Args:
         template: A template of serializing graph.
-        settings: Serialization settings.
+        settings: Serialization settings where each key denotes a node name.
     Returns:
         Schema of serialization result.
     """

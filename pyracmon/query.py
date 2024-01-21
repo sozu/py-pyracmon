@@ -7,19 +7,39 @@ Class methods on `Q` are designed to concatenate conditions in conjunction with 
 Constructed condition results in `Conditional` object and `where` extracts `WHERE` clause and parameters from it.
 Due to that, query operation code can be divided into condition construction phase and query formatting phase clearly.
 
->>> cond = Q.eq("t", c1=1) & Q.lt("t", c2=2)
->>> w, params = where(cond)
->>> db.stmt().execute("SELECT * FROM table AS t {w} LIMIT $_ OFFSET $_", *params, 10, 5)
->>> # SQL: SELECT * FROM table AS t WHERE t.c1 = 1 AND t.c2 < 2 LIMIT 10 OFFSET 5
-
-This module also exports utility functions to generate a part of query.
-
+```python
+cond = Q.eq("t", c1=1) & Q.lt("t", c2=2)
+w, params = where(cond)
+db.stmt().execute("SELECT * FROM table AS t {w} LIMIT $_ OFFSET $_", *params, 10, 5)
+# SQL: SELECT * FROM table AS t WHERE t.c1 = 1 AND t.c2 < 2 LIMIT 10 OFFSET 5
+```
 """
+from collections.abc import Sequence, Mapping
 from functools import reduce
 from itertools import chain
-from typing import *
-from .sql import Sql
-from .marker import Marker
+from typing import Any, Callable, Union, Generic, Optional, Protocol, TYPE_CHECKING
+from typing_extensions import Self, TypeVarTuple, Unpack, NotRequired
+
+
+QA = TypeVarTuple('QA')
+if TYPE_CHECKING:
+    # TODO: There are no correct hinting expression for optional arguments in python <= 3.10.
+    class Queryable(Protocol, Generic[Unpack[QA]]):
+        def eq(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def neq(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def in_(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def not_in(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def match(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def like(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def startswith(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def endswith(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def lt(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def le(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def gt(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+        def ge(self, *args: Union[Unpack[QA], Unpack[tuple[Unpack[QA], Any]]]) -> 'Conditional': ...
+else:
+    class Queryable(Protocol, Generic[Unpack[QA]]):
+        pass
 
 
 class Q:
@@ -28,55 +48,70 @@ class Q:
 
     Using `of()` is the most simple way to create a condition clause with parameters.
 
+    ```python
     >>> Q.of("a = $_", 1)
     Condition: 'a = $_' -- [1]
+    ```
 
     Other utility methods correspond to basic operators defined in SQL.
     They takes keyword arguments and create conditions by applying operator to each item respectively.
 
+    ```python
     >>> Q.eq(a=1)
     Condition: 'a = %s' -- [1]
     >>> Q.in_(a=[1, 2, 3])
     Condition: 'a IN (%s, %s, %s)' -- [1, 2, 3]
     >>> Q.like(a="abc")
     Condition: 'a LIKE %s' -- ["%abc%"]
+    ```
 
     Multiple arguments generates a condition which concatenates conditions with logical operator, by default `AND` .
 
+    ```python
     >>> Q.eq(a=1, b=2)
     Condition: 'a = %s AND b = %s' -- [1, 2]
+    ```
 
     Those methods also accept table alias which is prepended to columns.
 
+    ```python
     >>> Q.eq("t", a=1, b=2)
     Condition: 't.a = %s AND t.b = %s'
+    ```
 
     Additionally, the instance of this class has its own functionality to generate condition.
 
     Each parameter passed to the constructor becomes an instance method of the instance,
     which takes a condition clause including placeholders which will take parameters in query execution phase.
-    `Statement.execute` allows unified marker `$_` in spite of DB driver.
+    `pyracmon.connection.Statement.execute` allows unified marker `$_` in spite of DB driver.
 
+    ```python
     >>> q = Q(a=1)
     >>> q.a("a = $_")
     Condition: 'a = $_' -- [1]
+    ```
 
     Method whose name is not passed to the constructor renders empty condition which has no effect on the query.
 
+    ```python
     >>> q.b("b = $_")
     Condition: '' -- []
+    ```
 
     By default, `None` is equivalent to not being passed. Giving `True` at the first argument in constructor changes the behavior.
 
+    ```python
     >>> q = Q(a=1, b=None)
     >>> q.b("b = $_")
     Condition: '' -- []
     >>> q = Q(True, a=1, b=None)
     >>> q.b("b = $_")
     Condition: 'b = $_' -- [None]
+    ```
 
     This feature simplifies a query construction in cases some parameters are absent.
 
+    ```python
     >>> def search(db, q):
     >>>     w, params = where(q.a("a = $_") & q.b("b = $_"))
     >>>     db.stmt().execute(f"SELECT * FROM table {w}", *params)
@@ -84,17 +119,22 @@ class Q:
     >>> search(db, Q(a=1))      # SELECT * FROM table WHERE a = 1
     >>> search(db, Q(a=1, b=2)) # SELECT * FROM table WHERE a = 1 AND b = 2
     >>> search(db, Q())         # SELECT * FROM table
+    ```
     """
-    class Attribute:
+    class Attribute(Queryable[str]): # type: ignore
         def __init__(self, value):
             self.value = value
 
-        def __call__(self, expression: Union[str, Callable[[Any], str]], convert: Callable[[Any], Any] = None) -> 'Conditional':
+        def __call__(
+            self,
+            expression: Union[str, Callable[[Any], str]],
+            convert: Optional[Union[Callable[[Any], Any], Any]] = None,
+        ) -> 'Conditional':
             """
-            Craetes conditional object composed of given clause and the attribute value as parameters.
+            Creates conditional object composed of given expression and the attribute value as parameters.
 
             Args:
-                clause: A clause or a function generating a clause by taking the attribute value.
+                expression: A clause or a function generating a clause by taking the attribute value.
                 convert: A function converting the attribute value to parameters.
                     If this function returns a value which is not a list, a list having only the value is used.
             Returns:
@@ -115,6 +155,9 @@ class Q:
         def all(self) -> 'Q.Attribute':
             """
             Returns composite attribute which applies conditions to every values iterated from attribute value and join them with `AND`.
+
+            Returns:
+                Composite attribute.
             """
             return Q.CompositeAttribute(self.value, True)
 
@@ -122,6 +165,9 @@ class Q:
         def any(self) -> 'Q.Attribute':
             """
             Returns composite attribute which applies conditions to every values iterated from attribute value and join them with `OR`.
+
+            Returns:
+                Composite attribute.
             """
             return Q.CompositeAttribute(self.value, False)
 
@@ -135,6 +181,21 @@ class Q:
             return other if not bool(self.value) else Conditional()
 
         def __getattr__(self, key):
+            """
+            Exposes a method which works similarly to 'Q' 's utility method of the same name.
+
+            ```python
+            >>> q = Q(a = 1)
+            >>> q.a.eq("col")
+            Condition: 'col = $_' -- [1]
+            >>>
+            >>> q.a.eq("col", None, "t")
+            Condition: 't.col = $_' -- [1]
+            >>>
+            >>> q.a.eq("col", lambda x: x*2, "t")
+            Condition: 't.col = $_' -- [2]
+            ```
+            """
             method = getattr(Q, key)
             def invoke(col, convert=None, *args, **kwargs):
                 if callable(convert):
@@ -207,7 +268,7 @@ class Q:
         """
         self.attributes = dict([(k, v) for k, v in kwargs.items() if _include_none_ or v is not None])
 
-    def __getattr__(self, key):
+    def __getattr__(self, key) -> Attribute:
         if key in self.attributes:
             return Q.Attribute(self.attributes[key])
         else:
@@ -227,7 +288,7 @@ class Q:
         return Conditional(expression, list(params))
 
     @classmethod
-    def eq(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any):
+    def eq(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Creates a condition applying `=` operator to columns.
 
@@ -249,7 +310,7 @@ class Q:
         return _conditional("=", _and_, kwargs, is_null, _alias_)
 
     @classmethod
-    def neq(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any):
+    def neq(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `!=`.
 
@@ -271,7 +332,7 @@ class Q:
         return _conditional("!=", _and_, kwargs, is_null, _alias_)
 
     @classmethod
-    def in_(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: List[Any]):
+    def in_(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Sequence[Any]) -> 'Conditional':
         """
         Works like `eq`, but applies `IN`.
 
@@ -291,7 +352,7 @@ class Q:
         return _conditional("IN", _and_, kwargs, in_list, _alias_)
 
     @classmethod
-    def not_in(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: List[Any]):
+    def not_in(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Sequence[Any]) -> 'Conditional':
         """
         Works like `eq`, but applies `NOT IN`.
 
@@ -311,9 +372,9 @@ class Q:
         return _conditional("NOT IN", _and_, kwargs, in_list, _alias_)
 
     @classmethod
-    def match(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str):
+    def match(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
-        Works like `eq`, but applies `LIKE`. Given parameters will be passed to query without being modified.
+        Works like `eq`, but applies `LIKE`. Given parameters will be passed to query without being escaped or enclosed.
 
         Args:
             _alias_: Table alias.
@@ -325,7 +386,7 @@ class Q:
         return _conditional("LIKE", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def like(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str):
+    def like(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
         Works like `eq`, but applies `LIKE`. Given parameters will be escaped and enclosed with wildcards (%) to execute partial match.
 
@@ -339,7 +400,7 @@ class Q:
         return _conditional("LIKE", _and_, {k: f"%{escape_like(v)}%" for k, v in kwargs.items()}, None, _alias_)
 
     @classmethod
-    def startswith(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str):
+    def startswith(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
         Works like `eq`, but applies `LIKE`. Given parameters will be escaped and appended with wildcards (%) to execute prefix match.
 
@@ -353,7 +414,7 @@ class Q:
         return _conditional("LIKE", _and_, {k: f"{escape_like(v)}%" for k, v in kwargs.items()}, None, _alias_)
 
     @classmethod
-    def endswith(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str):
+    def endswith(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
         Works like `eq`, but applies `LIKE`. Given parameters will be escaped and prepended with wildcards (%) to execute backward match.
 
@@ -367,7 +428,7 @@ class Q:
         return _conditional("LIKE", _and_, {k: f"%{escape_like(v)}" for k, v in kwargs.items()}, None, _alias_)
 
     @classmethod
-    def lt(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any):
+    def lt(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `<`.
 
@@ -381,7 +442,7 @@ class Q:
         return _conditional("<", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def le(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any):
+    def le(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `<=`.
 
@@ -395,7 +456,7 @@ class Q:
         return _conditional("<=", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def gt(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any):
+    def gt(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `>`.
 
@@ -409,7 +470,7 @@ class Q:
         return _conditional(">", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def ge(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any):
+    def ge(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `>=`.
 
@@ -423,7 +484,7 @@ class Q:
         return _conditional(">=", _and_, kwargs, None, _alias_)
 
 
-def _conditional(op, and_, column_values, gen=None, alias=None):
+def _conditional(op, and_, column_values, gen=None, alias=None) -> 'Conditional':
     cond = Conditional()
 
     def concat(c):
@@ -449,9 +510,9 @@ def _conditional(op, and_, column_values, gen=None, alias=None):
 
 class Expression:
     """
-    Abstraction of expression is any query.
+    Abstraction of expression in any query.
     """
-    def __init__(self, expression: str, params: List[Any]):
+    def __init__(self, expression: str, params: list[Any]):
         #: Expression string.
         self.expression = expression
         #: Parameters corresponding to placeholders in the expression.
@@ -463,21 +524,23 @@ class Conditional(Expression):
     Represents a query condition composed of an expression and parameters.
 
     Parameters must be a list where the index of each parameter matches the index of placeholder for it.
-    The expression accepts only the automatic numbering template parameter `$_`.
+    The expression accepts only the unified marker `$_`.
 
     Applying logical operators such as `&`, `|` and `~` generates new condition.
 
+    ```python
     >>> c1 = Q.of("a = $_", 0)
     >>> c2 = Q.of("b < $_", 1)
     >>> c3 = Q.of("c > $_", 2)
     >>> c = ~(c1 & c2 | c3)
     >>> c
     Condition: NOT (((a = $_) AND (b < $_)) OR (c > $_)) -- [0, 1, 2]
+    ```
     """
     @classmethod
-    def all(cls, conditionals: Iterable['Conditional']) -> 'Conditional':
+    def all(cls, conditionals: Sequence['Conditional']) -> 'Conditional':
         """
-        Concatenates conditional objects with `AND`.
+        Concatenates condition objects with `AND`.
 
         Args:
             conditionals: Condition objects.
@@ -487,15 +550,17 @@ class Conditional(Expression):
         return reduce(lambda acc, c: acc & c, conditionals, Conditional())
 
     @classmethod
-    def any(cls, conditionals: Iterable['Conditional']) -> 'Conditional':
+    def any(cls, conditionals: Sequence['Conditional']) -> 'Conditional':
         """
-        Concatenates conditional objects with `OR`.
+        Concatenates condition objects with `OR`.
 
         Args:
             conditionals: Condition objects.
         Returns:
             Concatenated condition object.
         """
+        if len(conditionals) == 0:
+            return Conditional("1 = 0")
         return reduce(lambda acc, c: acc | c, conditionals, Conditional())
 
     def __init__(self, expression="", params=None):
@@ -504,16 +569,7 @@ class Conditional(Expression):
     def __repr__(self):
         return f"Condition: '{self.expression}' -- {self.params}"
 
-    def __call__(self, marker):
-        """
-        .. deprecated:: 1.0.0
-        """
-        c, p = Sql(marker, self.expression).render(*self.params)
-        if not isinstance(p, list):
-            raise ValueError(f"Only list style marker is available.")
-        return Conditional(c, p)
-
-    def __and__(self, other):
+    def __and__(self, other) -> 'Conditional':
         expression = ""
         if self.expression and other.expression:
             expression = f"({self.expression}) AND ({other.expression})"
@@ -524,7 +580,7 @@ class Conditional(Expression):
 
         return Conditional(expression, self.params + other.params)
 
-    def __or__(self, other):
+    def __or__(self, other) -> 'Conditional':
         expression = ""
         if self.expression and other.expression:
             expression = f"({self.expression}) OR ({other.expression})"
@@ -535,7 +591,7 @@ class Conditional(Expression):
 
         return Conditional(expression, self.params + other.params)
 
-    def __invert__(self):
+    def __invert__(self) -> 'Conditional':
         if self.expression:
             return Conditional(f"NOT ({self.expression})", self.params)
         else:
@@ -563,7 +619,7 @@ def escape_like(v: str) -> str:
     return ''.join(map(esc, v))
 
 
-def where(condition: 'Conditional') -> Tuple[str, List[Any]]:
+def where(condition: 'Conditional') -> tuple[str, list[Any]]:
     """
     Generates a `WHERE` clause and parameters representing given condition.
 
@@ -575,122 +631,3 @@ def where(condition: 'Conditional') -> Tuple[str, List[Any]]:
         Tuple of `WHERE` clause and parameters.
     """
     return ('', []) if condition.expression == '' else (f'WHERE {condition.expression}', condition.params)
-
-
-def order_by(columns: Dict[str, bool], **defaults: bool) -> str:
-    """
-    Generates `ORDER BY` clause from columns and directions.
-
-    Args:
-        columns: Columns and directions. Iteration order is kept in rendered clause.
-        defaults: Column names and directions appended to the clause when the column is not specified in `columns` argument.
-    Returns:
-        `ORDER BY` clause.
-    """
-    columns = dict(columns, **{c:v for c,v in defaults.items() if c not in columns})
-    def col(cd):
-        return f"{cd[0]} ASC" if cd[1] else f"{cd[0]} DESC"
-    return '' if len(columns) == 0 else f"ORDER BY {', '.join(map(col, columns.items()))}"
-
-
-def ranged_by(limit: Optional[int] = None, offset: Optional[int] = None) -> Tuple[str, List[Any]]:
-    """
-    Generates `LIMIT` and `OFFSET` clause using marker.
-
-    Args:
-        limit: Limit value. `None` means no limitation.
-        offset: Offset value. `None` means `0`.
-    Returns:
-        Tuple of `LIMIT` and `OFFSET` clause and parameters.
-    """
-    clause, params = [], []
-
-    if limit is not None:
-        clause.append("LIMIT $_")
-        params.append(limit)
-
-    if offset is not None:
-        clause.append("OFFSET $_")
-        params.append(offset)
-
-    return ' '.join(clause) if clause else '', params
-
-
-def holders(length_or_keys: Union[int, List[str]], qualifier: Dict[int, Callable[[str], str]] = None) -> str:
-    """
-    Generates partial query string containing placeholder markers separated by comma.
-
-    Qualifier function works as described in `pyracmon.mixin.CRUDMixin`.
-
-    Args:
-        length_or_keys: The number of placeholders or list of placeholder keys.
-        qualifier: Qualifying function for each index.
-    Returns:
-        Query string.
-    """
-    if isinstance(length_or_keys, int):
-        hs = ["${_}"] * length_or_keys
-    else:
-        def key(k):
-            if isinstance(k, int):
-                return f"${{_{k}}}"
-            elif k:
-                return f"${{{k}}}"
-            else:
-                return "${_}"
-        hs = [key(k) for k in length_or_keys]
-
-    if qualifier:
-        hs = [qualifier.get(i, _noop)(h) for i, h in enumerate(hs)]
-
-    return ', '.join(hs)
-
-
-def values(length_or_key_gen: Union[int, List[Callable[[int], str]]], rows: int, qualifier: Dict[int, Callable[[str], str]] = None):
-    """
-    Generates partial query string for `VALUES` clause in insertion query.
-
-    Args:
-        length_or_key_gen: The number of placeholders or list of functions taking row index and returning key for each placeholder.
-        rows: The number of rows to insert.
-        qualifier: Qualifying function for each index.
-    Returns:
-        Query string.
-    """
-    if isinstance(length_or_key_gen, int):
-        lok = (lambda i: length_or_key_gen)
-    else:
-        lok = (lambda i: [g(i) for g in length_or_key_gen])
-
-    return ', '.join([f"({holders(lok(i), qualifier)})" for i in range(rows)])
-
-
-class QueryHelper:
-    """
-    .. deprecated:: 1.0.0
-    """
-    def __init__(self, api, config):
-        self.api = api
-        self.config = config
-
-    def marker(self):
-        # TODO read paramstyle from config.
-        return Marker.of(self.api.paramstyle)
-
-    def holders(self, keys, qualifier = None, start = 0, marker = None):
-        m = marker or self.marker()
-        qualifier = qualifier or {}
-
-        if isinstance(keys, int):
-            return ', '.join([qualifier.get(i, _noop)(m(i + start)) for i in range(keys)])
-        else:
-            return ', '.join([qualifier.get(i, _noop)(m(k)) for i, k in enumerate(keys)])
-
-    def values(self, keys, rows, qualifier = None, start = 0, marker = None):
-        num = keys if isinstance(keys, int) else len(keys)
-        m = marker or self.marker()
-        return ', '.join([f"({self.holders(keys, qualifier, start + num * i, m)})" for i in range(0, rows)])
-
-
-def _noop(x):
-    return x
