@@ -99,6 +99,15 @@ class Aliased(Generic[M]):
 
 
 class Consumable:
+    @staticmethod
+    def to_consumable(value: Any) -> 'Consumable':
+        if isinstance(value, Consumable):
+            return value
+        elif isinstance(value, str):
+            return StrConsumable(value)
+        else:
+            return EmptyConsumable()
+
     def __len__(self) -> int: ...
     @property
     def name(self) -> Optional[str]: ...
@@ -356,7 +365,7 @@ class RowValues:
         self._values.append(value)
 
 
-def read_row(row, *selections: Consumable, allow_redundancy: bool = False) -> RowValues:
+def read_row(row, *selections: Union[Consumable, str, tuple], allow_redundancy: bool = False) -> RowValues:
     """
     Read values in a row according to given selections.
 
@@ -372,9 +381,11 @@ def read_row(row, *selections: Consumable, allow_redundancy: bool = False) -> Ro
     Returns:
         Values read from the row accoding to the selections.
     """
-    result = RowValues(list(selections))
+    consumables = [Consumable.to_consumable(s) for s in selections]
 
-    for s in selections:
+    result = RowValues(consumables)
+
+    for s in consumables:
         result.append(s.consume(row))
         row = row[len(s):]
 

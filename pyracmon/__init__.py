@@ -98,7 +98,7 @@ def declare_models(
         dialect: A module exporting `read_schema` function and `mixins` classes.
             `pyracmon.dialect.postgresql` and `pyracmon.dialect.mysql` are available.
         db: Connection already connected to database.
-        module: A module or module name where the declarations are located.
+        module: A module or module name where the declarations will be located.
         mixins: Additional mixin classes for declaring model types.
         excludes: Excluding table names.
         includes: Including table names. When this argument is omitted, all tables except for specified in `excludes` are declared.
@@ -122,7 +122,7 @@ def declare_models(
 
 def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
     """
-    Create a graph template on the default `GraphSpec` predefined to handle model object in appropriate ways.
+    Create a graph template on the default `GraphSpec` which handles model object in appropriate ways.
 
     See `pyracmon.graph.GraphSpec.new_template` for the detail of definitions.
 
@@ -137,13 +137,13 @@ def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
 
 def graph_dict(graph: GraphView, **settings: NodeSerializer) -> dict[str, Any]:
     """
-    Serialize a graph into a `dict` under the default specification.
+    Serialize a graph into a `dict` under the default `GraphSpec` .
 
     See `pyracmon.graph.GraphSpec.to_dict` for the detail of serialization settings.
 
     Args:
         graph: A view of the graph.
-        settings: Serialization settings.
+        settings: Serialization settings where each key denotes a node name.
     Returns:
         Serialization result.
     """
@@ -152,16 +152,13 @@ def graph_dict(graph: GraphView, **settings: NodeSerializer) -> dict[str, Any]:
 
 def graph_schema(template: GraphTemplate, **settings: NodeSerializer) -> GraphSchema:
     """
-    Creates `GraphSchema` under the default specifications.
-
-    `GraphSchema` represents the structure of `dict` serialized a graph of the template with given serialization settings.
-    Use this, for example, to document REST API which responds serialized graph in JSON format. 
+    Creates `GraphSchema` under the default `GraphSpec` .
 
     See `pyracmon.graph.GraphSpec.to_schema` for the detail of serialization settings.
 
     Args:
         template: A template of serializing graph.
-        settings: Serialization settings.
+        settings: Serialization settings where each key denotes a node name.
     Returns:
         Schema of serialization result.
     """

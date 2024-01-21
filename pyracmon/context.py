@@ -13,16 +13,25 @@ from . import dbapi
 
 
 PARAMS: TypeAlias = Union[list[Any], dict[str, Any]]
+"""Type alias of parameters of query.
+
+Which type in `list` or `dict` is used depends on the type of the marker.
+"""
 
 
 class ConnectionContext:
     """
     This class represents a context of query execution.
 
-    You don't need to care this object in most cases except for when you want to change the configuration at a query execution.
+    By default, the context based on global configuration is used.
+    You should declare your own context class and set it to `Connection.use` if you want to change the behavior.
+
+    Custom context is also useful to change cursor state before and after query execution.  Overwrite `execute` method to do it.
     """
     def __init__(self, identifier: Optional[str] = None, **configurations):
+        #: Identifier of this context. `None` by default.
         self.identifier = identifier
+        #: Configuration used in this context.
         self.config = default_config().derive(**configurations)
 
     def _message(self, message):
@@ -31,6 +40,8 @@ class ConnectionContext:
     def configure(self, **configurations: Any) -> 'ConnectionContext':
         """
         Change configurations of this context.
+
+        Changes by this method never affect global configuration even if the context is based on it.
 
         Args:
             configurations: Configurations. See `pyracmon.config` to know available keys.
@@ -44,12 +55,6 @@ class ConnectionContext:
         """
         Executes a query on a cursor.
 
-        Query logging is also done in this method according to the configuration.
-
-        This method is invoked from `ConnectionContext.execute` internally.
-        When you intend to change behaviors of query executions,
-        inherit this class, overwrite this method and set factory method for the class by `Connection.use` .
-
         Args:
             cursor: Cursor object.
             sql: Query string.
@@ -59,7 +64,7 @@ class ConnectionContext:
         """
         return self._execute(cursor, sql, params, False)
 
-    def executemany(self, cursor: dbapi.Cursor, sql: str, params: Sequence[PARAMS]) -> dbapi.Cursor:
+    def executemany(self, cursor: dbapi.Cursor, sql: str, seq_of_params: Sequence[PARAMS]) -> dbapi.Cursor:
         """
         Repeats query on a cursor for sequencee of parameters.
 
@@ -68,11 +73,11 @@ class ConnectionContext:
         Args:
             cursor: Cursor object.
             sql: Query string.
-            params: Sequence of query parameters.
+            seq_of_args: A sequence of parameters of the query.
         Returns:
             Given cursor object. Internal state may be changed by the execution of the query.
         """
-        return self._execute(cursor, sql, params, True)
+        return self._execute(cursor, sql, seq_of_params, True)
 
     @overload
     def _execute(self, cursor: dbapi.Cursor, sql: str, params: PARAMS, is_many: Literal[False] = False) -> dbapi.Cursor: ...

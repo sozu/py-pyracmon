@@ -8,7 +8,6 @@ This library adopts unified marker `$_` instead of the styles to make things sim
 Everything in this module is used internally in most cases, thus user does not need to know the detail.
 """
 from typing import Any, Optional, Union
-from typing_extensions import Self
 
 
 class Marker:
@@ -18,7 +17,7 @@ class Marker:
     Each subclass corresponds to a `paramstyle` and implements methods to convert unified marker into its style.
     """
     @classmethod
-    def of(cls, paramstyle: str) -> Self:
+    def of(cls, paramstyle: str) -> 'Marker':
         """
         Creates an instance for given `paramstyle`.
 

@@ -8,7 +8,7 @@ from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from typing import Any, Union, Optional, Callable
-from typing_extensions import Self
+from typing_extensions import Self, TypeAlias, Unpack, TypeVarTuple
 from .model import Table, Column
 from .model_graph import ConfigurableSpec
 
@@ -17,6 +17,16 @@ __all__ = [
     "default_config",
     "PyracmonConfiguration",
 ]
+
+
+#Ts = TypeVarTuple("Ts")
+#TypeMap: TypeAlias = Callable[[str, Unpack[Ts]], Optional[type]]
+TypeMap: TypeAlias = Callable[..., Optional[type]]
+"""Signature of a function which takes at least a type name and returns a python type if possible.
+
+According to DBMS, the function will be called with additional arguments.
+It is recommended to add keyword arguments to the function even if you don't need them.
+"""
 
 
 @dataclass
@@ -36,8 +46,8 @@ class PyracmonConfiguration:
     """Flag to log query parameters also."""
     paramstyle: Optional[str] = None
     """Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module."""
-    type_mapping: Optional[Callable[[str], Optional[type]]] = None
-    """Function estimating python type from type name in database and optional DBMS dependent keys."""
+    type_mapping: Optional[TypeMap] = None
+    """Function estimating python type from type name in database and optional arguments dependent on DBMS."""
     graph_spec: ConfigurableSpec = ConfigurableSpec.create()
     """Graph specification used as default."""
     fixture_mapping: Optional[Callable[[Table, Column, int], Any]] = None
@@ -51,7 +61,7 @@ class PyracmonConfiguration:
     timedelta_unit: dict[str, Any] = field(default_factory=lambda: dict(seconds=1))
     """Default keyword arguments to pass `datetime.timedelta` used in `near` matcher."""
 
-    def _copy_to(self, other: Self, **kwargs: Any):
+    def _copy_to(self, other: 'PyracmonConfiguration', **kwargs: Any):
         for f in fields(self):
             val = kwargs[f.name] if f.name in kwargs else deepcopy(getattr(self, f.name))
             setattr(other, f.name, val)
@@ -62,11 +72,16 @@ class PyracmonConfiguration:
         if len(invalid) > 0:
             raise KeyError(f"Invalid configuration keys are found: {', '.join(invalid)}")
 
-    def derive(self, **kwargs: Any) -> Self:
+    def derive(self, **kwargs: Any) -> 'PyracmonConfiguration':
         """
         Creates new configuration instance deriving this configuration.
 
         Each keyword argument overwrites corresponding configuration value unless it is `None`.
+
+        Args:
+            kwargs: New configuration values. Each key must be a valid configuration key.
+        Returns:
+            Derived configuration.
         """
         self._check_fields(**kwargs)
         derived = PyracmonConfiguration()
@@ -74,11 +89,17 @@ class PyracmonConfiguration:
         return derived
 
     def set(self, **kwargs: Any) -> None:
+        """
+        Updates this configuration by setting given configuration values.
+
+        Args:
+            kwargs: New configuration values. Each key must be a valid configuration key.
+        """
         self._check_fields(**kwargs)
         for k, v in kwargs.items():
             setattr(self, k, v)
 
-    def __enter__(self) -> Self:
+    def __enter__(self) -> 'PyracmonConfiguration':
         derived = self.derive()
         return derived
 
@@ -92,7 +113,7 @@ def contextualConfiguration(
 ) -> PyracmonConfiguration:
     @dataclass
     class contextual(PyracmonConfiguration):
-        def __enter__(self) -> Self:
+        def __enter__(self) -> 'PyracmonConfiguration':
             derived = contextual()
             self._copy_to(derived)
             config_var().set(derived)
@@ -120,12 +141,15 @@ def default_config() -> PyracmonConfiguration:
     The object works as a context manager by `with` block where another object can be used as global configuration.
 
     ```python
-    >>> with default_config() as cfg:
-    >>>     # Updates to cfg are reflected to global configurations.
-    >>>     cfg.name = "another"
-    >>>     assert default_config().name == "another"
-    >>> # Updates inside with block is no longer valid.
-    >>> assert default_config().name == "default"
+    with default_config() as cfg:
+        # Updates to cfg are not affect the global configurations.
+        cfg.name = "another"
+        assert default_config().name == "another"
+    # Updates inside with block is no longer valid.
+    assert default_config().name == "default"
     ```
+
+    Returns:
+        Global configuration.
     """
     return config.get()

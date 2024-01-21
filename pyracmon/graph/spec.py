@@ -199,11 +199,11 @@ class GraphSpec:
         Omitted values are completed with registered items in this object.
 
         ```python
-        >>> template = GraphSpac().new_template(
-        >>>     a = int,
-        >>>     b = (str, lambda x:x),
-        >>>     c = (str, lambda x:x, lambda x:len(x)>5),
-        >>> )
+        template = GraphSpac().new_template(
+            a = int,
+            b = (str, lambda x:x),
+            c = (str, lambda x:x, lambda x:len(x)>5),
+        )
         ```
 
         Args:
@@ -224,11 +224,11 @@ class GraphSpec:
         Each `NodeSerializer` object can be built by factory methods on `pyracmon.graph.serialize.S`.
 
         ```python
-        >>> GraphSpec().to_dict(
-        >>>     graph,
-        >>>     a = S.of(),
-        >>>     b = S.name("B"),
-        >>> )
+        GraphSpec().to_dict(
+            graph,
+            a = S.of(),
+            b = S.name("B"),
+        )
         ```
 
         Args:

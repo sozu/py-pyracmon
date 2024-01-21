@@ -13,6 +13,13 @@ from .util import Qualifier
 
 
 ORDER: TypeAlias = Union[bool, tuple[bool, bool], str]
+"""Column order.
+
+Boolean represents `ASC` or `DESC` by itself or as the first item of tuple. 
+The second item of tuple represents `NULLS FIRST` or `NULLS LAST` .
+`str` value is used as is.
+"""
+
 HolderKeys: TypeAlias = Union[str, int, None, Expression]
 
 
@@ -22,7 +29,7 @@ def order_by(columns: Mapping[Union[str, AliasedColumn], ORDER], **defaults: ORD
 
     Args:
         columns: Columns and directions. Iteration order is kept in rendered clause.
-        defaults: Column names and directions appended to the clause when the column is not specified in `columns` argument.
+        defaults: Column names and directions appended to the clause if the column is not contained in `columns` .
     Returns:
         `ORDER BY` clause.
     """
@@ -41,13 +48,13 @@ def order_by(columns: Mapping[Union[str, AliasedColumn], ORDER], **defaults: ORD
 
 def ranged_by(limit: Optional[int] = None, offset: Optional[int] = None) -> tuple[str, list[Any]]:
     """
-    Generates `LIMIT` and `OFFSET` clause using marker.
+    Generates `LIMIT OFFSET` clause using marker.
 
     Args:
         limit: Limit value. `None` means no limitation.
         offset: Offset value. `None` means `0`.
     Returns:
-        Tuple of `LIMIT` and `OFFSET` clause and parameters.
+        `LIMIT OFFSET` clause and its parameters.
     """
     clause, params = [], []
 

@@ -162,21 +162,27 @@ def define_model(table_: Table, mixins: Union[type[MXT], list[type], None] = Non
     Omitted columns don't affect predefined operations such as `CRUDMixin.insert` .
     If `not null` constraint exists on the column, insertion will be denied at runtime and exception will be thrown.
 
+    ```python
     >>> # CREATE TABLE t1 (col1 int, col2 text, col3 text);
     >>> table = define_model("t1")
     >>> model = table(col1=1, col2="a")
+    ```
 
     Attributes are also assignable by normal setter. If attribute name is not a valid column name, `TypeError` raises.
 
+    ```python
     >>> model.col3 = "b"
+    ```
 
     Model instance supports iteration which yields pairs of assigned column schema and its value.
 
+    ```python
     >>> for c, v in model:
     >>>     print(f"{c.name} = {v}")
     col1 = 1
     col2 = a
     col3 = b
+    ```
 
     Args:
         table__: Table schema.
@@ -199,21 +205,15 @@ def define_model(table_: Table, mixins: Union[type[MXT], list[type], None] = Non
         column = Columns()
 
         @classmethod
-        def shrink(cls, excludes, includes=None) -> Self:
+        def shrink(cls, excludes: list[str], includes: Optional[list[str]] = None) -> Self:
             """
             Creates new model type containing subset of columns.
 
-            Parameters
-            ----------
-            excludes: [str]
-                Column names to exclude.
-            includes: [str]
-                Column names to include.
-
-            Returns
-            -------
-            type
-                Created model type.
+            Args:
+                excludes: Column names to exclude.
+                includes: Column names to include.
+            Returns:
+                model type.
             """
             cols = [c for c in cls.columns if (not includes or c.name in includes) and c.name not in excludes]
             return define_model(Table(cls.name, cols, cls.table.comment), mixins) # type: ignore

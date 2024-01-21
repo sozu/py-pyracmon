@@ -1,14 +1,13 @@
 """
 This module provides types and functions for DB connections.
 """
-from collections.abc import Sequence
+from collections.abc import Sequence, Callable
 import secrets
 import string
 import threading
 import types
 from typing import Any, Callable, Optional, Union
 from typing_extensions import Self
-from datetime import datetime
 from . import dbapi
 from .sql import Sql
 from .marker import Marker
@@ -21,14 +20,12 @@ def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
 
     Every optional argument is passed to `api.connect` and returns the `Connection` object which wraps obtained DB connection.
 
-    Here shows an example connecting to database and executing query.
-
     ```python
-    >>> import psycopg2
-    >>> from pyracmon import connect
-    >>> db = connect(psycopg2, host="localhost", port=5432, dbname="pyracmon", user="postgres", password="postgres")
-    >>> c = db.stmt().execute("SELECT 1")
-    >>> assert c.fetchone()[0] == 1
+    import psycopg2
+    from pyracmon import connect
+    db = connect(psycopg2, host="localhost", port=5432, dbname="pyracmon", user="postgres", password="postgres")
+    c = db.stmt().execute("SELECT 1")
+    assert c.fetchone()[0] == 1
     ```
 
     Args:
@@ -49,12 +46,14 @@ class Connection(dbapi.Connection):
     """
     _characters = string.ascii_letters + string.digits + ".="
 
-    def __init__(self, api, conn: dbapi.Connection, context_factory=None):
+    def __init__(self, api, conn: dbapi.Connection, context_factory: Optional[Callable[[], ConnectionContext]] = None):
         #: A string which identifies a connection.
         self.identifier = self._gen_identifier()
+        #: DB-API 2.0 module.
         self.api = api
+        #: Original connection object.
         self.conn = conn
-        self.context_factory = context_factory
+        self._context_factory = context_factory
         self._context = None
 
     def __getattr__(self, name):
@@ -84,7 +83,7 @@ class Connection(dbapi.Connection):
         Context object used for this connection.
         """
         if not self._context:
-            self._context = (self.context_factory or ConnectionContext)()
+            self._context = (self._context_factory or ConnectionContext)()
             self._context.identifier = self.identifier
         return self._context
 
@@ -111,7 +110,7 @@ class Connection(dbapi.Connection):
         Returns:
             This instance.
         """
-        self.context_factory = factory
+        self._context_factory = factory
         self._context = None
         return self
 
@@ -129,7 +128,7 @@ class Connection(dbapi.Connection):
 
 class Statement:
     """
-    This class has method to execute query on containing connection and context.
+    This class has methods to execute query on containing connection and context.
 
     Be sure to execute queries on this class to benefit from:
 
@@ -176,12 +175,11 @@ class Statement:
 
     def executemany(self, sql: str, seq_of_args: Sequence[PARAMS]) -> dbapi.Cursor:
         """
-        Executes a query and returns a cursor object.
+        Executes a query for each parameters in `seq_of_args` and returns a cursor object.
 
         Args:
             sql: Query template which can contain unified marker.
-            args: Positional parameters of query.
-            kwargs: Keyword parameters of query.
+            seq_of_args: A sequence of parameters of the query.
         Returns:
             Cursor object used for the query execution.
         """

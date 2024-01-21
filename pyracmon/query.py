@@ -7,10 +7,12 @@ Class methods on `Q` are designed to concatenate conditions in conjunction with 
 Constructed condition results in `Conditional` object and `where` extracts `WHERE` clause and parameters from it.
 Due to that, query operation code can be divided into condition construction phase and query formatting phase clearly.
 
->>> cond = Q.eq("t", c1=1) & Q.lt("t", c2=2)
->>> w, params = where(cond)
->>> db.stmt().execute("SELECT * FROM table AS t {w} LIMIT $_ OFFSET $_", *params, 10, 5)
->>> # SQL: SELECT * FROM table AS t WHERE t.c1 = 1 AND t.c2 < 2 LIMIT 10 OFFSET 5
+```python
+cond = Q.eq("t", c1=1) & Q.lt("t", c2=2)
+w, params = where(cond)
+db.stmt().execute("SELECT * FROM table AS t {w} LIMIT $_ OFFSET $_", *params, 10, 5)
+# SQL: SELECT * FROM table AS t WHERE t.c1 = 1 AND t.c2 < 2 LIMIT 10 OFFSET 5
+```
 """
 from collections.abc import Sequence, Mapping
 from functools import reduce
@@ -150,7 +152,7 @@ class Q:
             return Conditional(expression, params if isinstance(params, list) else [params])
 
         @property
-        def all(self) -> Self:
+        def all(self) -> 'Q.Attribute':
             """
             Returns composite attribute which applies conditions to every values iterated from attribute value and join them with `AND`.
 
@@ -160,7 +162,7 @@ class Q:
             return Q.CompositeAttribute(self.value, True)
 
         @property
-        def any(self) -> Self:
+        def any(self) -> 'Q.Attribute':
             """
             Returns composite attribute which applies conditions to every values iterated from attribute value and join them with `OR`.
 
@@ -536,7 +538,7 @@ class Conditional(Expression):
     ```
     """
     @classmethod
-    def all(cls, conditionals: Sequence['Conditional']) -> Self:
+    def all(cls, conditionals: Sequence['Conditional']) -> 'Conditional':
         """
         Concatenates condition objects with `AND`.
 
@@ -548,7 +550,7 @@ class Conditional(Expression):
         return reduce(lambda acc, c: acc & c, conditionals, Conditional())
 
     @classmethod
-    def any(cls, conditionals: Sequence['Conditional']) -> Self:
+    def any(cls, conditionals: Sequence['Conditional']) -> 'Conditional':
         """
         Concatenates condition objects with `OR`.
 
@@ -567,7 +569,7 @@ class Conditional(Expression):
     def __repr__(self):
         return f"Condition: '{self.expression}' -- {self.params}"
 
-    def __and__(self, other) -> Self:
+    def __and__(self, other) -> 'Conditional':
         expression = ""
         if self.expression and other.expression:
             expression = f"({self.expression}) AND ({other.expression})"
@@ -578,7 +580,7 @@ class Conditional(Expression):
 
         return Conditional(expression, self.params + other.params)
 
-    def __or__(self, other) -> Self:
+    def __or__(self, other) -> 'Conditional':
         expression = ""
         if self.expression and other.expression:
             expression = f"({self.expression}) OR ({other.expression})"
@@ -589,7 +591,7 @@ class Conditional(Expression):
 
         return Conditional(expression, self.params + other.params)
 
-    def __invert__(self) -> Self:
+    def __invert__(self) -> 'Conditional':
         if self.expression:
             return Conditional(f"NOT ({self.expression})", self.params)
         else:

@@ -21,9 +21,9 @@ class GraphTemplate:
     In next code, the template is composed of 4 properties where `d` is a child of `c`, and `b` and `c` are children of `a`.
 
     ```python
-    >>> template = GraphSpec().new_template(a=int, b=str, c=int, d=float)
-    >>> template.a << [template.b, template.c]
-    >>> template.c << template.d
+    template = GraphSpec().new_template(a=int, b=str, c=int, d=float)
+    template.a << [template.b, template.c]
+    template.c << template.d
     ```
 
     Templates are merged when `+` is applied to them. The result has properties defined in both templates with keeping their relationships.

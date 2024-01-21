@@ -45,13 +45,13 @@ class Graph:
     The structure is determined by `GraphTemplate`. Use `new_graph` Instead of constructor to create new graph instance.
 
     ```python
-    >>> template = GraphSpac().new_template(
-    >>>     a = (int, lambda x:x),
-    >>>     b = (str, lambda x:x),
-    >>>     c = (str, lambda x:x),
-    >>> )
-    >>> template.a << template.b << template.c
-    >>> graph = new_graph(template)
+    template = GraphSpac().new_template(
+        a = (int, lambda x:x),
+        b = (str, lambda x:x),
+        c = (str, lambda x:x),
+    )
+    template.a << template.b << template.c
+    graph = new_graph(template)
     ```
 
     In above code, a graph which has 3 properties ( `a` `b` `c` ) and a structure where `a` is parent of `b` and `b` is parent of `c` is created.
@@ -60,7 +60,7 @@ class Graph:
     Entites are encapsulated by `Node` which can have an edge to parent node.
 
     ```python
-    >>> graph.append(a=1, b="a", c="x").append(a=2, b="b", c="y")
+    graph.append(a=1, b="a", c="x").append(a=2, b="b", c="y")
     ```
 
     In `append`, entities are first sorted in descending order, and then:
@@ -73,7 +73,7 @@ class Graph:
     In example here, the identification is done by entity value itself ( `lambda x:x` ). Next code is the example where *identical* nodes are found.
 
     ```python
-    >>> graph.append(a=1, b="a", c="z").append(a=2, b="c", c="y")
+    graph.append(a=1, b="a", c="z").append(a=2, b="c", c="y")
     ```
 
     In the first `append`, `a` and `b` has its *identical* node and `a` is *identical* in the second.
@@ -327,16 +327,16 @@ class NodeContainer:
         The view object works as the accessor to container components.
 
         ```python
-        >>> template = GraphSpac().new_template(a=int, b=str, c=str)
-        >>> template.a << template.b
-        >>> graph = new_graph(template).append(a=1, b="a").append(a=1, b="b").append(a=2, b="c")
-        >>> container = graph.containers["a"]
-        >>> view = graph.view.a
-        >>> assert view() is container                             # invocation
-        >>> assert view.b is container.nodes[0].children["b"].view # attribute
-        >>> assert view[1] is container.nodes[1].view              # index
-        >>> assert [n() for n in view] == [1, 2]                   # iteration
-        >>> assert len(view) == 2                                  # length
+        template = GraphSpac().new_template(a=int, b=str, c=str)
+        template.a << template.b
+        graph = new_graph(template).append(a=1, b="a").append(a=1, b="b").append(a=2, b="c")
+        container = graph.containers["a"]
+        view = graph.view.a
+        assert view() is container                             # invocation
+        assert view.b is container.nodes[0].children["b"].view # attribute
+        assert view[1] is container.nodes[1].view              # index
+        assert [n() for n in view] == [1, 2]                   # iteration
+        assert len(view) == 2                                  # length
         ```
         """
         if self._view is None:

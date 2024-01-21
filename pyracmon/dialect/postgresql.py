@@ -17,7 +17,7 @@ from pyracmon.clause import holders
 SequencePattern = re.compile(r"nextval\(\'([a-zA-Z0-9_]+)\'(\:\:regclass)?\)")
 
 
-def read_schema(db, excludes: Optional[list[str]] = None, includes: Optional[list[str]] = None) -> list[Table]:
+def read_schema(db: Connection, excludes: Optional[list[str]] = None, includes: Optional[list[str]] = None) -> list[Table]:
     """
     Collect tables in current database.
 
@@ -159,11 +159,11 @@ def read_schema(db, excludes: Optional[list[str]] = None, includes: Optional[lis
 
     for t in tables:
         cc = db.stmt().execute(f"SELECT col_description($_, 0)", *[table_oids[t.name]])
-        t.comment = cc.fetchone()[0] or ""
+        t.comment = cc.fetchone()[0] or "" # type: ignore
 
         for i, col in enumerate(t.columns):
             cc = db.stmt().execute(f"SELECT col_description($_, $_)", *[table_oids[t.name], column_positions[t.name][col.name]])
-            col.comment = cc.fetchone()[0] or ""
+            col.comment = cc.fetchone()[0] or "" # type: ignore
 
         cc.close()
 

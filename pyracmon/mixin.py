@@ -59,8 +59,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
     We need sometimes qualify markers to apply DB function, calculation, type cast and so on. This feature enables them like below.
 
     ```python
-    >>> t.insert(db, dict(c1=1, c2=None), dict(c1=lambda x: f"{x}+1", c2=lambda x: "now()"))
-    >>> # SQL: INSERT INTO t (c1, c2) VALUES (?+1, now())
+    t.insert(db, dict(c1=1, c2=None), dict(c1=lambda x: f"{x}+1", c2=lambda x: "now()"))
+    # SQL: INSERT INTO t (c1, c2) VALUES (?+1, now())
     ```
 
     Be aware that when model object is passed, its column values may differ from actual values in DB after query.
@@ -70,8 +70,10 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         """
         Count rows which satisfies the condition.
 
-        >>> t.count(db, Q.eq(c1=1))
-        >>> # SQL: SELECT COUNT(*) FROM t WHERE c1 = 1
+        ```python
+        t.count(db, Q.eq(c1=1))
+        # SQL: SELECT COUNT(*) FROM t WHERE c1 = 1
+        ```
 
         Args:
             db: DB connection.
@@ -89,8 +91,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         Fetch a record by primary key(s).
 
         ```python
-        >>> t.fetch(db, 1)
-        >>> # SQL: SELECT * FROM t WHERE id = 1
+        t.fetch(db, 1)
+        # SQL: SELECT * FROM t WHERE id = 1
         ```
 
         Args:
@@ -116,8 +118,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         This method simply concatenates equality conditions on primary key by OR operator.
 
         ```python
-        >>> t.fetch(db, [1, 2, 3])
-        >>> # SQL: SELECT * FROM t WHERE id = 1 or id = 2 or id = 3
+        t.fetch_many(db, [1, 2, 3])
+        # SQL: SELECT * FROM t WHERE id = 1 OR id = 2 OR id = 3
         ```
 
         Args:
@@ -165,8 +167,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         Fetch records which satisfy the condition.
 
         ```python
-        >>> t.fetch_where(db, Q.eq(c1=1), dict(c2=True), 10, 5)
-        >>> # SQL: SELECT * FROM t WHERE c1 = 1 ORDER BY c2 ASC LIMIT 10 OFFSET 5
+        t.fetch_where(db, Q.eq(c1=1), dict(c2=True), 10, 5)
+        # SQL: SELECT * FROM t WHERE c1 = 1 ORDER BY c2 ASC LIMIT 10 OFFSET 5
         ```
 
         Args:
@@ -199,8 +201,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         Use this method for queries which certainly returns a single row, such as search by unique key.
 
         ```python
-        >>> t.fetch_one(db, Q.eq(c1=1))
-        >>> # SQL: SELECT * FROM t WHERE c1 = 1
+        t.fetch_one(db, Q.eq(c1=1))
+        # SQL: SELECT * FROM t WHERE c1 = 1
         ```
 
         Args:
@@ -259,19 +261,21 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         """
         Insert a record.
 
-        Returned model object contains auto incremental column even if they are not set beforehand.
-        On the contrary, default value generated in database side is not set.
+        If `returning` is `True` and the DBMS supports **RETURNING** clause,
+        returned model object contains comple and correct column values.
+        Otherwise, auto incremental value is set to the returned model object
+        but other column values generated inside DBMS such as default value are not set.
 
         ```python
-        >>> t.insert(db, dict(c1=1, c2=2))
-        >>> # SQL: INSERT INTO t (c1, c2) VALUES (1, 2)
+        t.insert(db, dict(c1=1, c2=2))
+        # SQL: INSERT INTO t (c1, c2) VALUES (1, 2)
         ```
 
         Args:
             db: DB connection.
             record: Object contains column values.
             qualifier: Functions qualifying placeholder markers.
-            returning: 
+            returning: Flag to return inserted record with complete and correct column values.
         Returns:
             Model of inserted record.
         """
@@ -313,10 +317,10 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         """
         Insert records.
 
-        If `returning` is `False`, this method returns models where only passed values and auto-increment values are set,
-        that is, values assigned in DB side for example DEFAULT values are not set.
-        If `True`, inserted records are selected from DB with their primary keys and returned
-        only when primary keys can be determined by available values. If they can't, `ValueError` will raise.
+        If `returning` is `True` and the DBMS supports **RETURNING** clause,
+        returned model object contains comple and correct column values.
+        Otherwise, auto incremental value is set to the returned model object
+        but other column values generated inside DBMS such as default value are not set.
 
         Args:
             db: DB connection.
@@ -409,8 +413,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         This method only updates columns which are found in `record` except for primary key(s).
 
         ```python
-        >>> t.update(db, 1, dict(c1=1, c2=2))
-        >>> # SQL: UPDATE t SET c1 = 1, c2 = 2 WHERE id = 1
+        t.update(db, 1, dict(c1=1, c2=2))
+        # SQL: UPDATE t SET c1 = 1, c2 = 2 WHERE id = 1
         ```
 
         Args:
@@ -418,6 +422,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
             pks: Primary key value(s).
             record: Object contains column values.
             qualifier: Functions qualifying placeholder markers.
+            returning: Flag to return updated records with complete and correct column values.
         Returns:
             Whether the record exists and updated or updated record model.
         """
@@ -460,7 +465,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
             db: DB connection.
             record: Sequence of objects contains column values.
             qualifier: Functions qualifying placeholder markers.
-            returning: Flag to return updated records.
+            returning: Flag to return updated records with complete and correct column values.
         Returns:
             The number of affected rows or updated records.
         """
@@ -533,8 +538,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         Update records which satisfy the condition.
 
         ```python
-        >>> t.update(db, dict(c2=2), Q.eq(c1=1))
-        >>> # SQL: UPDATE t SET c2 = 2 WHERE c1 = 1
+        t.update(db, dict(c2=2), Q.eq(c1=1))
+        # SQL: UPDATE t SET c2 = 2 WHERE c1 = 1
         ```
 
         Args:
@@ -542,8 +547,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
             record: Object contains column values.
             condition: Query condition.
             qualifier: Functions qualifying placeholder markers.
+            returning: Flag to return updated records with complete and correct column values.
             allow_all: If `False`, empty condition raises `ValueError`.
-            returning: Flag to return updated records. If not supported, `NotImplementedError` will raise.
         Returns:
             The number of affected rows or updated records.
         """
@@ -573,8 +578,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         Delete a record by primary key(s).
 
         ```python
-        >>> t.delete(db, 1)
-        >>> # SQL: DELETE FROM t WHERE id = 1
+        t.delete(db, 1)
+        # SQL: DELETE FROM t WHERE id = 1
         ```
 
         Args:
@@ -654,15 +659,15 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         Delete records which satisfy the condition.
 
         ```python
-        >>> t.delete(db, Q.eq(c1=1))
-        >>> # SQL: DELETE FROM t WHERE c1 = 1
+        t.delete(db, Q.eq(c1=1))
+        # SQL: DELETE FROM t WHERE c1 = 1
         ```
 
         Args:
             db: DB connection.
             condition: Query condition.
-            allow_all: If `False`, empty condition raises `ValueError`.
             returning: Flag to return deleted records.
+            allow_all: If `False`, empty condition raises `ValueError`.
         Returns:
             The number of affected rows or deleted records.
         """
@@ -704,12 +709,12 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
     @classmethod
     def support_returning(cls, db: Connection) -> bool:
         """
-        Checks whehter this DBMS support RETURNING clause or not.
+        Checks whehter this DBMS support **RETURNING** clause or not.
 
         Args:
             db: DB connection.
         Returns:
-            Whehter this DBMS support RETURNING clause or not.
+            Whehter this DBMS support **RETURNING** clause or not.
         """
         return False
 

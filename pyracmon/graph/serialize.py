@@ -194,6 +194,8 @@ class NodeSerializer(NodeSerializing):
         """
         Set the documentation for this node.
 
+        `document` is used in graph schema as a parameter of `Annotated` .
+
         Args:
             document: A documentation string.
             options: Documentation options.
@@ -500,13 +502,13 @@ class SerializationContext:
     Following code shows the example passing a parameter to a *serializer* .
 
     ```python
-    >>> cxt = SerializationContext(
-    >>>     dict(
-    >>>         a = S.each(lambda cxt: cxt.value*c.params.value),
-    >>>     ),
-    >>>     finder,
-    >>>     dict(a={"value": 10})
-    >>> )
+    cxt = SerializationContext(
+        dict(
+            a = S.each(lambda cxt: cxt.value*c.params.value),
+        ),
+        finder,
+        dict(a={"value": 10})
+    )
     ```
 
     Args:
@@ -638,7 +640,21 @@ class SerializerMeta(NodeSerializing, type): # type: ignore
 
 class S(metaclass=SerializerMeta):
     """
-    An utility class to build `NodeSerializer`.
+    An utility class to build `NodeSerializer` .
+
+    This class provides factory class methods to create `NodeSerializer`
+    each of which works in the same way as the method of the same name declared on `NodeSerializer` .
+
+    Use them to supply `NodeSerializer`s to functions to serialize a graph or to create a graph schema
+    such as `graph_dict` or `graph_schema` .
+
+    ```python
+    graph_dict(
+        graph,
+        a = S.of(),
+        b = S.head(),
+    )
+    ```
     """
     @classmethod
     def of(

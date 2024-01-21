@@ -18,7 +18,7 @@ On the other hand, this library does NOT support following features which are co
 
 **DB-API 2.0**
 
-This library works as a wrapper of any kind of DB driver compliant with DB-API 2.0 such as *psycopg2* or *PyMySQL*. DB operations are passed to the driver so that any functionality it provides is also available. 
+This library works as a wrapper of any kind of DB driver compliant with DB-API 2.0 such as *psycopg* or *PyMySQL*. DB operations are passed to the driver so that any functionality it provides is also available. 
 
 **Automatic declaration of model types**
 
@@ -34,7 +34,7 @@ While this library mainly focuses on the use of SQL, not DSL, it exports functio
 
 **Static typing support**
 
-This library provides the functionality to get the schema of serialized graph statically. For example in RESTful applications, the schema can be used for documentation of HTTP response. Because the schema reflects flexible change on data structure (ex. adding computed values, removing keys from a dictionary) in serialization phase, it no longer necessary to declare a type only to represent response structure. Note that the state of this functionality is still unstable becasue static typing support of python is changing frequently.
+This library provides the functionality to get the schema of serialized graph statically. For example in RESTful applications, the schema can be used for documentation of HTTP response. Because the schema accepts flexible change on data structure (ex. adding computed values, removing keys from a dictionary) in serialization phase, it no longer necessary to declare a type only to represent response structure. Note that the state of this functionality is still unstable becasue static typing support of python is changing frequently.
 
 **Testing support**
 
@@ -46,15 +46,13 @@ Testing DB operations is an important but frastrating task. `pyracmon.testing` p
 
 Pyracmon requires python 3.9 or higher.
 
-Static typing functionalities are highly affected by python version.
-Because of frequent update of python `typing` package, syntax assumed in this library might already have got deprecated.
-Those functionalities will be left not completely conforming to specifications of the package while they are unstable.
+The static typing is the main feature sensitive to python version.
+It is mainly written in the style ordinary in python 3.9 but some parts depend on newer objects imported by `typing_extensions` .
 
 Currently supported DBMS are PostgreSQL (>= 10.0) and MySQL (>= 8.0).
 
-Although pyracmon does not require any libraries for use by itself, it needs DB driver which conforms to DB-API 2.0.
-[psycopg2](https://pypi.org/project/psycopg2/) (for PostgreSQL) and [PyMySQL](https://pypi.org/project/PyMySQL/)_ are used in development.
-Use them or some other library and tell it to pyracmon via `pyracmon.declare_models`.
+DB driver compliant with DB-API 2.0 is required. 
+[psycopg2](https://pypi.org/project/psycopg2/) (for PostgreSQL) and [PyMySQL](https://pypi.org/project/PyMySQL/) (for MySQL) are used in development respectively.
 
 ## Installation
 
@@ -104,7 +102,7 @@ CREATE TABLE post_comment (
 
 ### Create connection
 
-All operations start with creating connection object. This library works as a wrapper of other DB-API 2.0 compliant DB drivers, thereby arguments given to `connect()` are passed through to `connect()` API of specified DB driver. Next code is an example using `psycopg2`.
+All operations start with creating connection object. This library works as a wrapper of other DB-API 2.0 compliant DB drivers, thereby arguments given to `connect()` are passed through to `connect()` API of the driver. In addition to the arguments, you have to pass driver module to `connect()` at the first argument.
 
 ```
 import psycopg2
@@ -113,7 +111,7 @@ from pyracmon import connect
 db = connect(psycopg2, dbname="example", user="postgres", password="postgres")
 ```
 
-Returned object `db` is a wrapped `Connection` object which also conforms to DB-API 2.0's `Connection`.
+`db` is a wrapped `Connection` object which also conforms to DB-API 2.0's `Connection`.
 
 ### Declarations of model types
 
@@ -239,7 +237,7 @@ Above code shows the basic flow of execution of SELECT query.
     - As well as *models*, raw expressions like `COUNT(*)` are also available.
 2. Creates `Conditional` object, and then obtatins conditional clause starting with `WHERE` and parameters used in it.
     - There are many functions to create `Conditional` object like `Q.in_()`.
-3. Executs SQL on `Statement` object. Range condition and its parameters are added in both SQL and parameter list.
+3. Executs SQL on `Statement` object. Parameters should be passed as positional arguments.
 4. Obtains *model objects* from each row. `read_row()` parses a row and returns an object which exposes *model objects* via its attributes named by the alias given to `select()`.
 
 See API documentation for further information.
@@ -295,7 +293,7 @@ Suppose you want a structured list of blogs like below.
 }
 ```
 
-Each blog entry contains various kinds of values which possibly should be obtained by multiple queries. First of all, you should declare `GraphTemplate` representing graph structure covering required values.
+Each blog entry contains various kinds of values which possibly should be obtained by multiple queries. First of all, you should declare `GraphTemplate` representing graph structure.
 
 ```
 from pyracmon import graph_template
@@ -315,7 +313,7 @@ t.blogs << [t.categories, t.total_posts, t.recent_posts]
 t.recent_posts << [t.images, t.recent_comments, t.most_liked_comment, t.total_comments]
 ```
 
-In each keyword argument, key denotes the kind of nodes and value denotes the type of node value; `blogs` specifies the container of nodes each of which contains `blog` *model object*. Relationships between nodes are declared by shift operators; category, total number of posts and recent post are children of each blog.
+In each keyword argument, key denotes the name of nodes and value denotes the type of node value; `blogs` specifies the container of nodes each of which contains `blog` *model object*. Relationships between nodes are declared by shift operators; category, total number of posts and recent post are children of each blog.
 
 Next example shows the query execution and `Graph` creation which contains the result of the query (actual queries are not written to save spaces).
 
@@ -428,7 +426,7 @@ result = graph_dict(
 - `head()` uses a value of the first node in the container instead of a list of values.
 - When the function is given by `each()`, it is applied to each node to generate the value in resulting `dict`.
 
-`S` provides some more class methods to control the serialization mechanism. Additionally, their arguments have variations. See API documentation for further information.
+`S` provides some more class methods to control the serialization mechanism. See API documentation for further information.
 
 ### Static typing
 
