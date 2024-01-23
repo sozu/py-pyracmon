@@ -16,37 +16,79 @@ def _connect():
         port = 3306,
     )
 
-@pytest.mark.filterwarnings("ignore")
-class TestReadSchame:
+
+class TestReadSchema:
     def test_read(self):
-        with _connect() as db:
-            tables = sorted(read_schema(db), key = lambda t: t.name)
+        db = _connect()
 
-            assert len(tables) == 4
+        tables = read_schema(db)
 
-            _assert_scheme(tables[0], "t1", "comment of t1", [
-                dict(name = "c11", type = int, pk = True, fk = False, incremental = True, comment = "comment of c11"),
-                dict(name = "c12", type = int, pk = False, fk = False, incremental = None, comment = "comment of c12"),
-                dict(name = "c13", type = str, pk = False, fk = False, incremental = None, comment = "comment of c13"),
-            ])
-            _assert_scheme(tables[1], "t2", "", [
-                dict(name = "c21", type = int, pk = True, fk = False, incremental = None, comment = ""),
-                dict(name = "c22", type = int, pk = True, fk = False, incremental = None, comment = ""),
-                dict(name = "c23", type = str, pk = False, fk = False, incremental = None, comment = ""),
-            ])
-            _assert_scheme(tables[2], "t3", "", [
-                dict(name = "c31", type = int, pk = True, fk = True, incremental = None, comment = ""),
-                dict(name = "c32", type = int, pk = False, fk = False, incremental = None, comment = ""),
-                dict(name = "c33", type = str, pk = False, fk = False, incremental = None, comment = ""),
-            ])
-            _assert_scheme(tables[3], "t4", "", [
-                dict(name = "c41", type = int, pk = True, fk = False, incremental = None, comment = ""),
-                dict(name = "c42", type = int, pk = True, fk = True, incremental = None, comment = ""),
-                dict(name = "c43", type = int, pk = True, fk = True, incremental = None, comment = ""),
-            ])
+        assert len(tables) == 5
+
+        table_map = {t.name:t for t in tables}
+
+        _assert_schema(table_map["t1"], "t1", "comment of t1", [
+            dict(name="c11", type=int, pk=True, fk=None, incremental=True, nullable=False, comment="comment of c11"),
+            dict(name="c12", type=int, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c12"),
+            dict(name="c13", type=str, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c13"),
+        ])
+        _assert_schema(table_map["t2"], "t2", "", [
+            dict(name="c21", type=int, pk=True, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c22", type=int, pk=True, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c23", type=str, pk=False, fk=None, incremental=None, nullable=False, comment=""),
+        ])
+        _assert_schema(table_map["t3"], "t3", "", [
+            dict(name="c31", type=int, pk=True, fk=[(table_map["t1"], "c11")], incremental=None, nullable=False, comment=""),
+            dict(name="c32", type=int, pk=False, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c33", type=str, pk=False, fk=None, incremental=None, nullable=True, comment=""),
+        ])
+        _assert_schema(table_map["t4"], "t4", "", [
+            dict(name="c41", type=int, pk=True, fk=[(table_map["t1"], "c11")], incremental=None, nullable=False, comment=""),
+            dict(name="c42", type=int, pk=True, fk=[(table_map["t2"], "c21")], incremental=None, nullable=False, comment=""),
+            dict(name="c43", type=int, pk=True, fk=[(table_map["t2"], "c22")], incremental=None, nullable=False, comment=""),
+        ])
+        _assert_schema(table_map["v1"], "v1", "", [
+            dict(name="c11", type=int, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c11"),
+            dict(name="c12", type=int, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c12"),
+            dict(name="c31", type=int, pk=False, fk=None, incremental=None, nullable=False, comment=""),
+            dict(name="c32", type=int, pk=False, fk=None, incremental=None, nullable=False, comment=""),
+        ])
+
+    def test_excludes(self):
+        db = _connect()
+
+        tables = sorted(read_schema(db, excludes=["t1", "t3"]), key = lambda t: t.name)
+
+        assert len(tables) == 3
+        assert {t.name for t in tables} == {"t2", "t4", "v1"}
+
+    def test_includes(self):
+        db = _connect()
+
+        tables = sorted(read_schema(db, includes=["t2", "t4"]), key = lambda t: t.name)
+
+        assert len(tables) == 2
+        assert {t.name for t in tables} == {"t2", "t4"}
+
+    def test_type_mapping(self):
+        class C:
+            pass
+
+        db = _connect()
+        db.context.configure(type_mapping = lambda t: C if t in {"int"} else None)
+
+        tables = read_schema(db)
+
+        table_map = {t.name:t for t in tables}
+
+        _assert_schema(table_map["t1"], "t1", "comment of t1", [
+            dict(name="c11", type=C, pk=True, fk=None, incremental=True, nullable=False, comment="comment of c11"),
+            dict(name="c12", type=C, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c12"),
+            dict(name="c13", type=str, pk=False, fk=None, incremental=None, nullable=False, comment="comment of c13"),
+        ])
 
 
-def _assert_scheme(actual, t, tcm, cs):
+def _assert_schema(actual, t, tcm, cs):
     assert t == actual.name
     assert len(cs) == len(actual.columns)
 
@@ -59,12 +101,18 @@ def _assert_scheme(actual, t, tcm, cs):
         if 'info' in c:
             assert c['info'] == a.type_info
         assert c['pk'] == a.pk
-        assert c['fk'] == a.fk
+        if c['fk']:
+            assert len(a.fk.constraints) == len(c['fk'])
+            for act, exp in zip(a.fk.constraints, c['fk']):
+                tt, ct = exp[0], exp[0].find(exp[1])
+                assert (act.table, act.column) == (tt, ct)
+        else:
+            assert None is a.fk
         assert c['incremental'] == a.incremental
+        assert c['nullable'] is a.nullable
         assert c['comment'] == a.comment
 
 
-@pytest.mark.filterwarnings("ignore")
 class TestLastSequences:
     def test_last_sequences(self):
         with _connect() as db:
@@ -80,7 +128,6 @@ class TestLastSequences:
             assert [(m.columns[0], 3)] == m.last_sequences(db, 3)
 
 
-@pytest.mark.filterwarnings("ignore")
 class TestFunctions:
     def test_found_rows(self):
         with _connect() as db:

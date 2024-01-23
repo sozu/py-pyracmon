@@ -1,12 +1,14 @@
 import sys
 import psycopg2
 import pytest
+from datetime import date, datetime, time, timedelta
+from typing import Annotated
+from uuid import UUID
 from tests import models as m
-from pyracmon import declare_models, graph_template, graph_dict, CRUDMixin, GraphEntityMixin, add_identifier, add_serializer, add_entity_filter
-from pyracmon.connection import connect
+from pyracmon import *
+from pyracmon import default_config
 from pyracmon.dialect import postgresql
-from pyracmon.model import define_model, Table, Column
-from pyracmon.graph import Graph
+from pyracmon.graph.schema import TypedDict, document_type
 
 
 def _connect():
@@ -20,175 +22,244 @@ def _connect():
     )
 
 
-def test_module_name_postgresql():
-    db = _connect()
-
-    declare_models(postgresql, db, 'tests.models')
-    try:
-        assert hasattr(m, "t1")
-        assert hasattr(m, "t2")
-        assert hasattr(m, "t3")
-        assert hasattr(m, "t4")
-    finally:
-        del sys.modules['tests.models'].__dict__["t1"]
-        del sys.modules['tests.models'].__dict__["t2"]
-        del sys.modules['tests.models'].__dict__["t3"]
-        del sys.modules['tests.models'].__dict__["t4"]
+tables = ["t1", "t2", "t3", "t4", "v1", "mv1", "mv2", "types"]
 
 
-def test_module_obj_postgresql():
-    db = _connect()
+class TestDeclareModels:
+    def test_module_name_postgresql(self):
+        db = _connect()
 
-    declare_models(postgresql, db, m)
-    try:
-        assert hasattr(m, "t1")
-        assert hasattr(m, "t2")
-        assert hasattr(m, "t3")
-        assert hasattr(m, "t4")
-    finally:
-        del sys.modules['tests.models'].__dict__["t1"]
-        del sys.modules['tests.models'].__dict__["t2"]
-        del sys.modules['tests.models'].__dict__["t3"]
-        del sys.modules['tests.models'].__dict__["t4"]
+        declare_models(postgresql, db, 'tests.models')
 
+        try:
+            for t in tables:
+                assert hasattr(m, t)
+        finally:
+            for t in tables:
+                del sys.modules['tests.models'].__dict__[t]
 
-def test_model_graph():
-    t1 = Table("t1", [
-        Column("c1", int, None, True, False, None),
-        Column("c2", int, None, False, False, None),
-    ])
-    t2 = Table("t2", [
-        Column("c1", int, None, True, False, None),
-        Column("c2", int, None, False, False, None),
-    ])
+    def test_module_obj_postgresql(self):
+        db = _connect()
 
-    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
-    m2 = define_model(t2, [CRUDMixin, GraphEntityMixin])
+        declare_models(postgresql, db, m)
 
-    t = graph_template(
-        m1 = m1,
-        m2 = m2,
-    )
-    t.m2 >> t.m1
-
-    graph = Graph(t)
-
-    graph.append(
-        m1 = m1(c1 = 1, c2 = "a"),
-        m2 = m2(c1 = 1, c2 = 1),
-    )
-    graph.append(
-        m1 = m1(c1 = 2, c2 = "b"),
-        m2 = m2(c1 = 2, c2 = 2),
-    )
-    graph.append(
-        m1 = m1(c1 = 2, c2 = "dummy"),
-        m2 = m2(c1 = 3, c2 = 2),
-    )
-    graph.append(
-        m1 = m1(c1 = None, c2 = None),
-        m2 = m2(c1 = 3, c2 = 2),
-    )
-    graph.append(
-        m1 = m1(c1 = 3, c2 = "c"),
-        m2 = m2(c1 = 1, c2 = 3),
-    )
-    graph.append(
-        m1 = m1(c1 = 4, c2 = "d"),
-        m2 = m2(c1 = None, c2 = None),
-    )
-
-    assert graph_dict(
-        graph.view,
-        m1 = (),
-        m2 = (),
-    ) == dict(
-        m1 = [
-            dict(c1 = 1, c2 = "a", m2 = [dict(c1 = 1, c2 = 1)]),
-            dict(c1 = 2, c2 = "b", m2 = [dict(c1 = 2, c2 = 2), dict(c1 = 3, c2 = 2)]),
-            dict(c1 = 3, c2 = "c", m2 = [dict(c1 = 1, c2 = 3)]),
-            dict(c1 = 4, c2 = "d", m2 = []),
-        ]
-    )
+        try:
+            for t in tables:
+                assert hasattr(m, t)
+        finally:
+            for t in tables:
+                del sys.modules['tests.models'].__dict__[t]
 
 
-def test_add_identifier():
-    t1 = Table("t1", [
-        Column("c1", int, None, True, False, None),
-        Column("c2", int, None, False, False, None),
-    ])
+class TestModelGraph:
+    def test_graph(self):
+        db = _connect()
 
-    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
+        declare_models(postgresql, db, m)
 
-    add_identifier(m1, lambda x: x.c2)
+        template = graph_template(
+            t1 = m.t1,
+            t2 = m.t2,
+            t3 = m.t3,
+            num = int,
+            types = m.types,
+        )
+        template.t1 << [template.num >> template.t2, template.t3]
 
-    t = graph_template(m1 = m1)
-    graph = Graph(t)
+        graph = new_graph(template)
 
-    graph.append(m1 = m1(c1 = 1, c2 = "a"))
-    graph.append(m1 = m1(c1 = 2, c2 = "a"))
+        graph.append(
+            t1 = m.t1(c11=1, c12=11),
+            t2 = m.t2(c21=1, c22=21),
+            t3 = m.t3(c31=1, c32=31),
+            num = 0,
+        )
+        graph.append(
+            t1 = m.t1(c11=1, c12=111),
+            t2 = m.t2(c21=1, c22=211),
+            t3 = m.t3(c31=2, c32=32),
+            num = 1,
+        )
+        graph.append(
+            t1 = m.t1(c11=1, c12=111),
+            t2 = m.t2(c21=2, c22=22),
+            t3 = m.t3(c31=2, c32=33),
+            num = 2,
+        )
+        graph.append(
+            t1 = m.t1(c11=None),
+            t2 = m.t2(c21=3, c22=21),
+            t3 = m.t3(c31=4, c32=31),
+            num = 3,
+        )
+        graph.append(
+            t1 = m.t1(c11=2),
+            t2 = m.t2(c21=1, c22=21),
+            t3 = m.t3(c31=None),
+            num = 4,
+        )
+        graph.append(
+            t1 = m.t1(c11=2, c12=12),
+            t2 = m.t2(c21=1, c22=21),
+            t3 = m.t3(c31=5, c32=None),
+            num = 5,
+        )
+        graph.append(
+            t2 = m.t2(c21=1, c22=21),
+            num = 6,
+        )
 
-    assert len(graph.view.m1) == 1
-    v = graph.view.m1[0]()
-    assert v.c1 == 1
-    assert v.c2 == "a"
+        view = graph.view
 
+        assert [(n(), [(n2(), [v() for v in n2.num]) for n2 in n.t2], [n3() for n3 in n.t3]) for n in view.t1] \
+            == [
+                (
+                    m.t1(c11=1, c12=11),
+                    [(m.t2(c21=1, c22=21), [0, 6]), (m.t2(c21=1, c22=211), [1]), (m.t2(c21=2, c22=22), [2])],
+                    [m.t3(c31=1, c32=31), m.t3(c31=2, c32=32)],
+                ),
+                (
+                    m.t1(c11=2),
+                    [(m.t2(c21=1, c22=21), [4, 5, 6])],
+                    [m.t3(c31=5, c32=None)],
+                ),
+            ]
 
-def test_no_pk():
-    t1 = Table("t1", [
-        Column("c1", int, None, False, False, None),
-        Column("c2", int, None, False, False, None),
-    ])
+        r = graph_dict(
+            view,
+            t1 = S.of(),
+            t2 = S.of(),
+            t3 = S.of(),
+            num = S.of(),
+        )
 
-    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
+        assert r == {
+            "t1": [
+                {
+                    "c11": 1, "c12": 11,
+                    "t2": [{"c21": 1, "c22": 21, "num": [0, 6]}, {"c21": 1, "c22": 211, "num": [1]}, {"c21": 2, "c22": 22, "num": [2]}],
+                    "t3": [{"c32": 31}, {"c32": 32}],
+                },
+                {
+                    "c11": 2,
+                    "t2": [{"c21": 1, "c22": 21, "num": [4, 5, 6]}],
+                    "t3": [{"c32": None}],
+                }
+            ]
+        }
 
-    t = graph_template(m1 = m1)
-    graph = Graph(t)
+        gs = graph_schema(
+            template,
+            t1 = S.doc("T1"),
+            t2 = S.of(),
+            t3 = S.of(),
+            num = S.doc("Num"),
+            types = S.of(),
+        )
 
-    graph.append(m1 = m1(c1 = 1, c2 = "a"))
-    graph.append(m1 = m1(c1 = 1, c2 = "a"))
+        r["types"] = []
 
-    assert len(graph.view.m1) == 2
+        assert r == gs.serialize(view)
+        assert walk_schema(gs.schema, True) == {
+            "t1": ([
+                {
+                    "c11": (int, "comment of c11"), "c12": (int, "comment of c12"), "c13": (str, "comment of c13"),
+                    "t2": ([
+                        {
+                            "c21": (int, ""), "c22": (int, ""), "c23": (str, ""),
+                            "num": ([int], "Num"),
+                        },
+                    ], ""),
+                    "t3": ([
+                        {
+                            "c32": (int, ""), "c33": (str, ""),
+                        }
+                    ], ""),
+                },
+            ], "T1"),
+            "types": ([
+                {
+                    "bool_": (bool, ""),
+                    "double_": (float, ""),
+                    "int_": (int, ""),
+                    "string_": (str, ""),
+                    "bytes_": (bytes, ""),
+                    "date_": (date, ""),
+                    "datetime_": (datetime, ""),
+                    "time_": (time, ""),
+                    "delta_": (timedelta, ""),
+                    "uuid_": (UUID, ""),
+                    "enum_": (object, ""),
+                    "record_": (object, ""),
+                    "array_": ([int], ""),
+                    "deeparray_": ([int], ""),
+                    "json_": (dict, ""),
+                    "jsonb_": (dict, ""),
+                }
+            ], ""),
+        }
 
+    def test_serializer(self):
+        db = _connect()
 
-def test_add_entity_filter():
-    t1 = Table("t1", [
-        Column("c1", int, None, True, False, None),
-        Column("c2", int, None, False, False, None),
-    ])
+        declare_models(postgresql, db, m)
 
-    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
+        template = graph_template(
+            t1 = m.t1,
+            t2 = m.t2,
+            t3 = m.t3,
+        )
+        template.t1 << [template.t2, template.t3]
 
-    add_entity_filter(m1, lambda x: x.c1 >= 0)
+        graph = new_graph(template)
 
-    t = graph_template(m1 = m1, v = int)
-    t.m1 << t.v
-    graph = Graph(t)
+        graph.append(
+            t1 = m.t1(c11=1, c12=11, c13="aaa"),
+            t2 = m.t2(c21=1, c22=21, c23="bbb"),
+            t3 = m.t3(c31=1, c32=31, c33="ccc"),
+        )
 
-    graph.append(m1 = m1(c1 = -1, c2 = "a"), v = 1)
-    graph.append(m1 = m1(c1 = 0, c2 = "b"), v = 2)
-    graph.append(m1 = m1(c1 = 1, c2 = "c"), v = 3)
+        class T2(TypedDict):
+            x1: Annotated[int, "X1"]
+            x2: str
 
-    assert [(n().c1, n().c2) for n in graph.view.m1] == [(0, "b"), (1, "c")]
-    assert [n() for n in graph.view.v] == [2, 3]
-    assert [n() for n in graph.view.m1[0].v] == [2]
-    assert [n() for n in graph.view.m1[1].v] == [3]
+        def ex(cxt) -> T2:
+            return T2(x1=cxt.value.c22*2, x2=f"_{cxt.value.c22}_")
 
+        config = default_config().derive()
+        config.graph_spec.include_fk = True
+        config.graph_spec.add_serializer(m.t2, S.alter(ex, {"c22"}))
 
-def test_add_serializer():
-    t1 = Table("t1", [
-        Column("c1", int, None, True, False, None),
-        Column("c2", int, None, False, False, None),
-    ])
+        assert config.graph_spec.to_dict(
+            graph.view,
+            t1 = S.head(),
+            t2 = S.head(),
+            t3 = S.head(),
+        ) == {
+            "t1": {
+                "c11": 1, "c12": 11, "c13": "aaa",
+                "t2": {
+                    "c21": 1, "c23": "bbb", "x1": 42, "x2": "_21_",
+                },
+                "t3": {
+                    "c31": 1, "c32": 31, "c33": "ccc",
+                },
+            },
+        }
 
-    m1 = define_model(t1, [CRUDMixin, GraphEntityMixin])
-
-    t = graph_template(m1 = m1)
-    graph = Graph(t)
-
-    graph.append(m1 = m1(c1 = 1, c2 = "a"))
-
-    add_serializer(m1, lambda s, x: dict(c1 = x.c1 * 2, c2 = f"__{x.c2}__"))
-
-    assert graph_dict(graph.view, m1 = ()) == dict(m1 = [dict(c1 = 2, c2 = "__a__")])
-
+        assert walk_schema(config.graph_spec.to_schema(
+            template,
+            t1 = S.head(),
+            t2 = S.head(),
+            t3 = S.head(),
+        ).schema, True) == {
+            "t1": ({
+                "c11": (int, "comment of c11"), "c12": (int, "comment of c12"), "c13": (str, "comment of c13"),
+                "t2": ({
+                    "c21": (int, ""), "c23": (str, ""), "x1": (int, "X1"), "x2": (str, ""),
+                }, ""),
+                "t3": ({
+                    "c31": (int, ""), "c32": (int, ""), "c33": (str, ""),
+                }, ""),
+            }, ""),
+        }

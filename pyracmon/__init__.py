@@ -1,169 +1,165 @@
+"""
+Base module of pyracmon exporting commonly used objects.  Use `*` simply to import them.
+
+>>> from pyracmon import *
+"""
 import sys
 import types
+from typing import Union, Optional, Any, TypeVar, TYPE_CHECKING
+from pyracmon.config import default_config
 from pyracmon.connection import connect, Connection
-from pyracmon.mixin import CRUDMixin, read_row, expressions
-from pyracmon.model import define_model
-from pyracmon.graph import new_graph, GraphSpec, S
-from pyracmon.query import Q
+from pyracmon.context import ConnectionContext
+from pyracmon.graph.serialize import NodeSerializer
+from pyracmon.mixin import CRUDMixin
+from pyracmon.select import read_row
+from pyracmon.model import define_model, Table, Column
+from pyracmon.model_graph import GraphEntityMixin
+from pyracmon.query import Q, Expression, Conditional, escape_like, where
+from pyracmon.query_graph import append_rows
+from pyracmon.clause import order_by, ranged_by, holders, values
+from pyracmon.stub import output_stub
+from pyracmon.graph import new_graph, S
+from pyracmon.graph.graph import Graph, GraphView, NodeContainer, ContainerView, Node, NodeView
+from pyracmon.graph.spec import GraphSpec
+from pyracmon.graph.template import GraphTemplate
+from pyracmon.graph.schema import document_type, Typeable, GraphSchema
+from pyracmon.graph.serialize import NodeContext
+from pyracmon.graph.typing import walk_schema
+from pyracmon.testing import TestingMixin
+
+
+if TYPE_CHECKING:
+    from pyracmon.model import Model as _Model
+    class Model(_Model):
+        pass
+else:
+    from pyracmon.model import Model
 
 
 __all__ = [
     "connect",
     "Connection",
-    "declare_models",
+    "ConnectionContext",
+    "CRUDMixin",
     "read_row",
-    "expressions",
-    "graph_template",
-    "graph_dict",
-    "add_identifier",
-    "add_serializer",
+    "define_model",
+    "Table",
+    "Column",
+    "Q",
+    "Expression",
+    "Conditional",
+    "where",
+    "append_rows",
+    "escape_like",
+    "order_by",
+    "ranged_by",
+    "holders",
+    "values",
     "new_graph",
     "S",
-    "Q",
+    "Graph",
+    "GraphView",
+    "NodeContainer",
+    "ContainerView",
+    "Node",
+    "NodeView",
+    "document_type",
+    "Typeable",
+    "walk_schema",
+    "GraphSchema",
+    "NodeContext",
+    "Model",
+    "declare_models",
+    "graph_template",
+    "graph_dict",
+    "graph_schema",
 ]
 
 
-def declare_models(dialect, db, module = __name__, mixins = [], excludes = [], includes = []):
-    """
-    Declare model types read from database in the specified module.
+M = TypeVar('M', bound=Model)
 
-    Parameters
-    ----------
-    dialect: module
-        A module exporting `read_schema` function and `mixins` classes.
-    db: pyracmon.connection.Connection
-        Wrapper of DB-API 2.0 Connection.
-    module: str | module
-        A module name where the declarations are located.
-    mixins: [type]
-        Additional mixin classes for declaring model types.
-    excludes: [str]
-        Excluding table names.
-    includes: [str]
-        Including table names. All tables excluding `excludes` are declared as models if this argument is omitted.
+
+def declare_models(
+    dialect: types.ModuleType,
+    db: Connection,
+    module: Union[types.ModuleType, str] = __name__,
+    mixins: list[type] = [],
+    excludes: Optional[list[str]] = None,
+    includes: Optional[list[str]] = None,
+    *,
+    testing: bool = False,
+    model_type: type[M] = Model,
+    write_stub: bool = False,
+) -> list[type[M]]:
+    """
+    Declare model types read from database into the specified module.
+
+    Args:
+        dialect: A module exporting `read_schema` function and `mixins` classes.
+            `pyracmon.dialect.postgresql` and `pyracmon.dialect.mysql` are available.
+        db: Connection already connected to database.
+        module: A module or module name where the declarations will be located.
+        mixins: Additional mixin classes for declaring model types.
+        excludes: Excluding table names.
+        includes: Including table names. When this argument is omitted, all tables except for specified in `excludes` are declared.
+    Returns:
+        Declared model types.
     """
     tables = dialect.read_schema(db, excludes, includes)
+    models = []
+    mod = module if isinstance(module, types.ModuleType) else sys.modules[module]
+    base_mixins = [CRUDMixin, GraphEntityMixin, model_type]
+    if testing:
+        base_mixins[0:0] = [TestingMixin]
     for t in tables:
-        if isinstance(module, types.ModuleType):
-            module.__dict__[t.name] = define_model(t, mixins + dialect.mixins + [CRUDMixin, GraphEntityMixin])
-        else:
-            sys.modules[module].__dict__[t.name] = define_model(t, mixins + dialect.mixins + [CRUDMixin, GraphEntityMixin])
+        m = define_model(t, mixins + dialect.mixins + base_mixins)
+        mod.__dict__[t.name] = m
+        models.append(m)
+    if write_stub:
+        output_stub(None, mod, models, dialect, mixins, testing=testing)
+    return models
 
 
-class GraphEntityMixin:
-    @classmethod
-    def identify(cls, model):
-        pks = [c.name for c in cls.columns if c.pk]
-        if len(pks) > 0 and all([hasattr(model, n) and getattr(model, n) is not None for n in pks]):
-            return tuple(map(lambda n: getattr(model, n), pks))
-        else:
-            return None
-
-    @classmethod
-    def is_null(cls, model):
-        return all([getattr(model, c.name, None) is None for c in cls.columns])
-
-def _identify(model):
-    return type(model).identify(model)
-
-def _filter(model):
-    return model and not type(model).is_null(model)
-
-def _serialize(s, model):
-    return dict([(c.name, v) for c, v in model])
-
-
-globalSpec = GraphSpec(
-    identifiers=[
-        (GraphEntityMixin, _identify),
-    ],
-    entity_filters=[
-        (GraphEntityMixin, _filter),
-    ],
-    serializers=[
-        (GraphEntityMixin, _serialize),
-    ]
-)
-
-def graph_template(*bases, **definitions):
+def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
     """
-    Create a graph template on the default specification predefined to handle model object in appropriate ways.
+    Create a graph template on the default `GraphSpec` which handles model object in appropriate ways.
 
-    Parameters
-    ----------
-        bases: [GraphTemplate]
-            Base templates whose properties and relations are merged into new template.
-    definitions: {str: (type, T -> ID, T -> bool) | type | None}
-        Definitions of template properties. See `GraphSpec.new_template` for the detail.
+    See `pyracmon.graph.GraphSpec.new_template` for the detail of definitions.
 
-    Returns
-    -------
-    GraphTemplate
-        Created graph template.
+    Args:
+        bases: Base templates whose properties and relations are merged into new template.
+        definitions: Definitions of template properties.
+    Returns:
+        Graph template.
     """
-    return globalSpec.new_template(*bases, **definitions)
+    return default_config().graph_spec.new_template(*bases, **definitions)
 
 
-def graph_dict(graph, **serializers):
+def graph_dict(graph: GraphView, **settings: NodeSerializer) -> dict[str, Any]:
     """
-    Generates a dictionary representing structured values of a graph on the default specification predefined to handle model object in appropriate ways.
+    Serialize a graph into a `dict` under the default `GraphSpec` .
 
-    Parameters
-    ----------
-    graph: Graph.View
-        A view of the graph.
-    serializers: {str: NodeSerializer | (str | str -> str, [T] -> T | int, T -> U)}
-        Mapping from property name to `NodeSerializer` s or their equivalents.
+    See `pyracmon.graph.GraphSpec.to_dict` for the detail of serialization settings.
 
-    Returns
-    -------
-    {str: object}
-        A dictionary representing the graph.
+    Args:
+        graph: A view of the graph.
+        settings: Serialization settings where each key denotes a node name.
+    Returns:
+        Serialization result.
     """
-    return globalSpec.to_dict(graph, **serializers)
+    return default_config().graph_spec.to_dict(graph, {}, **settings)
 
 
-def add_identifier(t, identifier):
+def graph_schema(template: GraphTemplate, **settings: NodeSerializer) -> GraphSchema:
     """
-    Register a function which extracts identifying key value from the entity to the default specification.
+    Creates `GraphSchema` under the default `GraphSpec` .
 
-    Be sure to call this function before every invocation of `graph_template()`.
+    See `pyracmon.graph.GraphSpec.to_schema` for the detail of serialization settings.
 
-    Parameters
-    ----------
-    c: type
-        Super type of the entity to apply the function.
-    identifier: T -> ID
-        A function which extracts identifying key value from the entity.
+    Args:
+        template: A template of serializing graph.
+        settings: Serialization settings where each key denotes a node name.
+    Returns:
+        Schema of serialization result.
     """
-    globalSpec.add_identifier(t, identifier)
-
-
-def add_entity_filter(t, entity_filter):
-    """
-    Register a function which determines whether to append the entity into the graph to the default specification.
-
-    Be sure to call this function before every invocation of `graph_template()`.
-
-    Parameters
-    ----------
-    c: type
-        Super type of the entity to apply the function.
-    entity_filter: T -> bool
-        A function which determines whether to append the entity into the graph.
-    """
-    globalSpec.add_entity_filter(t, entity_filter)
-
-
-def add_serializer(t, serializer):
-    """
-    Register a function which converts the entity into a serializable value to the default specification.
-
-    Parameters
-    ----------
-    c: type
-        Super type of the entity to apply the function.
-    serializer: T -> U
-        A function which converts the entity into a serializable value.
-    """
-    globalSpec.add_serializer(t, serializer)
+    return default_config().graph_spec.to_schema(template, **settings)

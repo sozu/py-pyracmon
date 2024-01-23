@@ -1,0 +1,38 @@
+version: '3'
+services:
+  pyracmon3.6:
+    build:
+      context: ./Dockerfiles
+      dockerfile: python3.6
+    image: pyracmon3.6:develop
+    tty: true
+    volumes:
+      - .:/home/pyracmon
+    container_name: pyracmon-3.6
+  pyracmon3.7:
+    build:
+      context: ./Dockerfiles
+      dockerfile: python3.7
+    image: pyracmon3.7:develop
+    tty: true
+    volumes:
+      - .:/home/pyracmon
+    container_name: pyracmon-3.7
+  pyracmon3.8:
+    build:
+      context: ./Dockerfiles
+      dockerfile: python3.8
+    image: pyracmon3.8:develop
+    tty: true
+    volumes:
+      - .:/home/pyracmon
+    container_name: pyracmon-3.8
+  pyracmon3.9:
+    build:
+      context: ./Dockerfiles
+      dockerfile: python3.9
+    image: pyracmon3.9:develop
+    tty: true
+    volumes:
+      - .:/home/pyracmon
+    container_name: pyracmon-3.9

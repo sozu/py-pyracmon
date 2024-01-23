@@ -1,185 +1,253 @@
-from itertools import zip_longest
-from pyracmon.graph.graph import IdentifyPolicy
-from pyracmon.graph.template import P, GraphTemplate
-from pyracmon.graph.serialize import S, SerializationContext, NodeSerializer
+"""
+This module provides a type which contains objects to control how graphs work.
+"""
+from typing import Callable, Any, Optional, TypeVar, Union
+from typing_extensions import Self
+from .identify import IdentifyPolicy, HierarchicalPolicy, neverPolicy
+from .template import GraphTemplate
+from .serialize import Serializer, SerializationContext, NodeSerializer
+from .schema import GraphSchema
+from .typing import issubtype
+from .graph import GraphView
+
+
+T = TypeVar('T')
+
+
+TypeDef = Union[type, GraphTemplate, GraphTemplate.Property]
+Identifier = Callable[[Any], Any]
+EntityFilter = Callable[[Any], bool]
+TemplateProperty = Union[
+    type,
+    tuple[()],
+    tuple[type],
+    tuple[type, Optional[Identifier]],
+    tuple[type, Optional[Identifier], Optional[EntityFilter]],
+]
 
 
 class GraphSpec:
     """
-    This class contains the specifications of graph which determine various behaviors in the lifecycle of graphs.
+    This class contains the specifications of graph which control various behaviors in the lifecycles of graphs.
 
-    Behaviors controlled by this specification is:
+    3 kinds of functions are the core of graph behaviors: *identifier*, *entity filter* and *serializer* .
 
-    - Identification of node entity when it is appended to a graph.
-    - Filtering of node entity which filters entities to append into a graph.
-    - Serialization of node entity.
+    *Identifier* and *entity filter* are used when appending values into graph.
+    *Identifier* is a function to get a value used for the identification of graph entity. See `Graph` to know how this works.
+    *Entity fliter* is a function to determine whether the entity should be appended to a graph or not.
+    If `False` is returned for an entity, it is just ignored.
 
-    Every attribute is in the form of a list of pairs composed of a type and a function.
-    The type determines whether to apply the function to the entity value by its type, that is,
-    the function is applied to the value only when its type is a sub-class of the type.
-    If multiple items fulfill the condition, only the latest registered one is used.
+    See `pyracmon.graph.serialize` to know the detail of *serializer*.
 
-    Attributes
-    ----------
-    identifiers: [(type, T -> ID)]
-        A list of pairs of type and function which extracts identifying key value from the entity.
-    entity_filters: [(type, T -> bool)]
-        A list of pairs of type and function which determines whether to append the entity into the graph.
-    serializers: [(type, T -> U)]
-        A list of pairs of type and function which converts the entity into a serializable value.
+    Each of them is bound to a `type` on registration to this and it affects nodes whose property type conforms to the `type` .
     """
-    def __init__(self, identifiers = None, entity_filters = None, serializers = None):
-        self.identifiers = identifiers or []
-        self.entity_filters = entity_filters or []
-        self.serializers = serializers or []
+    def __init__(
+        self,
+        identifiers: Optional[list[tuple[type, Identifier]]] = None,
+        entity_filters: Optional[list[tuple[type, EntityFilter]]] = None,
+        serializers: Optional[list[tuple[type, Serializer]]] = None,
+    ):
+        #: A list of pairs of type and *identifier*.
+        self.identifiers: list[tuple[type, Identifier]] = identifiers or []
+        #: A list of pairs of type and *entity_filter*.
+        self.entity_filters: list[tuple[type, EntityFilter]] = entity_filters or []
+        #: A list of pairs of type and *serializer*.
+        self.serializers: list[tuple[type, Serializer]] = serializers or []
 
-    def get_identifier(self, t):
-        return next(filter(lambda x: issubclass(t, x[0]), self.identifiers), (None, None))[1]
+    def _get_inherited(self, holder: list[tuple[type, T]], t: type) -> Optional[T]:
+        if not isinstance(t, type):
+            return None
+        return next(map(lambda x:x[1], filter(lambda x:issubtype(t, x[0]), holder)), None)
 
-    def get_entity_filter(self, t):
-        return next(filter(lambda x: issubclass(t, x[0]), self.entity_filters), (None, None))[1]
-
-    def get_serializer(self, v):
-        t = v if isinstance(v, type) else type(v)
-        return next(filter(lambda x: issubclass(t, x[0]), self.serializers), (None, None))[1]
-
-    def add_identifier(self, c, f):
+    def get_identifier(self, t: type) -> Optional[Callable[[Any], Any]]:
         """
-        Register a function which extracts identifying key value from the entity.
+        Returns the most appropriate identifier for a type.
+        
+        Args:
+            t: Type of an entity.
+        Returns:
+            Identifier if exists.
+        """
+        return self._get_inherited(self.identifiers, t)
 
-        The identification is based on declared type in the definition of graph template, not on an actual type of the entity.
+    def get_entity_filter(self, t: type) -> Optional[Callable[[Any], bool]]:
+        """
+        Returns the most appropriate entity filter for a type.
+        
+        Args:
+            t: Type of an entity.
+        Returns:
+            Entity filter if exists.
+        """
+        return self._get_inherited(self.entity_filters, t)
 
-        Parameters
-        ----------
-        c: type
-            Super type of the entity to apply the function.
-        f: T -> ID
-            A function which extracts identifying key value from the entity.
+    def find_serializers(self, t: type) -> list[Serializer]:
+        """
+        Returns a list of serializers applicable to a type.
+        
+        Args:
+            t: Type of an entity.
+        Returns:
+            Serializers found.
+        """
+        if not isinstance(t, type):
+            return []
+        return list(map(lambda x:x[1], filter(lambda x:issubtype(t, x[0]), self.serializers[::-1])))
+
+    def add_identifier(self, c: type, f: Callable[[Any], Any]) -> Self:
+        """
+        Register an identifier with a type.
+
+        Args:
+            c: A type bound to the identifier.
+            f: An identifier function.
+        Returns:
+            This instance.
         """
         self.identifiers[0:0] = [(c, f)]
+        return self
 
-    def add_entity_filter(self, c, f):
+    def add_entity_filter(self, c: type, f: Callable[[Any], bool]) -> Self:
         """
-        Register a function which determines whether to append the entity into the graph.
+        Register an entity filter with a type.
 
-        The filtering is based on declared type in the definition of graph template, not on an actual type of the entity.
-
-        Parameters
-        ----------
-        c: type
-            Super type of the entity to apply the function.
-        f: T -> bool
-            A function which determines whether to append the entity into the graph.
+        Args:
+            c: A type bound to the identifier.
+            f: An entity filter function.
+        Returns:
+            This instance.
         """
         self.entity_filters[0:0] = [(c, f)]
+        return self
 
-    def add_serializer(self, c, f):
+    def add_serializer(self, c: type, f: Union[Serializer, NodeSerializer]) -> Self:
         """
-        Register a function which converts the entity into a serializable value.
+        Register a serializer with a type.
 
-        Parameters
-        ----------
-        c: type
-            Super type of the entity to apply the function.
-        f: T -> U
-            A function which converts the entity into a serializable value.
+        Args:
+            c: A type bound to the identifier.
+            f: A serializer function.
+        Returns:
+            This instance.
         """
+        if isinstance(f, NodeSerializer):
+            f = f.serializer
         self.serializers[0:0] = [(c, f)]
+        return self
 
-    def new_template(self, *bases, **template):
-        """
-        Creates a graph template with given definitions for template properties.
+    def _make_policy(self, t: type, f: Union[IdentifyPolicy, Callable[[Any], Any], None]) -> IdentifyPolicy:
+        f = f or self.get_identifier(t)
 
-        Each template property definition can be given as a tuple contains at most 3 values:
+        if isinstance(f, IdentifyPolicy):
+            return f
+        elif callable(f):
+            return HierarchicalPolicy(f)
+        else:
+            return neverPolicy()
 
-        - The type of entity value.
-        - A function which extracts an identifying key value from the entity.
-        - A function which determines whether to append the entity into the graph.
-
-        The first item is used to get identifier and entity filter from the specification, 
-        and they can be overrided by second and third items respectively.
-
-        Every value can be omitted, thereby minimus definition is `None` or `()`.
-        When just an item whose type is `type` is given, it is supposed to be a tuple containing just the first item.
-
-        Parameters
-        ----------
-        bases: [GraphTemplate]
-            Base templates whose properties and relations are merged into new template.
-        template: {str: (type, T -> ID, T -> bool) | type | None}
-            Definitions of template properties.
-
-        Returns
-        -------
-        GraphTemplate
-            Created graph template.
-        """
-        def make_identifier(f):
-            if isinstance(f, IdentifyPolicy):
-                return f
-            elif callable(f):
-                return IdentifyPolicy.hierarchical(f)
-            else:
-                return IdentifyPolicy.never()
-        def definition(d):
-            if d is None or d == ():
-                return None, make_identifier(None), None
-            elif isinstance(d, P):
-                return d.kind, make_identifier(d.identifier), d.entity_filter
-            elif isinstance(d, tuple):
-                kind = d[0] if len(d) >= 1 else None
-                ident = make_identifier(d[1] if len(d) >= 2 else self.get_identifier(kind))
-                ef = d[2] if len(d) >= 3 else self.get_entity_filter(kind)
-                return kind, ident, ef
-            elif isinstance(d, type):
-                return d, make_identifier(self.get_identifier(d)), self.get_entity_filter(d)
+    def _get_property_definition(self, definition: Union[
+        TemplateProperty,
+        type,
+        GraphTemplate,
+    ]) -> tuple[TypeDef, IdentifyPolicy, Optional[EntityFilter]]:
+        if isinstance(definition, GraphTemplate):
+            return definition, neverPolicy(), None
+        elif isinstance(definition, type):
+            return definition, self._make_policy(definition, None), self.get_entity_filter(definition)
+        elif isinstance(definition, tuple):
+            # python < 3.10
+            if len(definition) == 3:
+                kind, identifier, entity_filter = definition
+            elif len(definition) == 2:
+                kind, identifier, entity_filter = definition + (None,)
+            elif len(definition) == 1:
+                kind, identifier, entity_filter = definition + (None, None)
+            elif len(definition) == 0:
+                kind, identifier, entity_filter = (object, None, None)
             else:
                 raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
+            # python >= 3.10
+            #match definition:
+            #    case (k, ident, ef):
+            #        kind = k; identifier = ident; entity_filter = ef
+            #    case (k, ident):
+            #        kind = k; identifier = ident; entity_filter = None
+            #    case (k,):
+            #        kind = k; identifier = None; entity_filter = None
+            #    case ():
+            #        kind = object; identifier = None; entity_filter = None
+            #    case _:
+            #        raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
+            return kind, self._make_policy(kind, identifier), entity_filter or self.get_entity_filter(kind)
+        else:
+            raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
 
-        template = GraphTemplate([(n, *definition(d)) for n, d in template.items()])
-
-        for t in bases:
-            for p in t._properties:
-                if hasattr(template, p.name):
-                    raise ValueError(f"Template property '{p.name}' conflicts.")
-                prop = GraphTemplate.Property(template, p.name, p.kind, p.identifier, p.entity_filter, origin=p)
-                template._properties.append(prop)
-                setattr(template, p.name, prop)
-            for f, t in t._relations:
-                getattr(template, f.name) >> getattr(template, t.name)
-
-        return template
-
-    def to_dict(self, graph, **serializers):
+    def new_template(self, *bases: GraphTemplate, **properties: Union[TemplateProperty, type, GraphTemplate]) -> GraphTemplate:
         """
-        Generates a dictionary representing structured values of a graph.
+        Creates a graph template with definitions of template properties.
 
-        Only nodes whose names appear in keys of `serializers` are used.
+        Each keyword argument corresponds to a template property where the key is proprety name and value is property definition.
 
-        Parameters
-        ----------
-        graph: Graph.View
-            A view of the graph.
-        serializers: {str: NodeSerializer | (str | str -> str, [T] -> T | int, T -> U)}
-            Mapping from property name to `NodeSerializer` s or their equivalents.
+        Property definition can be a `type` object or a tuple of at most 3 values.
+        The former is the equivalent to a tuple which contains the `type` object alone.
+        Values in the tuple are interpreted into following attributes in order.
 
-        Returns
-        -------
-        Dict[str, object]
-            A dictionary representing the graph.
+        - The kind of property which indicates a type of entity.
+        - *Identifier* of the property.
+        - *Entity filter* of the property. 
+
+        Omitted values are completed with registered items in this object.
+
+        ```python
+        template = GraphSpac().new_template(
+            a = int,
+            b = (str, lambda x:x),
+            c = (str, lambda x:x, lambda x:len(x)>5),
+        )
+        ```
+
+        Args:
+            bases: Base templates whose properties and relations are merged into new template.
+            properties: Definitions of template properties.
+        Returns:
+            Created graph template.
         """
-        def to_serializer(s):
-            if isinstance(s, NodeSerializer):
-                return s
-            else:
-                settings = [(p[0] or p[1]) for p in zip_longest(s, (None, None, None), fillvalue=None)]
-                return S.of(*settings)
+        base = sum(bases, GraphTemplate([]))
 
-        context = SerializationContext(dict([(n, to_serializer(s)) for n, s in serializers.items()]), self.get_serializer)
+        return base + GraphTemplate([(n, *self._get_property_definition(d)) for n, d in properties.items()])
 
-        result = {}
+    def to_dict(self, graph: GraphView, _params_: dict[str, dict[str, Any]] = {}, **settings: NodeSerializer) -> dict[str, Any]:
+        """
+        Serialize a graph into a `dict` .
 
-        for c in filter(lambda c: c().property.parent is None, graph):
-            context.serialize_to(c().name, c, result)
+        Only nodes whose names appear in keys of `settings` are serialized into the result.
+        Each `NodeSerializer` object can be built by factory methods on `pyracmon.graph.serialize.S`.
 
-        return result
+        ```python
+        GraphSpec().to_dict(
+            graph,
+            a = S.of(),
+            b = S.name("B"),
+        )
+        ```
+
+        Args:
+            graph: A view of the graph.
+            _params_: Parameters passed to `SerializationContext` and used by *serializer*s.
+            settings: `NodeSerializer` for each property.
+        Returns:
+            Serialization result.
+        """
+        return SerializationContext(settings, self.find_serializers, _params_).execute(graph)
+
+    def to_schema(self, template: GraphTemplate, **settings: NodeSerializer) -> GraphSchema:
+        """
+        Creates `GraphSchema` representing the structure of serialization result under given settings.
+
+        Args:
+            template: Template of a graph.
+            settings: `NodeSerializer` for each property.
+        Returns:
+            Schema of serialization result.
+        """
+        return GraphSchema(self, template, **settings)

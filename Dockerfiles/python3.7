@@ -1,0 +1,11 @@
+FROM python:3.7-alpine
+ENV PYTHONUNBUFFERED 1
+RUN mkdir /home/pyracmon
+ADD requirements.txt /tmp
+RUN apk add --no-cache alpine-sdk postgresql-dev libffi-dev openssl-dev && \
+    pip3 install --upgrade pip && \
+    pip3 install setuptools wheel && \
+    pip3 install -r /tmp/requirements.txt && \
+    pip3 install twine && \
+    apk del --purge alpine-sdk libffi-dev openssl-dev 
+WORKDIR /home/pyracmon

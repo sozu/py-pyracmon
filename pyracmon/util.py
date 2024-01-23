@@ -1,31 +1,43 @@
-from functools import reduce
-from collections import OrderedDict
+"""
+Utility types and functions for internal use.
+"""
+from collections.abc import Mapping, Sequence, Callable
+from typing import Any, Union, TypeVar
+try:
+    from typing import TypeAlias
+except:
+    from typing_extensions import TypeAlias
 
-def split_dict(d):
-    def add(acc, kv):
-        acc[0].append(kv[0])
-        acc[1].append(kv[1])
-        return acc
-    return reduce(add, d.items(), ([], []))
+
+T = TypeVar('T')
 
 
-def index_qualifier(qualifier, ordered_names):
+#----------------------------------------------------------------
+# Utility Types
+#----------------------------------------------------------------
+Qualifier: TypeAlias = Callable[[str], str]
+
+PKS = Union[Any, dict[str, Any]]
+"""Primary key(s)."""
+
+
+#----------------------------------------------------------------
+# Utility Functions
+#----------------------------------------------------------------
+def key_to_index(values: Mapping[str, T], ordered_keys: Sequence[str]) -> dict[int, T]:
+    """
+    Replace keys of a `dict` with its index in ordered list.
+
+    Args:
+        values: A dictionary.
+        ordered_keys: Ordered keys.
+    Returns:
+        New dictionary where keys are replaced.
+    """
     def index(k):
         if isinstance(k, int):
             return k
         else:
-            return ordered_names.index(k)
+            return ordered_keys.index(k)
 
-    return dict([(index(k), q) for k, q in qualifier.items()])
-
-
-def model_values(cls, values, excludes_pk=False):
-    if isinstance(values, (dict, OrderedDict)):
-        if excludes_pk:
-            pks = {c.name for c in cls.columns if c.pk}
-            values = {k:v for k,v in values.items() if k not in pks}
-        return values
-    elif isinstance(values, cls):
-        return OrderedDict([(cv[0].name, cv[1]) for cv in values if not excludes_pk or not cv[0].pk])
-    else:
-        raise TypeError(f"Values to insert or update must be a dictionary or model.")
+    return {index(k):v for k, v in values.items()}

@@ -1,7 +1,15 @@
-from .graph import new_graph, Graph, IdentifyPolicy
+from .graph import new_graph, Graph
 from .spec import GraphSpec
-from .serialize import as_is, head, S
-from .template import P
+from .serialize import S
+from .template import GraphTemplate
+from .identify import IdentifyPolicy
 
 
-__all__ = ["P", "S", "new_graph", "GraphSpec", "Graph", "IdentifyPolicy", "head"]
+__all__ = [
+    "new_graph",
+    "S",
+    "GraphSpec",
+    "Graph",
+    "GraphTemplate",
+    "IdentifyPolicy",
+]

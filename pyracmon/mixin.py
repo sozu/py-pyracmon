@@ -1,541 +1,723 @@
+"""
+This module provides mixin type which supplies each model type various DB operations as class methods.
+"""
+from collections.abc import Mapping, Sequence, Callable
 from functools import reduce
-from itertools import zip_longest
-from collections import OrderedDict
-from pyracmon.query import Q, where, order_by, ranged_by
-from pyracmon.util import split_dict, index_qualifier, model_values
+from typing import Any, Optional, Union, Literal, cast, overload, Protocol, TYPE_CHECKING
+from typing_extensions import Self
+from .connection import Connection
+from .dbapi import Cursor
+from .model import Meta, Column, Record, parse_pks, check_columns, model_values, extract_pks
+from .select import SelectMixin, AliasedColumn, read_row
+from .query import Q, Expression, Conditional, where
+from .clause import ORDER, ranged_by, order_by, values
+from .util import key_to_index, Qualifier, PKS
 
 
-class Selection:
+if TYPE_CHECKING:
+    class CRUDInternalMeta(Meta):
+        @classmethod
+        def last_sequences(cls, db: Connection, num: int) -> list[tuple[Column, int]]: ...
+
+        @classmethod
+        def support_returning(cls, db: Connection) -> bool: ...
+else:
+    class CRUDInternalMeta:
+        pass
+
+
+class CRUDMixin(SelectMixin, CRUDInternalMeta):
     """
-    The representation of table and its columns used in SQL.
-
-    This class is designed to be a bridge from query generation to reading results.
-    String expression of the instance is comma-separated column names with alias, which can be embedded in the select query.
-
-    >>> s1 = table1.select("t1", includes = ["col11", "col12"])
-    >>> s2 = table2.select("t2")
-    >>> str(s1)
-    't1.col11, t1.col12'
-    >>> str(s2)
-    't2.col21, t2.col22, t2.col23'
-
-    The instances of this class are used in `read_row()` to read model object from obtained row.
-
-    >>> c.execute(f"SELECT {s1}, {s2} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
-    >>> for row in c.fetchall():
-    >>>     r = read_row(row, s1, s2)
-    >>>     assert isinstance(r.t1, table1)
-    >>>     assert isinstance(r.t2, table2)
-    """
-    def __init__(self, table, alias, columns):
-        self.table = table
-        self.alias = alias
-        self.columns = columns
-
-    @property
-    def name(self):
-        return self.alias if self.alias else self.table.name
-
-    def __len__(self):
-        return len(self.columns)
-
-    def __repr__(self):
-        a = f"{self.alias}." if self.alias else ""
-        return ', '.join([f"{a}{c.name}" for c in self.columns])
-
-    def __add__(self, other):
-        return Expressions() + self + other
-
-    def consume(self, values):
-        return self.table(**dict([(c.name, v) for c, v in zip(self.columns, values)]))
-
-
-class Expressions:
-    """
-    The instance of this class works as the composition of `Selection`s which provides attributes to access each `Selection`.
-
-    The main purpose of this class is avoiding a flood of occurrence of `Selection` variables. 
-    Just applying + operator to them creates an instance of `Expressions`, by which all `Selection` are available via attributes of their names.
-
-    >>> exp = table1.select("t1", includes = ["col11", "col12"]) + table2.select("t2")
-    >>> c.execute(f"SELECT {exp.t1}, {exp.t2} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
-    >>> for row in c.fetchall():
-    >>>     r = read_row(row, *exp)
-    >>>     assert isinstance(r.t1, table1)
-    >>>     assert isinstance(r.t2, table2)
-    """
-    def __init__(self):
-        self.__selections = []
-        self.__keys = {}
-
-    def __add__(self, other):
-        if isinstance(other, Selection):
-            self.__selections.append(other)
-            self.__keys[other.name] = other
-        elif isinstance(other, Expressions):
-            self.__selections += other.__selections
-            self.__keys.update(other.__keys)
-        elif isinstance(other, str):
-            self.__selections.append(other)
-            self.__keys[other] = other
-        elif other is ():
-            self.__selections.append(other)
-        else:
-            raise ValueError(f"Operand of + for Expressions must be a Selection or Expressions but {type(other)} is given.")
-        return self
-
-    def __iadd__(self, selection):
-        if isinstance(selection, Selection):
-            self.__selections.append(selection)
-            self.__keys[selection.name] = selection
-        elif isinstance(other, str):
-            self.__selections.append(other)
-            self.__keys[other] = other
-        elif other is ():
-            self.__selections.append(other)
-        else:
-            raise ValueError(f"Operand of += for Expressions must be a Selection or Expressions object but {type(selection)} is given.")
-        return self
-
-    def __getattr__(self, key):
-        return self.__keys[key]
-
-    def __iter__(self):
-        return iter(self.__selections)
-
-    class Instance:
-        def __init__(self, exp, *args, **kwargs):
-            self.exp = exp
-            self.args = args
-            self.kwargs = kwargs
-
-        def __repr__(self):
-            args = list(self.args)
-            def _repr(s):
-                if isinstance(s, Selection):
-                    return s.__repr__()
-                elif isinstance(s, str):
-                    return self.kwargs.get(s, s)
-                elif s == ():
-                    return args.pop(0)
-            return ', '.join(map(_repr, self.exp))
-
-    def __call__(self, *args, **kwargs):
-        return Expressions.Instance(self, *args, **kwargs)
-
-    def __repr__(self):
-        return self().__repr__()
-
-
-def expressions(*exps):
-    """
-    Creates a sequence of expressions.
-
-    Parameters
-    ----------
-    exps: [Selection | str | ...]
-        Sequence of values each of which corresponds to an SQL expression.
-
-    Returns
-    -------
-    Expressions
-        Sequence of expressions.
-    """
-    exp = Expressions()
-    for x in exps:
-        exp += x
-    return exp
-
-
-class RowValues:
-    """
-    This class provides attribute access for each row in query result.
-
-    Values converted by `read_row()` can be accessed as if this instance is the list of them by using index or iteration.
-    They can also be accessed via the attribute whose name is the alias (if exists) or the table name.
-
-    >>> sels = table1.select("t1"), table2.select()
-    >>> v = read_row(row, *sels)
-    >>> v.t1
-    >>> v.table2
-    """
-    def __init__(self, selections):
-        self.key_map = dict([(s, i) for i, s in enumerate(map(self._key_of, selections)) if s is not None])
-        self.values = []
-
-    def _key_of(self, s):
-        if isinstance(s, Selection):
-            return s.name
-        elif isinstance(s, str):
-            return s
-        else:
-            return None
-
-    def __len__(self):
-        return len(self.values)
-
-    def __iter__(self):
-        return iter(self.values)
-
-    def __getitem__(self, index):
-        return self.values[index]
-
-    def __getattr__(self, key):
-        index = self.key_map.get(key, None)
-        if index is None:
-            raise AttributeError(f"No selection is found whose table name or alias is '{key}'")
-        return self.values[index]
-
-    def append(self, value):
-        self.values.append(value)
-
-
-def read_row(row, *selections, allow_redundancy = False):
-    """
-    Read values in a row according to `selections`.
-
-    This function returns `RowValues` where each value is created by the item of `selections` respectively.
-    The type of the item determines how values in the row is handled:
-
-    - Selection consumes as many values as the number of columns in it and creates a model instance.
-    - Callable consumes a value and returns another value.
-    - Empty tuple or a string consumes a value, which is stored in `RowValues` as it is.
-
-    Parameters
-    ----------
-    row: object
-        An object representing a row returned by fetchone() / fetchall().
-    selections: [Selection | S -> T | () | str]
-        various type of objects determining the way to handle values in the row.
-    allow_redundancy: bool
-        If `False`, an exception is thrown when not all values in a row are consumed.
-
-    Returns
-    -------
-    RowValues
-        Values read from the row.
-    """
-    result = RowValues(selections)
-
-    for s in selections:
-        if isinstance(s, Selection):
-            result.append(s.consume(row))
-            row = row[len(s):]
-        elif callable(s):
-            result.append(s(row[0]))
-            row = row[1:]
-        elif s == () or isinstance(s, str):
-            result.append(row[0])
-            row = row[1:]
-        else:
-            raise ValueError("Unavailable value is given to read_row().")
-
-    if not allow_redundancy and len(row) > 0:
-        raise ValueError("Not all elements in row is consumed.")
-
-    return result
-
-
-class CRUDMixin:
-    """
-    This class provides class methods available on all model classes.
+    Default mixin providing class methods available on all model types.
 
     Every method takes the DB connection object as its first argument.
+    Following arguments are defined in several methods commonly.
 
-    Also, arguments listed below are commonly used in some methods of this mixin class:
+    - `pks`
+        - Names and values of all primary key columns in form of `dict` .
+        - A primary key value. This form is allowed when the table has just one primary key column.
+        - e.g. If the table has a single primary key `id` of int, `1` is available to spcecify the row of `id = 1` .
+        - e.g. If the table has multiple primary keys `intid` and `strid`, `dict(intid=1, strid="abc")` is a valid argument.
+    - `record`
+        - A model object or a mapping from column name to its value, which corresponds to a table row.
+        - Only columns contained in the record is affected by the operation.
+        - e.g. When `dict(c1=1, c2="abc")` is passed for insertion, only `c1` and `c2` are set in INSERT query.
+        - e.g. For update, only the columns will be updated. Other columns are not affected.
+    - `condition`
+        - Query condition which will compose WHERE clause.
+        - `pyracmon.query.Q` is a factory class to create condition object.
+        - When `None` is passed, all rows are subject to the operation.
+    - `qualifier`
+        - A mapping from column name to a function which qualifies a placeholder passed by an argument.
+        - Detail of qualifier function is described below.
+    - `lock`
+        - This is reserved argument for locking statement but works just as the postfix of the query currently.
+        - The usage will be changed in future version.
 
-    - `pks` represents value(s) of primary key(s).
-        - If `pks` is a dictionary, each item is considered to be a pair of column name and value for primary keys respectively.
-        - Otherwise, the model must have a primary key and `pks` is considered as its value.
-    - `gen_condition` represents a condition or a function generating a condition with marker object.
-        - This polymorphism enables the use of marker especially if it is stateful.
-    - `qualifier` is a dictionary whose key is a column name and the value is a function generating SQL expression around the placeholder for the column.
-        - By default in insert and update query, the expressions generated by a marker is used for column values.
-        - This argument is used to override the expression.
-        - Because the function takes default expression as an argument, you can generate another expression by qualifying it.
+    Qualifier function is used typically to convert or replace placeholder marker in insert/update query.
+    By default, those queries contain markers like `insert into t (c1, c2) values (?, ?)` (`Q` parameter style).
+    We need sometimes qualify markers to apply DB function, calculation, type cast and so on. This feature enables them like below.
+
+    ```python
+    t.insert(db, dict(c1=1, c2=None), dict(c1=lambda x: f"{x}+1", c2=lambda x: "now()"))
+    # SQL: INSERT INTO t (c1, c2) VALUES (?+1, now())
+    ```
+
+    Be aware that when model object is passed, its column values may differ from actual values in DB after query.
     """
     @classmethod
-    def select(cls, alias = "", includes = [], excludes = []):
+    def count(cls, db: Connection, condition: Conditional = Q.of()) -> int:
         """
-        Select columns to use in a query with an alias of this table.
+        Count rows which satisfies the condition.
 
-        Parameters
-        ----------
-        alias: str
-            An alias string of this table.
-        includes: [str]
-            Column names to use. All columns are selected if empty.
-        excludes: [str]
-            Column names not to use.
+        ```python
+        t.count(db, Q.eq(c1=1))
+        # SQL: SELECT COUNT(*) FROM t WHERE c1 = 1
+        ```
 
-        Returns
-        -------
-        Selection
-            An object which has selected columns.
-        """
-        columns = [c for c in cls.columns if c.name not in excludes] \
-            if not bool(includes) else \
-                [c for c in cls.columns if c.name not in excludes and c.name in includes]
-        return Selection(cls, alias, columns)
-
-    @classmethod
-    def count(cls, db, gen_condition = lambda m: Q.of('', [])):
-        """
-        Count rows which fulfill the condition.
-
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        gen_condition: Q.C | Marker -> Q.C
-            Condition or a function creating a condition with a marker.
-
-        Returns
-        -------
-        int
+        Args:
+            db: DB connection.
+            condition: Query condition.
+        Returns:
             The number of rows.
         """
-        c = db.cursor()
-        m = db.helper.marker()
-        wc, wp = _where(gen_condition, m)
-        c.execute(f"SELECT COUNT(*) FROM {cls.name} {wc}", m.params(wp))
-        return c.fetchone()[0]
+        wc, wp = where(condition)
+        c = db.stmt().execute(f"SELECT COUNT(*) FROM {cls.name}{_spacer(wc)}", *wp)
+        return c.fetchone()[0] # type: ignore
 
     @classmethod
-    def fetch(cls, db, pks, lock = None):
+    def fetch(cls, db: Connection, pks: PKS, lock: Optional[Any] = None) -> Optional[Self]:
         """
         Fetch a record by primary key(s).
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        pks: object | {str: object}
-            A primary key or a mapping from column name to a value of primary keys.
-        lock: object
-            An object whose string representation is a valid locking statement.
+        ```python
+        t.fetch(db, 1)
+        # SQL: SELECT * FROM t WHERE id = 1
+        ```
 
-        Returns
-        -------
-        cls
-            A model of the record.
+        Args:
+            db: DB connection.
+            pks: Primary key value(s).
+            lock: Locking statement.
+        Returns:
+            A model object if exists, otherwise `None`.
         """
-        def spacer(s):
-            return (" " + str(s)) if s else ""
-        where_values = cls._parse_pks(pks)
-        c = db.cursor()
-        m = db.helper.marker()
+        cols, vals = parse_pks(cls, pks)
+        cond = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
+        wc, wp = where(cond)
         s = cls.select()
-        where = ' AND '.join([f"{n} = {m()}" for n in where_values[0]])
-        c.execute(f"SELECT {s} FROM {cls.name} WHERE {where}{spacer(lock)}", m.params(where_values[1]))
+        c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}", *wp)
         row = c.fetchone()
-        return read_row(row, s)[0] if row else None
+        return read_row(row, *s)[0] if row else None
 
     @classmethod
-    def fetch_where(cls, db, gen_condition = lambda m: Q.of('', []), orders = {}, limit = None, offset = None, lock = None):
+    def fetch_many(cls, db: Connection, seq_pks: Sequence[PKS], lock: Optional[Any] = None, /, per_page: int = 1000) -> list[Self]:
         """
-        Fetch records which fulfill a condition.
+        Fetch a record by sequence of primary key(s).
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        gen_condition: Q.C | Marker -> Q.C
-            Condition or a function creating a condition with a marker.
-        orders: {str: bool}
-            Ordered dict composed of column names and their ordering method. `True` means `ASC` and `False` means `DESC`.
-        limit: int
-            The number of rows to fetch. If `None`, all rows are obtained.
-        offset: int
-            The number of rows to skip.
-        lock: object
-            An object whose string representation is a valid locking statement.
+        This method simply concatenates equality conditions on primary key by OR operator.
 
-        Returns
-        -------
-        [cls]
-            Models of records.
+        ```python
+        t.fetch_many(db, [1, 2, 3])
+        # SQL: SELECT * FROM t WHERE id = 1 OR id = 2 OR id = 3
+        ```
+
+        Args:
+            db: DB connection.
+            seq_pks: Sequence of primary key value.
+            lock: Locking statement.
+            per_page: Maximum number of keys for an execution of query.
+        Returns:
+            Model objects in the same order as passed sequence.
         """
-        def spacer(s):
-            return (" " + str(s)) if s else ""
-        c = db.cursor()
-        m = db.helper.marker()
+        res = []
+        index = 0
+        while index < len(seq_pks):
+            ordered_pks = []
+            cond = Q.of()
+            for pks in seq_pks[index:index+per_page]:
+                cols, vals = parse_pks(cls, pks)
+                ordered_pks.append(tuple(v for v in vals))
+                cond |= Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
+            wc, wp = where(cond)
+            s = cls.select()
+            c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}", *wp)
+
+            record_map = {}
+            for r in [read_row(row, *s)[0] for row in c.fetchall()]:
+                pk_values = {c.name:v for c, v in r if c.pk}
+                record_map[tuple([v for _, v in check_columns(cls, pk_values, lambda c: c.pk, True)])] = r
+
+            res.extend([record_map[k] for k in ordered_pks if k in record_map])
+            index += per_page
+
+        return res
+
+    @classmethod
+    def fetch_where(
+        cls,
+        db: Connection,
+        condition: Conditional = Q.of(),
+        orders: Mapping[Union[str, AliasedColumn], ORDER] = {},
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        lock: Optional[Any] = None,
+    ) -> list[Self]:
+        """
+        Fetch records which satisfy the condition.
+
+        ```python
+        t.fetch_where(db, Q.eq(c1=1), dict(c2=True), 10, 5)
+        # SQL: SELECT * FROM t WHERE c1 = 1 ORDER BY c2 ASC LIMIT 10 OFFSET 5
+        ```
+
+        Args:
+            db: DB connection.
+            condition: Query condition.
+            orders: Ordering specification where key is column name and value denotes whether the order is ascending or not.
+            limit: Maximum nuber of rows to fetch. If `None`, all rows are returned.
+            offset: The number of rows to skip.
+            lock: Locking statement.
+        Returns:
+            Model objects.
+        """
+        wc, wp = where(condition)
+        rc, rp = ranged_by(limit, offset)
         s = cls.select()
-        wc, wp = _where(gen_condition, m)
-        rc, rp = ranged_by(m, limit, offset)
-        c.execute(f"SELECT {s} FROM {cls.name}{spacer(wc)}{spacer(order_by(orders))}{spacer(rc)}{spacer(lock)}", m.params(wp + rp))
-        return [read_row(row, s)[0] for row in c.fetchall()]
+        c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(order_by(orders))}{_spacer(rc)}{_spacer(lock)}", *(wp + rp))
+        return [read_row(row, *s)[0] for row in c.fetchall()]
 
     @classmethod
-    def insert(cls, db, values, qualifier = {}):
+    def fetch_one(
+        cls,
+        db: Connection,
+        condition: Conditional = Q.of(),
+        lock: Optional[Any] = None,
+    ) -> Optional[Self]:
+        """
+        Fetch a record which satisfies the condition.
+
+        `ValueError` raises When multiple records are found.
+        Use this method for queries which certainly returns a single row, such as search by unique key.
+
+        ```python
+        t.fetch_one(db, Q.eq(c1=1))
+        # SQL: SELECT * FROM t WHERE c1 = 1
+        ```
+
+        Args:
+            db: DB connection.
+            condition: Query condition.
+            lock: Locking statement.
+        Returns:
+            Model objects If exists, otherwise `None`.
+        """
+        rs = cls.fetch_where(db, condition, lock=lock)
+
+        if not rs:
+            return None
+        elif len(rs) == 1:
+            return rs[0]
+        else:
+            raise ValueError(f"{len(rs)} records are found on the invocation of fetch_one().")
+
+    @classmethod
+    def _insert_sql(cls, record: Union[Self, dict[str, Any]], qualifier: Mapping[str, Qualifier] = {}) -> tuple[str, list[str], list[Any]]:
+        model: Self = cast(Self, record) if isinstance(record, cls) else cls(**cast(dict, record))
+        value_dict = model_values(cls, model)
+        check_columns(cls, value_dict)
+        cols, vals = list(value_dict.keys()), list(value_dict.values())
+        ordered_qs = key_to_index(qualifier, cols)
+
+        def exp(v):
+            return lambda i: v
+
+        if any(isinstance(v, Expression) for v in vals):
+            key_gen = []
+            org_vals = vals
+            vals = []
+            for v in org_vals:
+                if isinstance(v, Expression):
+                    key_gen.append(exp(v))
+                    vals.extend(v.params)
+                else:
+                    key_gen.append(lambda i: None)
+                    vals.append(v)
+            values_clause = values(key_gen, 1, ordered_qs)
+        else:
+            values_clause = values(len(cols), 1, ordered_qs)
+
+        return f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values_clause}", cols, vals
+
+    @classmethod
+    def insert(
+        cls,
+        db: Connection,
+        record: Union[Self, dict[str, Any]],
+        qualifier: Mapping[str, Qualifier] = {},
+        /,
+        returning: bool = False,
+    ) -> Self:
         """
         Insert a record.
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        values: {str: object} | model
-            Columns and values to insert.
-        qualifier: {str: str -> str}
-            A mapping from column name to a function converting holder marker into another SQL expression.
+        If `returning` is `True` and the DBMS supports **RETURNING** clause,
+        returned model object contains comple and correct column values.
+        Otherwise, auto incremental value is set to the returned model object
+        but other column values generated inside DBMS such as default value are not set.
 
-        Returns
-        -------
-        object
-            An object returned by `execute()` of DB-API 2.0 module.
+        ```python
+        t.insert(db, dict(c1=1, c2=2))
+        # SQL: INSERT INTO t (c1, c2) VALUES (1, 2)
+        ```
+
+        Args:
+            db: DB connection.
+            record: Object contains column values.
+            qualifier: Functions qualifying placeholder markers.
+            returning: Flag to return inserted record with complete and correct column values.
+        Returns:
+            Model of inserted record.
         """
-        value_dict = model_values(cls, values)
-        cls._check_columns(value_dict)
-        column_values = split_dict(value_dict)
-        qualifier = index_qualifier(qualifier, column_values[0])
+        model: Self = cast(Self, record) if isinstance(record, cls) else cls(**cast(dict, record))
+        sql, _, vals = cls._insert_sql(record, qualifier)
 
-        m = db.helper.marker()
-        sql = f"INSERT INTO {cls.name} ({', '.join(column_values[0])}) VALUES {db.helper.values(len(column_values[1]), 1, qualifier, marker = m)}"
-        result = db.cursor().execute(sql, m.params(column_values[1]))
+        if returning:
+            if cls.support_returning(db):
+                c = db.stmt().execute(f"{sql} RETURNING *", *vals)
+                s = cls.select()
+                return read_row(c.fetchone(), *s)[0]
+            else:
+                # REVIEW
+                # Inserted row can't be specified from the table where no primary keys are defined .
+                pass
 
-        if isinstance(values, cls):
-            for c, v in cls.last_sequences(db, 1):
-                setattr(values, c.name, v)
-
-        return result
+        db.stmt().execute(sql, *vals)
+        for c, v in cls.last_sequences(db, 1):
+            setattr(model, c.name, v)
+        return model
 
     @classmethod
-    def update(cls, db, pks, values, qualifier = {}):
+    @overload
+    def insert_many(cls, db: Connection, records: list[Union[Self, dict[str, Any]]], qualifier: Mapping[str, Qualifier] = {},
+                    /, returning: Literal[False] = False) -> list[Self]: ...
+    @classmethod
+    @overload
+    def insert_many(cls, db: Connection, records: list[Union[Self, dict[str, Any]]], qualifier: Mapping[str, Qualifier] = {},
+                    /, returning: Literal[True] = True) -> list[Self]: ...
+    @classmethod
+    def insert_many(
+        cls,
+        db: Connection,
+        records: list[Union[Self, dict[str, Any]]],
+        qualifier: Mapping[str, Qualifier] = {},
+        /,
+        returning: bool = False,
+    ):
+        """
+        Insert records.
+
+        If `returning` is `True` and the DBMS supports **RETURNING** clause,
+        returned model object contains comple and correct column values.
+        Otherwise, auto incremental value is set to the returned model object
+        but other column values generated inside DBMS such as default value are not set.
+
+        Args:
+            db: DB connection.
+            record: Object contains column values.
+            qualifier: Functions qualifying placeholder markers.
+            returning: Flag to return inserted records with complete and correct column values.
+        Returns:
+            Models of inserted records or cursor.
+        """
+        if len(records) == 0:
+            return []
+
+        models: list[Self] = [cast(Self, r) if isinstance(r, cls) else cls(**cast(dict, r)) for r in records]
+
+        seq_of_params = []
+
+        sql, cols, params = cls._insert_sql(models[0], qualifier)
+
+        cols = set(cols)
+        seq_of_params.append(params)
+
+        for m in models[1:]:
+            value_dict = model_values(cls, m)
+            check_columns(cls, value_dict, lambda c: c.name in cols, requires_all=True)
+            # REVIEW:
+            # The consistency among columns where expression is set is not checked.
+            _, _, params = cls._insert_sql(m, qualifier)
+            seq_of_params.append(params)
+
+        db.stmt().executemany(sql, seq_of_params)
+        num = len(records)
+        for c, v in cls.last_sequences(db, num):
+            for i, m in enumerate(models):
+                setattr(m, c.name, v - (num - i - 1))
+
+        if returning:
+            seq_pks = [extract_pks(cls, m) for m in models]
+            return cls.fetch_many(db, seq_pks)
+        else:
+            return models
+
+    @classmethod
+    def _update_sql(cls, record: Record, condition: Conditional, qualifier: Mapping[str, Qualifier] = {}, allow_all: bool = True) -> tuple[str, list[str], list[Any]]:
+        value_dict = model_values(cls, record, excludes_pk=True)
+        check_columns(cls, value_dict)
+        cols, vals = list(value_dict.keys()), list(value_dict.values())
+        ordered_qs = key_to_index(qualifier, cols)
+
+        def set_col(acc, icv):
+            i, (c, v) = icv
+            if isinstance(v, Expression):
+                clause = f"{c} = {ordered_qs.get(i, lambda x:x)(v.expression)}"
+                params = v.params
+            else:
+                clause = f"{c} = {ordered_qs.get(i, lambda x:x)('$_')}"
+                params = [v]
+            acc[0].append(clause)
+            acc[1].extend(params)
+            return acc
+
+        setters, params = reduce(set_col, enumerate(zip(cols, vals)), ([], []))
+
+        wc, wp = where(condition)
+        if wc == "" and not allow_all:
+            raise ValueError("Update query to update all records is not allowed.")
+
+        return f"UPDATE {cls.name} SET {', '.join(setters)}{_spacer(wc)}", cols, params + wp
+
+    @classmethod
+    @overload
+    def update(cls, db: Connection, pks: PKS, record: Record, qualifier: Mapping[str, Qualifier] = {},
+               /, returning: Literal[False] = False) -> bool: ...
+    @classmethod
+    @overload
+    def update(cls, db: Connection, pks: PKS, record: Record, qualifier: Mapping[str, Qualifier] = {},
+               /, returning: Literal[True] = True) -> Optional[Self]: ...
+    @classmethod
+    def update(
+        cls,
+        db: Connection,
+        pks: PKS,
+        record: Record,
+        qualifier: Mapping[str, Qualifier] = {},
+        /,
+        returning: bool = False,
+    ):
         """
         Update a record by primary key(s).
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        pks: object | {str: object}
-            A primary key or a mapping from column name to a value of primary keys.
-        values: {str: object} | model
-            Columns and values to update.
-        qualifier: {str: str -> str}
-            A mapping from column name to a function converting holder marker into another SQL expression.
+        This method only updates columns which are found in `record` except for primary key(s).
 
-        Returns
-        -------
-        object
-            An object returned by `execute()` of DB-API 2.0 module.
+        ```python
+        t.update(db, 1, dict(c1=1, c2=2))
+        # SQL: UPDATE t SET c1 = 1, c2 = 2 WHERE id = 1
+        ```
+
+        Args:
+            db: DB connection.
+            pks: Primary key value(s).
+            record: Object contains column values.
+            qualifier: Functions qualifying placeholder markers.
+            returning: Flag to return updated records with complete and correct column values.
+        Returns:
+            Whether the record exists and updated or updated record model.
         """
-        def gen_condition(m):
-            cols, vals = cls._parse_pks(pks)
-            return reduce(lambda acc, x: acc & x, [Q.of(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
-        return cls.update_where(db, values, gen_condition, qualifier, False)
+        cols, vals = parse_pks(cls, pks)
+        condition = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
+        if returning:
+            if cls.support_returning(db):
+                models = cls.update_where(db, record, condition, qualifier, returning=True)
+                return models[0] if models else None
+            else:
+                models = cls.update_where(db, record, condition, qualifier, returning=False)
+                return cls.fetch(db, pks)
+        else:
+            return cls.update_where(db, record, condition, qualifier, returning=False) == 1
 
     @classmethod
-    def update_where(cls, db, values, gen_condition, qualifier = {}, allow_all = True):
+    @overload
+    def update_many(cls, db: Connection, records: Sequence[Record], qualifier: Mapping[str, Qualifier] = {},
+               /, returning: Literal[False] = False) -> int: ...
+    @classmethod
+    @overload
+    def update_many(cls, db: Connection, records: Sequence[Record], qualifier: Mapping[str, Qualifier] = {},
+               /, returning: Literal[True] = True) -> list[Self]: ...
+    @classmethod
+    def update_many(
+        cls,
+        db: Connection,
+        records: Sequence[Record],
+        qualifier: Mapping[str, Qualifier] = {},
+        /,
+        returning: bool = False,
+    ):
         """
-        Update records which fulfill a condition.
+        Update records by set of primary key(s).
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        values: {str: object} | model
-            Columns and values to update.
-        gen_condition: Q.C | Marker -> Q.C
-            Condition or a function creating a condition with a marker.
-        qualifier: {str: str -> str}
-            A mapping from column name to a function converting holder marker into another SQL expression.
-        allow_all: bool
-            Empty condition raises an exception if this is `False`.
+        This method invokes on `executemany` defined in DB-API 2.0.
+        Whether it is optimized compared to `execute` depends on DB driver.
 
-        Returns
-        -------
-        object
-            An object returned by `execute()` of DB-API 2.0 module.
+        Args:
+            db: DB connection.
+            record: Sequence of objects contains column values.
+            qualifier: Functions qualifying placeholder markers.
+            returning: Flag to return updated records with complete and correct column values.
+        Returns:
+            The number of affected rows or updated records.
         """
-        setters, params, m = _update(cls, db, values, qualifier)
+        if len(records) == 0:
+            return [] if returning else 0
 
-        wc, wp = _where(gen_condition, m)
-        if wc == "" and not allow_all:
-            raise ValueError("By default, update_where does not allow empty condition.")
+        keys = {c.name for c in cls.columns if c.pk}
+        if len(keys) == 0:
+            raise ValueError(f"update_many is not available because {cls} does not have primary key columns.")
 
-        return db.cursor().execute(f"UPDATE {cls.name} SET {', '.join(setters)} {wc}", m.params(params + wp))
+        def classify(acc: tuple[dict[str, Any], dict[str, Any]], cv: tuple[str, Any]):
+            if cv[0] in keys:
+                acc[0][cv[0]] = cv[1]
+            else:
+                acc[1][cv[0]] = cv[1]
+            return acc
+
+        seq_of_values: list[tuple[dict[str, Any], dict[str, Any]]] = []
+        target_columns: Optional[set[str]] = None
+
+        for vs in [model_values(cls, r, excludes_pk=False) for r in records]:
+            if not keys < vs.keys():
+                raise ValueError(f"Every row must contain values of all primary keys and at least one update column value.")
+            pks, rec = reduce(classify, vs.items(), ({}, {}))
+            if target_columns is None:
+                check_columns(cls, rec)
+                target_columns = set(rec.keys())
+            else:
+                check_columns(cls, rec, lambda c: c.name in target_columns, True) # type: ignore
+            seq_of_values.append((pks, rec))
+
+        sql_first = ""
+        seq_of_params: list[list[Any]] = []
+
+        for pks, rec in seq_of_values:
+            cols, vals = parse_pks(cls, pks)
+            condition = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
+
+            sql, _, params = cls._update_sql(rec, condition, qualifier)
+            if not sql_first:
+                sql_first = sql
+            seq_of_params.append(params)
+
+        if returning:
+            db.stmt().executemany(f"{sql_first}", seq_of_params)
+            return cls.fetch_many(db, [pks for pks, _ in seq_of_values])
+        else:
+            return db.stmt().executemany(sql_first, seq_of_params).rowcount
 
     @classmethod
-    def delete(cls, db, pks):
+    @overload
+    def update_where(cls, db: Connection, record: Record, condition: Conditional, qualifier: Mapping[str, Qualifier] = {},
+                     /, returning: Literal[False] = False, allow_all: bool = False) -> int: ...
+    @classmethod
+    @overload
+    def update_where(cls, db: Connection, record: Record, condition: Conditional, qualifier: Mapping[str, Qualifier] = {},
+                     /, returning: Literal[True] = True, allow_all: bool = False) -> list[Self]: ...
+    @classmethod
+    def update_where(
+        cls,
+        db: Connection,
+        record: Record,
+        condition: Conditional,
+        qualifier: Mapping[str, Qualifier] = {},
+        /,
+        returning: bool = False,
+        allow_all: bool = True,
+    ):
+        """
+        Update records which satisfy the condition.
+
+        ```python
+        t.update(db, dict(c2=2), Q.eq(c1=1))
+        # SQL: UPDATE t SET c2 = 2 WHERE c1 = 1
+        ```
+
+        Args:
+            db: DB connection.
+            record: Object contains column values.
+            condition: Query condition.
+            qualifier: Functions qualifying placeholder markers.
+            returning: Flag to return updated records with complete and correct column values.
+            allow_all: If `False`, empty condition raises `ValueError`.
+        Returns:
+            The number of affected rows or updated records.
+        """
+        sql, _, params = cls._update_sql(record, condition, qualifier, allow_all)
+
+        if returning:
+            if cls.support_returning(db):
+                c = db.stmt().execute(f"{sql} RETURNING *", *params)
+                s = cls.select()
+                return [read_row(row, *s)[0] for row in c.fetchall()]
+            else:
+                raise NotImplementedError(f"RETURNING is not supported and there is no way to fetch updated rows exactly.")
+        else:
+            c = db.stmt().execute(sql, *params)
+
+            return c.rowcount
+
+    @classmethod
+    @overload
+    def delete(cls, db: Connection, pks: PKS, /, returning: Literal[False] = False) -> bool: ...
+    @classmethod
+    @overload
+    def delete(cls, db: Connection, pks: PKS, /, returning: Literal[True] = True) -> Optional[Self]: ...
+    @classmethod
+    def delete(cls, db: Connection, pks: PKS, /, returning: bool = False):
         """
         Delete a record by primary key(s).
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        pks: object | {str: object}
-            A primary key or a mapping from column name to a value of primary keys.
+        ```python
+        t.delete(db, 1)
+        # SQL: DELETE FROM t WHERE id = 1
+        ```
 
-        Returns
-        -------
-        object
-            An object returned by `execute()` of DB-API 2.0 module.
+        Args:
+            db: DB connection.
+            pks: Primary key value(s).
+            returning: Flag to return deleted record if any.
+        Returns:
+            Whether the record exists and deleted or delete record if any.
         """
-        cols, vals = cls._parse_pks(pks)
-        gen_condition = lambda m: reduce(lambda acc, x: acc & x, [Q.of(f"{c} = {m()}", v) for c, v in zip(cols, vals)])
+        cols, vals = parse_pks(cls, pks)
 
-        return cls.delete_where(db, gen_condition)
+        if returning:
+            models = cls.delete_where(db, Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)]), returning=True)
+            return models[0] if models else None
+        else:
+            return cls.delete_where(db, Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])) == 1
 
     @classmethod
-    def delete_where(cls, db, gen_condition, allow_all = True):
+    @overload
+    def delete_many(cls, db: Connection, pks: Union[Sequence[PKS], Sequence[Record]], /, returning: Literal[False] = False) -> int: ...
+    @overload
+    @classmethod
+    def delete_many(cls, db: Connection, pks: Union[Sequence[PKS], Sequence[Record]], /, returning: Literal[True] = True) -> list[Self]: ...
+    @classmethod
+    def delete_many(cls, db: Connection, pks: Union[Sequence[PKS], Sequence[Record]], /, returning: bool = False):
         """
-        Delete records which fulfill a condition.
+        Delete a records by set of primary key(s).
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        gen_condition: Q.C | Marker -> Q.C
-            Condition or a function creating a condition with a marker.
-        allow_all: bool
-            Empty condition raises an exception if this is `False`.
+        This method invokes on `executemany` defined in DB-API 2.0.
+        Whether it is optimized compared to `execute` depends on DB driver.
 
-        Returns
-        -------
-        object
-            An object returned by `execute()` of DB-API 2.0 module.
+        Args:
+            db: DB connection.
+            pks: Primary keys or objects each of which contains values of all primary keys.
+            returning: Flag to return deleted records.
+        Returns:
+            The number of affected rows or deleted records.
         """
-        m = db.helper.marker()
-        wc, wp = _where(gen_condition, m)
+        if len(pks) == 0:
+            return None
+
+        seq_of_pks: list[dict[str, Any]] = []
+        for rec in pks:
+            if isinstance(rec, (dict, cls)):
+                seq_of_pks.append(extract_pks(cls, rec))
+            else:
+                cols, vals = parse_pks(cls, rec)
+                seq_of_pks.append(dict(zip(cols, vals)))
+
+        condition = Conditional.all([Q.eq(**{c: v}) for c, v in seq_of_pks[0].items()])
+        wc, wp = where(condition)
+
+        sql = f"DELETE FROM {cls.name}{_spacer(wc)}"
+        seq_of_params: list[list[Any]] = [wp]
+
+        for v in seq_of_pks[1:]:
+            condition = Conditional.all([Q.eq(**{c: v}) for c, v in v.items()])
+            _, wp = where(condition)
+            seq_of_params.append(wp)
+
+        if returning:
+            models = cls.fetch_many(db, seq_of_pks)
+            db.stmt().executemany(sql, seq_of_params)
+            return models
+        else:
+            return db.stmt().executemany(sql, seq_of_params).rowcount
+
+    @classmethod
+    @overload
+    def delete_where(cls, db: Connection, condition: Conditional, /, returning: Literal[False] = False, allow_all: bool = True) -> int: ...
+    @classmethod
+    @overload
+    def delete_where(cls, db: Connection, condition: Conditional, /, returning: Literal[True] = True, allow_all: bool = True) -> list[Self]: ...
+    @classmethod
+    def delete_where(cls, db: Connection, condition: Conditional, /, returning: bool = False, allow_all: bool = True):
+        """
+        Delete records which satisfy the condition.
+
+        ```python
+        t.delete(db, Q.eq(c1=1))
+        # SQL: DELETE FROM t WHERE c1 = 1
+        ```
+
+        Args:
+            db: DB connection.
+            condition: Query condition.
+            returning: Flag to return deleted records.
+            allow_all: If `False`, empty condition raises `ValueError`.
+        Returns:
+            The number of affected rows or deleted records.
+        """
+        wc, wp = where(condition)
         if wc == "" and not allow_all:
-            raise ValueError("By default, delete_where does not allow empty condition.")
+            raise ValueError("Delete query to delete all records is not allowed.")
 
-        return db.cursor().execute(f"DELETE FROM {cls.name} {wc}", m.params(wp))
+        sql = f"DELETE FROM {cls.name}{_spacer(wc)}"
+
+        if returning:
+            if cls.support_returning(db):
+                c = db.stmt().execute(f"{sql} RETURNING *", *wp)
+                return [read_row(row, *cls.select())[0] for row in c.fetchall()]
+            else:
+                current = cls.fetch_where(db, condition)
+                c = db.stmt().execute(sql, *wp)
+                return current
+        else:
+            return db.stmt().execute(sql, *wp).rowcount
 
     @classmethod
-    def last_sequences(cls, db, num):
+    def last_sequences(cls, db: Connection, num: int) -> list[tuple[Column, int]]:
         """
-        Returns latest auto generated numbers in this table.
+        Returns the sequential (auto incremental) values of a table generated by the latest insertion.
 
-        Parameters
-        ----------
-        db: Connection
-            DB connection.
-        num: int
-            The number of records inserted by the latest insert query.
+        Result contains every sequential columns and their values.
+        When the latest query inserts multiple rows, only the last (= biggest) value is returned.
 
-        Returns
-        -------
-        [(Column, int)]
-            A list of pairs of column and the generated number.
+        This method should be overridden by another mixin class defined in dialect module.
+
+        Args:
+            db: DB connection.
+            num: The number of records inserted by the latest query.
+        Returns:
+            List of pairs of column and its values.
         """
         return []
 
+    @classmethod
+    def support_returning(cls, db: Connection) -> bool:
+        """
+        Checks whehter this DBMS support **RETURNING** clause or not.
 
-def _update(cls, db, values, qualifier):
-    value_dict = model_values(cls, values, excludes_pk=True)
-    cls._check_columns(value_dict)
-    column_values = split_dict(value_dict)
-    qualifier = index_qualifier(qualifier, column_values[0])
-
-    m = db.helper.marker()
-    setters = [f"{n} = {qualifier.get(i, lambda x: x)(m())}" for i, n in enumerate(column_values[0])]
-
-    return setters, column_values[1], m
+        Args:
+            db: DB connection.
+        Returns:
+            Whehter this DBMS support **RETURNING** clause or not.
+        """
+        return False
 
 
-def _where(gen_condition, marker):
-    return where(gen_condition if isinstance(gen_condition, Q.C) else gen_condition(marker))
+def _spacer(s):
+    return (" " + str(s)) if s else ""

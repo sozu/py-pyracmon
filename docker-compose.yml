@@ -1,7 +1,9 @@
 version: '3'
 services:
   pyracmon:
-    build: .
+    build:
+      context: ./Dockerfiles
+      dockerfile: python3.10
     image: pyracmon:develop
     tty: true
     volumes:
@@ -10,7 +12,7 @@ services:
   postgres:
     image: postgres:10
     ports:
-      - 55432:5432
+      - 35432:5432
     environment:
       POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data/postgres
@@ -21,7 +23,7 @@ services:
   mysql:
     image: mysql:8
     ports:
-      - 53306:3306
+      - 33306:3306
     environment:
       MYSQL_ROOT_PASSWORD: root
     volumes:

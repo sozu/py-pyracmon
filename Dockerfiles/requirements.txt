@@ -1,0 +1,4 @@
+pytest
+psycopg2-binary
+PyMySQL
+typing_extensions
