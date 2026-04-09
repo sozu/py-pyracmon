@@ -2,13 +2,13 @@ import sys
 import psycopg2
 import pytest
 from datetime import date, datetime, time, timedelta
-from typing import Annotated
+from typing import Annotated, TypedDict
 from uuid import UUID
 from tests import models as m
 from pyracmon import *
 from pyracmon import default_config
 from pyracmon.dialect import postgresql
-from pyracmon.graph.schema import TypedDict, document_type
+from pyracmon.graph.schema import document_type
 
 
 def _connect():
@@ -87,7 +87,7 @@ class TestModelGraph:
             num = 2,
         )
         graph.append(
-            t1 = m.t1(c11=None),
+            t1 = m.t1(c11=None), # type: ignore
             t2 = m.t2(c21=3, c22=21),
             t3 = m.t3(c31=4, c32=31),
             num = 3,
@@ -95,13 +95,13 @@ class TestModelGraph:
         graph.append(
             t1 = m.t1(c11=2),
             t2 = m.t2(c21=1, c22=21),
-            t3 = m.t3(c31=None),
+            t3 = m.t3(c31=None), # type: ignore
             num = 4,
         )
         graph.append(
             t1 = m.t1(c11=2, c12=12),
             t2 = m.t2(c21=1, c22=21),
-            t3 = m.t3(c31=5, c32=None),
+            t3 = m.t3(c31=5, c32=None), # type: ignore
             num = 5,
         )
         graph.append(
@@ -121,7 +121,7 @@ class TestModelGraph:
                 (
                     m.t1(c11=2),
                     [(m.t2(c21=1, c22=21), [4, 5, 6])],
-                    [m.t3(c31=5, c32=None)],
+                    [m.t3(c31=5, c32=None)], # type: ignore
                 ),
             ]
 

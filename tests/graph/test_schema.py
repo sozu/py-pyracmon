@@ -1,6 +1,6 @@
 import pytest
 from dataclasses import dataclass
-from typing import Generic, TypeVar
+from typing import Annotated, Generic, TypedDict, TypeVar
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.graph import new_graph
 from pyracmon.graph.serialize import S
@@ -403,7 +403,7 @@ class TestSerializer:
             @staticmethod
             def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
-                    u: Annotated[bound, "U"]
+                    u: Annotated[bound, "U"] # type: ignore
                 return Schema
 
         def ser0(x) -> int:
@@ -431,7 +431,7 @@ class TestSerializer:
             @staticmethod
             def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
-                    u: Annotated[bound, "U"]
+                    u: Annotated[bound, "U"] # type: ignore
                 return Schema
 
         def ser0(x) -> int:
@@ -512,7 +512,7 @@ class TestSerializer:
             @staticmethod
             def resolve(td2, bound, arg, spec):
                 class Schema(TypedDict):
-                    u: Annotated[bound, "U"]
+                    u: Annotated[bound, "U"] # type: ignore
                 return Schema
 
         spec = GraphSpec()

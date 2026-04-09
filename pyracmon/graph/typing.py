@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import is_dataclass, fields
 from inspect import Signature
 from typing import Any, TypeVar, Generic, Optional, TypedDict, Annotated, Union, get_args, get_origin, get_type_hints, cast
@@ -123,7 +124,7 @@ def replace_optional_typevar(t: Any, actual: Any) -> Any:
         return t
 
 
-def to_typeddict(t: Any, strict: bool) -> type[TypedDict]:
+def to_typeddict(t: Any, strict: bool) -> type:
     """
     Convert an annotation `t` into `TypedDict` type.
 
@@ -165,7 +166,7 @@ def to_rawdict(v: Any, strict: bool) -> dict:
             return {}
 
 
-def generate_schema(annotations: dict[str, Any], base: Optional[type[TypedDict]] = None) -> type[TypedDict]:
+def generate_schema(annotations: dict[str, Any], base: Optional[type] = None) -> type:
     """
     Generate schema as `TypedDict` by extending base schema.
 
@@ -175,7 +176,8 @@ def generate_schema(annotations: dict[str, Any], base: Optional[type[TypedDict]]
     Returns:
         Generated schema.
     """
-    class Schema(base or TypedDict):
+    schema_base: type = base or TypedDict
+    class Schema(schema_base):
         pass
 
     # In python3.6, "__annotations__" does not exist in "__dict__"
@@ -289,7 +291,7 @@ class Shrink(Typeable[T]):
     This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
     """
     @staticmethod
-    def resolve(shrink: type['Shrink'], bound: Union[type[TypedDict], Signature], arg: type, spec: Any) -> type:
+    def resolve(shrink: type['Shrink'], bound: Union[type, Signature], arg: type, spec: Any) -> type:
         """
         Resolve a `TypedDict` into another `TypedDict` by removing some keys defined by `select` .
         """
@@ -304,7 +306,7 @@ class Shrink(Typeable[T]):
         return generate_schema(annotations)
 
     @classmethod
-    def select(cls, bound: type[TypedDict], arg: type) -> tuple[list[str], list[str]]:
+    def select(cls, bound: type, arg: type) -> tuple[list[str], list[str]]:
         """
         Select excluding and including keys from `TypedDict`.
 
@@ -330,7 +332,7 @@ class Extend(Typeable[T]):
     This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
     """
     @staticmethod
-    def resolve(extend: type['Extend'], bound: Union[type[TypedDict], Signature], arg: type, spec: Any) -> type:
+    def resolve(extend: type['Extend'], bound: Union[type, Signature], arg: type, spec: Any) -> type:
         """
         Resolve a `TypedDict` into another `TypedDict` by adding some keys retrieved by `schema` .
         """
@@ -345,7 +347,7 @@ class Extend(Typeable[T]):
         return generate_schema(td.__annotations__, bound)
 
     @classmethod
-    def schema(cls, bound: type[TypedDict], arg: type) -> Any:
+    def schema(cls, bound: type, arg: type) -> Any:
         """
         Creates a `TypedDict` representing a schema of adding keys and their types.
 
@@ -384,7 +386,7 @@ def decompose_document(t: type) -> tuple[type, str]:
         return t, ""
 
 
-def walk_schema(td, with_doc=False) -> dict[str, Union[type, Annotated]]:
+def walk_schema(td, with_doc=False) -> dict[str, Union[type, tuple[type, str]]]:
     """
     Returns a dictionary as a result of walking a schema object from its root.
 
@@ -397,15 +399,15 @@ def walk_schema(td, with_doc=False) -> dict[str, Union[type, Annotated]]:
     if '__annotations__' not in td.__dict__:
         return {}
 
-    result = {}
+    result: dict[str, Union[type, tuple[type, str]]] = {}
 
-    def put(k, t, doc):
+    def put(k: str, t: type, doc: str):
         if with_doc:
             result[k] = (t, doc)
         else:
             result[k] = t
 
-    def expand(t):
+    def expand(t: type) -> tuple[type, Callable]:
         return (get_args(t)[0], lambda x:[x]) if issubgeneric(t, list) else (t, lambda x:x)
 
     for k, t in get_type_hints(td, include_extras=True).items():

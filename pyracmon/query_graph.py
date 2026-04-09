@@ -27,15 +27,15 @@ def append_rows(cursor: Cursor, exp: Iterable[Union[Consumable, Any]], graph: Gr
     Returns:
         The same graph as passed one. 
     """
-    def get(k: str) -> Any:
+    def get(r: RowValues, k: str) -> Any:
         v = assign[k]
         if isinstance(v, Consumable):
-            return getattr(r, v.name)
+            return getattr(r, v.name or "")
         else:
             return v
 
     for row in cursor.fetchall():
         r = read_row(row, *exp)
-        graph.append(**{k:get(k) for k in assign.keys()})
+        graph.append(**{k:get(r, k) for k in assign.keys()})
 
     return graph

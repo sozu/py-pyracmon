@@ -35,7 +35,7 @@ if TYPE_CHECKING:
         def __contains__(self, key) -> bool: ...
 
         @classmethod
-        def shrink(cls, excludes, includes=None) -> Self: ...
+        def shrink(cls: type[M], excludes, includes=None) -> M: ...
 
 
     class Model(Mixins[Unpack[MXS]], metaclass=Meta):
@@ -198,14 +198,14 @@ def define_model(table_: Table, mixins: Union[type[MXT], list[type], None] = Non
             for c in table_.columns:
                 setattr(self, c.name, c)
 
-    class Meta(type):
+    class _Meta(Meta, type):
         name = table_.name
         table = table_
         columns = table_.columns
         column = Columns()
 
         @classmethod
-        def shrink(cls, excludes: list[str], includes: Optional[list[str]] = None) -> Self:
+        def shrink(cls, excludes: list[str], includes: Optional[list[str]] = None) -> 'Meta':
             """
             Creates new model type containing subset of columns.
 
@@ -218,7 +218,7 @@ def define_model(table_: Table, mixins: Union[type[MXT], list[type], None] = Non
             cols = [c for c in cls.columns if (not includes or c.name in includes) and c.name not in excludes]
             return define_model(Table(cls.name, cols, cls.table.comment), mixins) # type: ignore
 
-    class Base(Model, metaclass=Meta):
+    class Base(Model, metaclass=_Meta):
         pass
 
     mixin_types: list[type] = []

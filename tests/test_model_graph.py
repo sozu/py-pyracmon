@@ -1,12 +1,12 @@
 import pytest
 from copy import deepcopy
 import inspect
-from typing import Annotated
+from typing import Annotated, TypedDict
 from pyracmon.model import Table, Column, Relations, define_model, COLUMN
 from pyracmon.model_graph import *
 from pyracmon.graph.graph import Node
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.schema import Typeable, TypedDict
+from pyracmon.graph.schema import Typeable
 from pyracmon.graph.typing import walk_schema
 from pyracmon.graph.serialize import chain_serializers, S, NodeContextFactory, SerializationContext
 

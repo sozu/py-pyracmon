@@ -10,6 +10,7 @@ except:
 
 
 T = TypeVar('T')
+CI = TypeVar('CI', bound=Union[str, int], covariant=True)
 
 
 #----------------------------------------------------------------
@@ -24,7 +25,7 @@ PKS = Union[Any, dict[str, Any]]
 #----------------------------------------------------------------
 # Utility Functions
 #----------------------------------------------------------------
-def key_to_index(values: Mapping[str, T], ordered_keys: Sequence[str]) -> dict[int, T]:
+def key_to_index(values: Mapping[CI, T], ordered_keys: Sequence[str]) -> dict[int, T]:
     """
     Replace keys of a `dict` with its index in ordered list.
 
