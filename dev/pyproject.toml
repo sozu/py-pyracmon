@@ -20,7 +20,7 @@ dependencies = [
   "typing_extensions",
 ]
 
-[project.optional-dependencies]
+[dependency-groups]
 dev = [
   "pytest",
   "psycopg2-binary",

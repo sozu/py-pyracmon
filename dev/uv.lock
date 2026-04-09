@@ -139,7 +139,7 @@ dependencies = [
     { name = "typing-extensions" },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
     { name = "psycopg2-binary" },
     { name = "pymysql" },
@@ -147,13 +147,14 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "psycopg2-binary", marker = "extra == 'dev'" },
-    { name = "pymysql", marker = "extra == 'dev'" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "typing-extensions" },
+requires-dist = [{ name = "typing-extensions" }]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "psycopg2-binary" },
+    { name = "pymysql" },
+    { name = "pytest" },
 ]
-provides-extras = ["dev"]
 
 [[package]]
 name = "pytest"

@@ -142,7 +142,9 @@ def to_typeddict(t: Any, strict: bool) -> type:
         if strict:
             raise TypeError(f"Type parameter must be resolved to TypedDict but {t}.")
         else:
-            return TypedDict
+            class TD(TypedDict):
+                pass
+            return TD
 
 
 def to_rawdict(v: Any, strict: bool) -> dict:
@@ -176,18 +178,20 @@ def generate_schema(annotations: dict[str, Any], base: Optional[type] = None) ->
     Returns:
         Generated schema.
     """
-    schema_base: type = base or TypedDict
-    class Schema(schema_base):
-        pass
+    # From python3.14, the structure of TypedDict is not changed by updating __annotations__.
+    # Use inheritance to generate schema type instead.
+    schema_type: type
 
-    # In python3.6, "__annotations__" does not exist in "__dict__"
-    # In python3.8, it exists even the class does not have any field.
-    if "__annotations__" not in Schema.__dict__:
-        setattr(Schema, "__annotations__", annotations)
+    EXTRA = TypedDict('Extra', annotations) # type: ignore
+
+    if base:
+        class Schema(base, EXTRA):
+            pass
+        schema_type = Schema
     else:
-        Schema.__annotations__.update(**annotations)
+        schema_type = EXTRA
 
-    return Schema
+    return schema_type
 
 
 class Typeable(Generic[T]):
@@ -296,7 +300,7 @@ class Shrink(Typeable[T]):
         Resolve a `TypedDict` into another `TypedDict` by removing some keys defined by `select` .
         """
         if bound == Signature.empty:
-            return TypedDict
+            return TypedDict('_Shrink', {})
 
         bound = to_typeddict(bound, True)
 
@@ -337,7 +341,7 @@ class Extend(Typeable[T]):
         Resolve a `TypedDict` into another `TypedDict` by adding some keys retrieved by `schema` .
         """
         if bound == Signature.empty:
-            return TypedDict
+            return TypedDict('_Extend', {})
 
         bound = to_typeddict(bound, True)
 
@@ -396,8 +400,8 @@ def walk_schema(td, with_doc=False) -> dict[str, Union[type, tuple[type, str]]]:
     Returns:
         Key value representation of the schema. If `with_doc` is `True`, each value is `Annotated`.
     """
-    if '__annotations__' not in td.__dict__:
-        return {}
+    #if '__annotations__' not in td.__dict__:
+    #    return {}
 
     result: dict[str, Union[type, tuple[type, str]]] = {}
 

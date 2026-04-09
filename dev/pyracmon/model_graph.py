@@ -51,11 +51,9 @@ class ModelSchema(DynamicType[T]):
     """
     @classmethod
     def fix(cls, bound, arg):
-        class Schema(TypedDict):
-            pass
         bound = cast(type[Meta], bound)
-        setattr(Schema, '__annotations__', {c.name:document_type(c.ptype, c.comment) for c in bound.columns})
-        return Schema
+        annotations = {c.name:document_type(c.ptype, c.comment) for c in bound.columns}
+        return TypedDict('Schema', annotations) # type: ignore
 
 
 class ExcludeFK(Shrink[T]):
