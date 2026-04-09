@@ -1,18 +1,19 @@
-version: '3'
 services:
   pyracmon:
     build:
-      context: ./Dockerfiles
-      dockerfile: python3.13
+      context: ./dev
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
     image: pyracmon:develop
     tty: true
     volumes:
-      - .:/home/pyracmon
+      - ./dev:/home/dev
     container_name: pyracmon
   postgres:
     image: postgres:10
     ports:
-      - 35432:5432
+      - ${PYRACMON_POSTGRES_PORT:-35432}:5432
     environment:
       POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data/postgres
@@ -23,7 +24,7 @@ services:
   mysql:
     image: mysql:8
     ports:
-      - 33306:3306
+      - ${PYRACMON_MYSQL_PORT:-33306}:3306
     environment:
       MYSQL_ROOT_PASSWORD: root
     volumes:
