@@ -1,11 +1,11 @@
 import pytest
 from collections.abc import Sequence
 from typing import Any
-from pyracmon.dbapi import Cursor
 from pyracmon.model import Model, Table, Column, define_model, COLUMN
 from pyracmon.graph import GraphTemplate, new_graph
 from pyracmon.select import Selection, SelectMixin
 from pyracmon.query_graph import append_rows
+from .db_api import PseudoCursor as Cursor
 
 
 table1 = Table("t1", [
@@ -27,7 +27,7 @@ model1 = define_model(table1, [SelectMixin], model_type=T1)
 model2 = define_model(table2, [SelectMixin], model_type=T2)
 
 
-class PseudoCursor(Cursor): # type: ignore
+class PseudoCursor(Cursor):
     def __init__(self, rows: Sequence[Sequence[Any]]) -> None:
         self.rows = rows
 

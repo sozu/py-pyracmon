@@ -5,7 +5,7 @@ Schema is a `TypedDict` type estimated by template property and type hinting ann
 It is obtained statically, thus it is available for, for example, documentation such as JsonSchema.
 """
 from collections.abc import Iterator
-from typing import Type, TypeVar, Any, Optional, Union, Annotated, TypedDict, get_args, get_origin, get_type_hints, cast
+from typing import TypeVar, Any, Optional, get_args, get_type_hints, cast
 try:
     from typing import is_typeddict
 except:
@@ -111,7 +111,7 @@ class GraphSchema:
 
         return resolve(iter([ns_type, base_type, entity_type, entity_type]))
 
-    def schema_of(self, prop: GraphTemplate.Property) -> Type[Annotated]:
+    def schema_of(self, prop: GraphTemplate.Property) -> type:
         """
         Generates structured and documented schema for a template property.
 
@@ -145,14 +145,14 @@ class GraphSchema:
                 else:
                     annotations[ns.namer(c.name)] = document_type(list[t], d)
 
-            td_type: Optional[type[TypedDict]] = cast(type[TypedDict], return_type) if is_typeddict(return_type) else None
+            td_type: Optional[type] = cast(type, return_type) if is_typeddict(return_type) else None
 
             return document_type(generate_schema(annotations, td_type), doc)
         else:
             return document_type(return_type, doc)
 
     @property
-    def schema(self) -> type[TypedDict]:
+    def schema(self) -> type:
         """
         Generates `TypedDict` which represents the schema of serialized graph.
         """

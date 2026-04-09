@@ -197,12 +197,14 @@ class TestFixture:
         model = m.t1.by(1).fixture(db, m.t1(c12=12, c13="abc"))
 
         assert m.t1.count(db) == 1
-        assert m.t1.fetch(db, 1).match(c11=1, c12=12, c13="abc")
+        rec = m.t1.fetch(db, 1)
+        assert rec and rec.match(c11=1, c12=12, c13="abc")
 
         model = m.t1.fixture(db, m.t1())
 
         assert m.t1.count(db) == 2
-        assert m.t1.fetch(db, 2).match(c11=2, c12=2, c13="c13-2")
+        rec = m.t1.fetch(db, 2)
+        assert rec and rec.match(c11=2, c12=2, c13="c13-2")
 
     def test_dict(self):
         db = _connect()
@@ -213,12 +215,14 @@ class TestFixture:
         model = m.t1.by(1).fixture(db, dict(c12=12, c13="abc"))
 
         assert m.t1.count(db) == 1
-        assert m.t1.fetch(db, 1).match(c11=1, c12=12, c13="abc")
+        rec = m.t1.fetch(db, 1)
+        assert rec and rec.match(c11=1, c12=12, c13="abc")
 
         model = m.t1.fixture(db, dict())
 
         assert m.t1.count(db) == 2
-        assert m.t1.fetch(db, 2).match(c11=2, c12=2, c13="c13-2")
+        rec = m.t1.fetch(db, 2)
+        assert rec and rec.match(c11=2, c12=2, c13="c13-2")
 
     def test_models(self):
         db = _connect()

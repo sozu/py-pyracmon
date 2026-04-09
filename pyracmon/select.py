@@ -12,14 +12,14 @@ from collections.abc import Iterator
 from typing import Any, Union, TypeVar, Generic, Optional, Literal, Protocol, cast, overload
 from typing_extensions import Self
 from .model import Model, Column
-from .query import Q, Queryable
+from .query import Q, QueryableT
 
 
 S = TypeVar('S')
 M = TypeVar('M', bound=Model)
 
 
-class AliasedColumn(Queryable[Any]): # type: ignore
+class AliasedColumn(QueryableT[Any]): # type: ignore
     """
     The representation of column and the alias of its belonging table.
 
