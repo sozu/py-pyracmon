@@ -3,13 +3,16 @@ This module provides graph specifications to deal with model types.
 
 Most of them are not used directly except for `ConfigurableSpec` which is an attribute of `PyracmonConfiguration` .
 """
-from typing import Optional, Any, cast
+from typing import Any, TypeVar, cast
 import inspect
 from .model import Model, Meta
 from .graph.spec import GraphSpec
 from .graph.typing import DynamicType, Shrink, document_type
-from .graph.serialize import T, Serializer
+from .graph.serialize import Serializer
 from .graph.typing import TypedDict, issubgeneric
+
+
+_T = TypeVar('_T')
 
 
 class GraphEntityMixin(Meta):
@@ -17,7 +20,7 @@ class GraphEntityMixin(Meta):
     Mixin class for model types which enables identity calculation and nullity check.
     """
     @classmethod
-    def identity(cls, model: Model) -> Optional[Any]:
+    def identity(cls, model: Model) -> Any | None:
         """
         Returns primary key values as the identity of a model.
 
@@ -45,7 +48,7 @@ class GraphEntityMixin(Meta):
         return all([getattr(model, c.name, None) is None for c in cls.columns])
 
 
-class ModelSchema(DynamicType[T]):
+class ModelSchema[T](DynamicType[T]):
     """
     Schema of model type `T`.
     """
@@ -56,7 +59,7 @@ class ModelSchema(DynamicType[T]):
         return TypedDict('Schema', annotations) # type: ignore
 
 
-class ExcludeFK(Shrink[T]):
+class ExcludeFK[T](Shrink[T]):
     """
     Schema converter which excludes foreign key columns from schema of model type `T` .
     """
@@ -84,7 +87,7 @@ class ConfigurableSpec(GraphSpec):
         spec.add_identifier(GraphEntityMixin, lambda m: type(m).identity(m))
         spec.add_entity_filter(GraphEntityMixin, lambda m: m and not type(m).is_null(m))
 
-        def serialize(cxt) -> ModelSchema[T]:
+        def serialize(cxt) -> ModelSchema[_T]:
             return cast(ModelSchema, {c.name:v for c, v in cxt.value})
         spec.add_serializer(GraphEntityMixin, serialize)
 
@@ -114,7 +117,7 @@ class ConfigurableSpec(GraphSpec):
         Returns:
         """
         if not self.include_fk:
-            def serialize(cxt) -> ExcludeFK[T]:
+            def serialize(cxt) -> ExcludeFK[_T]:
                 fk = {c.name for c, _ in cxt.value if c.fk}
                 values = cxt.serialize()
                 return cast(ExcludeFK, {c:v for c, v in values.items() if not c in fk})

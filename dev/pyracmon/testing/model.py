@@ -2,7 +2,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid1, uuid3
-from typing import Optional, Union, TypeVar, Any, overload, TYPE_CHECKING
+from typing import TypeVar, Any, overload, TYPE_CHECKING
 from typing_extensions import Self
 from pyracmon.config import PyracmonConfiguration
 from pyracmon.connection import Connection
@@ -63,64 +63,64 @@ class TestingMixin(TestingModel):
     @classmethod
     def fixture(
         cls,
-        db: Optional[Connection],
+        db: Connection | None,
         variable: None = None,
-        index: Optional[int] = None,
-        cfg: Optional[PyracmonConfiguration] = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
     ) -> list[Self]: ...
     @overload
     @classmethod
     def fixture(
         cls,
-        db: Optional[Connection],
+        db: Connection | None,
         variable: int,
-        index: Optional[int] = None,
-        cfg: Optional[PyracmonConfiguration] = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
     ) -> list[Self]: ...
     @overload
     @classmethod
     def fixture(
         cls,
-        db: Optional[Connection],
+        db: Connection | None,
         variable: Self,
-        index: Optional[int] = None,
-        cfg: Optional[PyracmonConfiguration] = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
     ) -> Self: ...
     @overload
     @classmethod
     def fixture(
         cls,
-        db: Optional[Connection],
+        db: Connection | None,
         variable: dict[str, Any],
-        index: Optional[int] = None,
-        cfg: Optional[PyracmonConfiguration] = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
     ) -> Self: ...
     @overload
     @classmethod
     def fixture(
         cls,
-        db: Optional[Connection],
+        db: Connection | None,
         variable: list[Self],
-        index: Optional[int] = None,
-        cfg: Optional[PyracmonConfiguration] = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
     ) -> list[Self]: ...
     @overload
     @classmethod
     def fixture(
         cls,
-        db: Optional[Connection],
+        db: Connection | None,
         variable: list[dict[str, Any]],
-        index: Optional[int] = None,
-        cfg: Optional[PyracmonConfiguration] = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
     ) -> list[Self]: ...
     @classmethod
     def fixture(
         cls,
-        db: Optional[Connection],
-        variable: Optional[Union[int, dict[str, Any], Self, list[dict[str, Any]], list[Self]]] = None,
-        index: Optional[int] = None,
-        cfg: Optional[PyracmonConfiguration] = None,
-    ) -> Union[Self, list[Self]]:
+        db: Connection | None,
+        variable: int | dict[str, Any] | Self | list[dict[str, Any]] | list[Self] | None = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+    ) -> 'Self | list[Self]':
         """
         Inserts record(s) with auto-generated column values.
 
@@ -158,7 +158,7 @@ class TestingMixin(TestingModel):
         else:
             raise ValueError(f"Second argument of fixture() must be an int, dict, model or list of dict or model but {type(variable)} is passed.")
 
-    def match(self, **expected: Union[Matcher, Any]) -> bool:
+    def match(self, **expected: Matcher | Any) -> bool:
         """
         Tests columns values matches to expected values.
 

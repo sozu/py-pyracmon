@@ -5,7 +5,6 @@ from itertools import groupby
 from decimal import Decimal
 from enum import Enum
 from datetime import date, datetime, time, timedelta
-from typing import Optional
 from pyracmon.connection import Connection
 from pyracmon.model import Table, Column, Relations, ForeignKey
 from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
@@ -13,7 +12,7 @@ from pyracmon.query import Q, where
 from pyracmon.clause import holders
 
 
-def read_schema(db, excludes: Optional[list[str]] = None, includes: Optional[list[str]] = None) -> list[Table]:
+def read_schema(db, excludes: list[str] | None = None, includes: list[str] | None = None) -> list[Table]:
     """
     Collect tables in current database.
 

@@ -1,6 +1,6 @@
 import pytest
 from dataclasses import dataclass
-from typing import Annotated, Generic, TypedDict, TypeVar
+from typing import Annotated, TypedDict, TypeVar
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.graph import new_graph
 from pyracmon.graph.serialize import S
@@ -236,7 +236,7 @@ class TestGraphSchema:
             "a": [
                 {
                     "a1": int, "a2": str,
-                    "b": Optional[str],
+                    "b": str | None,
                     "__c__": [
                         {
                             "c1": int, "c2": str,
@@ -250,7 +250,7 @@ class TestGraphSchema:
             "a": ([
                 {
                     "a1": (int, ""), "a2": (str, "A2"),
-                    "b": (Optional[str], "B"),
+                    "b": (str | None, "B"),
                     "__c__": ([
                         {
                             "c1": (int, "C1"), "c2": (str, ""),
@@ -291,7 +291,7 @@ class TestGraphSchema:
 
         assert walk_schema(schema.schema) == {
             "a1": int, "a2": str,
-            "b": Optional[str],
+            "b": str | None,
             "__c__": [
                 {
                     "c1": int, "c2": str,

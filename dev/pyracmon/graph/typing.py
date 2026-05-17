@@ -1,19 +1,8 @@
 from collections.abc import Callable
 from dataclasses import is_dataclass, fields
 from inspect import Signature
-from typing import Any, TypeVar, Generic, Optional, TypedDict, Annotated, Union, get_args, get_origin, get_type_hints, cast
-try:
-    from typing import is_typeddict
-except:
-    from typing_extensions import is_typeddict
-try:
-    # > python3.10
-    from types import UnionType
-except:
-    UnionType = None
-
-
-T = TypeVar('T')
+from typing import Any, TypeVar, Optional, TypedDict, Annotated, Union, get_args, get_origin, get_type_hints, is_typeddict
+from types import UnionType
 
 
 def issubgeneric(t: Any, p: type) -> bool:
@@ -49,7 +38,7 @@ def issubtype(t: type, p: type) -> bool:
         return issubclass(t, p)
 
 
-def is_optional(t: Any) -> Optional[Any]:
+def is_optional(t: Any) -> Any | None:
     """
     Checks if the given annotation corresponds to an optional type and returns the inner type.
 
@@ -168,7 +157,7 @@ def to_rawdict(v: Any, strict: bool) -> dict:
             return {}
 
 
-def generate_schema(annotations: dict[str, Any], base: Optional[type] = None) -> type:
+def generate_schema(annotations: dict[str, Any], base: type | None = None) -> type:
     """
     Generate schema as `TypedDict` by extending base schema.
 
@@ -194,7 +183,7 @@ def generate_schema(annotations: dict[str, Any], base: Optional[type] = None) ->
     return schema_type
 
 
-class Typeable(Generic[T]):
+class Typeable[T]:
     """
     An interface for generic type which is resolved into a concrete type by a type parameter.
 
@@ -263,7 +252,7 @@ class Typeable(Generic[T]):
             return True
 
 
-class DynamicType(Typeable[T]):
+class DynamicType[T](Typeable[T]):
     """
     A `Typeable` type which can be resolved dynamically with resolved type parameter.
     """
@@ -288,14 +277,14 @@ class DynamicType(Typeable[T]):
         return bound
 
 
-class Shrink(Typeable[T]):
+class Shrink[T](Typeable[T]):
     """
     A type to remove keys from `TypedDict` bound to the type parameter `T`.
 
     This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
     """
     @staticmethod
-    def resolve(shrink: type['Shrink'], bound: Union[type, Signature], arg: type, spec: Any) -> type:
+    def resolve(shrink: type['Shrink'], bound: type | Signature, arg: type, spec: Any) -> type:
         """
         Resolve a `TypedDict` into another `TypedDict` by removing some keys defined by `select` .
         """
@@ -329,14 +318,14 @@ class Shrink(Typeable[T]):
         raise NotImplementedError()
 
 
-class Extend(Typeable[T]):
+class Extend[T](Typeable[T]):
     """
     A type to add keys to `TypedDict` bound to the type parameter `T`.
 
     This class only works when `TypedDict` parameter is set, otherwise `TypeError` is raised.
     """
     @staticmethod
-    def resolve(extend: type['Extend'], bound: Union[type, Signature], arg: type, spec: Any) -> type:
+    def resolve(extend: type['Extend'], bound: type | Signature, arg: type, spec: Any) -> type:
         """
         Resolve a `TypedDict` into another `TypedDict` by adding some keys retrieved by `schema` .
         """
@@ -390,7 +379,7 @@ def decompose_document(t: type) -> tuple[type, str]:
         return t, ""
 
 
-def walk_schema(td, with_doc=False) -> dict[str, Union[type, tuple[type, str]]]:
+def walk_schema(td, with_doc=False) -> dict[str, type | tuple[type, str]]:
     """
     Returns a dictionary as a result of walking a schema object from its root.
 
@@ -403,7 +392,7 @@ def walk_schema(td, with_doc=False) -> dict[str, Union[type, tuple[type, str]]]:
     #if '__annotations__' not in td.__dict__:
     #    return {}
 
-    result: dict[str, Union[type, tuple[type, str]]] = {}
+    result: dict[str, type | tuple[type, str]] = {}
 
     def put(k: str, t: type, doc: str):
         if with_doc:

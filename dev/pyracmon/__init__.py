@@ -5,7 +5,7 @@ Base module of pyracmon exporting commonly used objects.  Use `*` simply to impo
 """
 import sys
 import types
-from typing import Union, Optional, Any, TypeVar, TYPE_CHECKING
+from typing import Any, TypeVar, TYPE_CHECKING
 from pyracmon.config import default_config
 from pyracmon.connection import connect, Connection
 from pyracmon.context import ConnectionContext
@@ -82,10 +82,10 @@ M = TypeVar('M', bound=Model)
 def declare_models(
     dialect: types.ModuleType,
     db: Connection,
-    module: Union[types.ModuleType, str] = __name__,
+    module: types.ModuleType | str = __name__,
     mixins: list[type] = [],
-    excludes: Optional[list[str]] = None,
-    includes: Optional[list[str]] = None,
+    excludes: list[str] | None = None,
+    includes: list[str] | None = None,
     *,
     testing: bool = False,
     model_type: type[M] = Model,

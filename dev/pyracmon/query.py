@@ -17,7 +17,7 @@ db.stmt().execute("SELECT * FROM table AS t {w} LIMIT $_ OFFSET $_", *params, 10
 from collections.abc import Sequence, Mapping
 from functools import reduce
 from itertools import chain
-from typing import Any, Callable, Union, Generic, Optional, Protocol, TYPE_CHECKING
+from typing import Any, Callable, Generic, Protocol, TYPE_CHECKING
 from typing_extensions import Never, Self, TypeVarTuple, Unpack, NotRequired
 
 
@@ -143,8 +143,8 @@ class Q:
 
         def __call__(
             self,
-            expression: Union[str, Callable[[Any], str]],
-            convert: Optional[Union[Callable[[Any], Any], Any]] = None,
+            expression: str | Callable[[Any], str],
+            convert: Callable[[Any], Any] | Any | None = None,
         ) -> 'Conditional':
             """
             Creates conditional object composed of given expression and the attribute value as parameters.
@@ -304,7 +304,7 @@ class Q:
         return Conditional(expression, list(params))
 
     @classmethod
-    def eq(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
+    def eq(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Creates a condition applying `=` operator to columns.
 
@@ -326,7 +326,7 @@ class Q:
         return _conditional("=", _and_, kwargs, is_null, _alias_)
 
     @classmethod
-    def neq(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
+    def neq(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `!=`.
 
@@ -348,7 +348,7 @@ class Q:
         return _conditional("!=", _and_, kwargs, is_null, _alias_)
 
     @classmethod
-    def in_(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Sequence[Any]) -> 'Conditional':
+    def in_(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Sequence[Any]) -> 'Conditional':
         """
         Works like `eq`, but applies `IN`.
 
@@ -368,7 +368,7 @@ class Q:
         return _conditional("IN", _and_, kwargs, in_list, _alias_)
 
     @classmethod
-    def not_in(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Sequence[Any]) -> 'Conditional':
+    def not_in(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Sequence[Any]) -> 'Conditional':
         """
         Works like `eq`, but applies `NOT IN`.
 
@@ -388,7 +388,7 @@ class Q:
         return _conditional("NOT IN", _and_, kwargs, in_list, _alias_)
 
     @classmethod
-    def match(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
+    def match(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
         Works like `eq`, but applies `LIKE`. Given parameters will be passed to query without being escaped or enclosed.
 
@@ -402,7 +402,7 @@ class Q:
         return _conditional("LIKE", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def like(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
+    def like(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
         Works like `eq`, but applies `LIKE`. Given parameters will be escaped and enclosed with wildcards (%) to execute partial match.
 
@@ -416,7 +416,7 @@ class Q:
         return _conditional("LIKE", _and_, {k: f"%{escape_like(v)}%" for k, v in kwargs.items()}, None, _alias_)
 
     @classmethod
-    def startswith(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
+    def startswith(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
         Works like `eq`, but applies `LIKE`. Given parameters will be escaped and appended with wildcards (%) to execute prefix match.
 
@@ -430,7 +430,7 @@ class Q:
         return _conditional("LIKE", _and_, {k: f"{escape_like(v)}%" for k, v in kwargs.items()}, None, _alias_)
 
     @classmethod
-    def endswith(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
+    def endswith(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: str) -> 'Conditional':
         """
         Works like `eq`, but applies `LIKE`. Given parameters will be escaped and prepended with wildcards (%) to execute backward match.
 
@@ -444,7 +444,7 @@ class Q:
         return _conditional("LIKE", _and_, {k: f"%{escape_like(v)}" for k, v in kwargs.items()}, None, _alias_)
 
     @classmethod
-    def lt(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
+    def lt(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `<`.
 
@@ -458,7 +458,7 @@ class Q:
         return _conditional("<", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def le(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
+    def le(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `<=`.
 
@@ -472,7 +472,7 @@ class Q:
         return _conditional("<=", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def gt(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
+    def gt(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `>`.
 
@@ -486,7 +486,7 @@ class Q:
         return _conditional(">", _and_, kwargs, None, _alias_)
 
     @classmethod
-    def ge(cls, _alias_: Optional[str] = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
+    def ge(cls, _alias_: str | None = None, _and_: bool = True, **kwargs: Any) -> 'Conditional':
         """
         Works like `eq`, but applies `>=`.
 

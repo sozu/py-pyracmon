@@ -3,7 +3,7 @@ This module provides the context type which controls query execution as configur
 """
 from collections.abc import Sequence
 import logging
-from typing import Any, Union, Optional, Literal, overload
+from typing import Any, Literal, overload
 try:
     from typing import TypeAlias
 except:
@@ -12,7 +12,7 @@ from .config import default_config
 from . import dbapi
 
 
-PARAMS: TypeAlias = Union[list[Any], dict[str, Any]]
+PARAMS: TypeAlias = list[Any] | dict[str, Any]
 """Type alias of parameters of query.
 
 Which type in `list` or `dict` is used depends on the type of the marker.
@@ -28,7 +28,7 @@ class ConnectionContext:
 
     Custom context is also useful to change cursor state before and after query execution.  Overwrite `execute` method to do it.
     """
-    def __init__(self, identifier: Optional[str] = None, **configurations):
+    def __init__(self, identifier: str | None = None, **configurations):
         #: Identifier of this context. `None` by default.
         self.identifier = identifier
         #: Configuration used in this context.

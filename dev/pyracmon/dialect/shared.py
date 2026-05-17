@@ -2,7 +2,7 @@
 This module exports model mixin types having model methods available in some RDBMS.
 """
 from collections.abc import Sequence
-from typing import Union, Any
+from typing import Any
 from typing_extensions import Self
 from ..connection import Connection
 from ..clause import values
@@ -19,7 +19,7 @@ class MultiInsertMixin(CRUDInternalMeta):
     def inserts(
         cls,
         db: Connection,
-        rows: Sequence[Union[Self, dict[str, Any]]],
+        rows: Sequence[Self | dict[str, Any]],
         qualifier: dict[str, Qualifier] = {},
         rows_per_insert: int = 1000,
     ) -> int:

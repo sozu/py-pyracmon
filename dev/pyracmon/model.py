@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from collections.abc import Iterator, Sequence
-from typing import Any, Union, Optional, Callable, Generic, TypeVar, get_origin, get_args, cast, TYPE_CHECKING
+from typing import Any, Callable, Generic, TypeVar, get_origin, get_args, cast, TYPE_CHECKING
 from typing_extensions import TypeVarTuple, Unpack, Self, dataclass_transform
 from .util import PKS
 
@@ -51,7 +51,7 @@ else:
     class Model:
         pass
 #----------------------------------------------------------------
-Record = Union[Meta, dict[str, Any]]
+Record = Meta | dict[str, Any]
 """Model object or dict corresponding to a table row."""
 
 
@@ -59,7 +59,7 @@ class ForeignKey:
     """
     This class represents a foreign key constraint.
     """
-    def __init__(self, table: Union['Table', str], column: Union[str, 'Column']) -> None:
+    def __init__(self, table: 'Table | str', column: 'str | Column') -> None:
         #: Referenced table model, table name is set alternatively when the table is not modelled.
         self.table = table
         #: Referenced column model, column name is set alternatively when the column is not modelled.
@@ -92,10 +92,10 @@ class Column:
         self,
         name: str,
         ptype: type,
-        type_info: Optional[Any],
+        type_info: Any | None,
         pk: bool,
-        fk: Optional[Relations],
-        incremental: Optional[Any],
+        fk: Relations | None,
+        incremental: Any | None,
         nullable: bool,
         comment: str = "",
     ):
@@ -129,7 +129,7 @@ class Table:
         #: Comment of the table.
         self.comment = comment
 
-    def find(self, name: str) -> Optional[Column]:
+    def find(self, name: str) -> 'Column | None':
         """
         Find a column by name.
 
@@ -141,7 +141,7 @@ class Table:
         return next(filter(lambda c: c.name == name, self.columns), None)
 
 
-def define_model(table_: Table, mixins: Union[type[MXT], list[type], None] = None, model_type: Optional[type[M]] = Model) -> type[M]:
+def define_model(table_: Table, mixins: type[MXT] | list[type] | None = None, model_type: type[M] | None = Model) -> type[M]:
     """
     Create a model type representing a table.
 
@@ -205,7 +205,7 @@ def define_model(table_: Table, mixins: Union[type[MXT], list[type], None] = Non
         column = Columns()
 
         @classmethod
-        def shrink(cls, excludes: list[str], includes: Optional[list[str]] = None) -> 'Meta':
+        def shrink(cls, excludes: list[str], includes: list[str] | None = None) -> 'Meta':
             """
             Creates new model type containing subset of columns.
 

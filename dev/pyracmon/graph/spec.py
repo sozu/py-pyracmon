@@ -1,29 +1,25 @@
 """
 This module provides a type which contains objects to control how graphs work.
 """
-from typing import Callable, Any, Optional, TypeVar, Union
+from typing import Callable, Any, TypeVar
 from typing_extensions import Self
 from .identify import IdentifyPolicy, HierarchicalPolicy, neverPolicy
-from .template import GraphTemplate
+from .template import GraphTemplate, PropDef
 from .serialize import Serializer, SerializationContext, NodeSerializer
 from .schema import GraphSchema
 from .typing import issubtype
 from .graph import GraphView
 
 
-T = TypeVar('T')
-
-
-TypeDef = Union[type, GraphTemplate, GraphTemplate.Property]
-Identifier = Callable[[Any], Any]
-EntityFilter = Callable[[Any], bool]
-TemplateProperty = Union[
-    type,
-    tuple[()],
-    tuple[type],
-    tuple[type, Optional[Identifier]],
-    tuple[type, Optional[Identifier], Optional[EntityFilter]],
-]
+type Identifier = Callable[[Any], Any]
+type EntityFilter = Callable[[Any], bool]
+type TemplateProperty = (
+    type
+    | tuple[()]
+    | tuple[type]
+    | tuple[type, Identifier | None]
+    | tuple[type, Identifier | None, EntityFilter | None]
+)
 
 
 class GraphSpec:
@@ -43,9 +39,9 @@ class GraphSpec:
     """
     def __init__(
         self,
-        identifiers: Optional[list[tuple[type, Identifier]]] = None,
-        entity_filters: Optional[list[tuple[type, EntityFilter]]] = None,
-        serializers: Optional[list[tuple[type, Serializer]]] = None,
+        identifiers: list[tuple[type, Identifier]] | None = None,
+        entity_filters: list[tuple[type, EntityFilter]] | None = None,
+        serializers: list[tuple[type, Serializer]] | None = None,
     ):
         #: A list of pairs of type and *identifier*.
         self.identifiers: list[tuple[type, Identifier]] = identifiers or []
@@ -54,12 +50,12 @@ class GraphSpec:
         #: A list of pairs of type and *serializer*.
         self.serializers: list[tuple[type, Serializer]] = serializers or []
 
-    def _get_inherited(self, holder: list[tuple[type, T]], t: type) -> Optional[T]:
+    def _get_inherited[T](self, holder: list[tuple[type, T]], t: type) -> T | None:
         if not isinstance(t, type):
             return None
         return next(map(lambda x:x[1], filter(lambda x:issubtype(t, x[0]), holder)), None)
 
-    def get_identifier(self, t: type) -> Optional[Callable[[Any], Any]]:
+    def get_identifier(self, t: type) -> Callable[[Any], Any] | None:
         """
         Returns the most appropriate identifier for a type.
         
@@ -70,7 +66,7 @@ class GraphSpec:
         """
         return self._get_inherited(self.identifiers, t)
 
-    def get_entity_filter(self, t: type) -> Optional[Callable[[Any], bool]]:
+    def get_entity_filter(self, t: type) -> Callable[[Any], bool] | None:
         """
         Returns the most appropriate entity filter for a type.
         
@@ -94,7 +90,7 @@ class GraphSpec:
             return []
         return list(map(lambda x:x[1], filter(lambda x:issubtype(t, x[0]), self.serializers[::-1])))
 
-    def add_identifier(self, c: type, f: Callable[[Any], Any]) -> Self:
+    def add_identifier[T](self, c: type[T], f: Callable[[T], Any]) -> Self:
         """
         Register an identifier with a type.
 
@@ -107,7 +103,7 @@ class GraphSpec:
         self.identifiers[0:0] = [(c, f)]
         return self
 
-    def add_entity_filter(self, c: type, f: Callable[[Any], bool]) -> Self:
+    def add_entity_filter[T](self, c: type[T], f: Callable[[T], bool]) -> Self:
         """
         Register an entity filter with a type.
 
@@ -120,7 +116,7 @@ class GraphSpec:
         self.entity_filters[0:0] = [(c, f)]
         return self
 
-    def add_serializer(self, c: type, f: Union[Serializer, NodeSerializer]) -> Self:
+    def add_serializer(self, c: type, f: Serializer | NodeSerializer) -> Self:
         """
         Register a serializer with a type.
 
@@ -135,7 +131,7 @@ class GraphSpec:
         self.serializers[0:0] = [(c, f)]
         return self
 
-    def _make_policy(self, t: type, f: Union[IdentifyPolicy, Callable[[Any], Any], None]) -> IdentifyPolicy:
+    def _make_policy(self, t: type, f: IdentifyPolicy | Callable[[Any], Any] | None) -> IdentifyPolicy:
         f = f or self.get_identifier(t)
 
         if isinstance(f, IdentifyPolicy):
@@ -145,44 +141,29 @@ class GraphSpec:
         else:
             return neverPolicy()
 
-    def _get_property_definition(self, definition: Union[
-        TemplateProperty,
-        type,
-        GraphTemplate,
-    ]) -> tuple[TypeDef, IdentifyPolicy, Optional[EntityFilter]]:
+    def _get_property_definition(self, definition: TemplateProperty | type | GraphTemplate) -> PropDef:
         if isinstance(definition, GraphTemplate):
             return definition, neverPolicy(), None
         elif isinstance(definition, type):
             return definition, self._make_policy(definition, None), self.get_entity_filter(definition)
         elif isinstance(definition, tuple):
-            # python < 3.10
-            if len(definition) == 3:
-                kind, identifier, entity_filter = definition
-            elif len(definition) == 2:
-                kind, identifier, entity_filter = definition + (None,)
-            elif len(definition) == 1:
-                kind, identifier, entity_filter = definition + (None, None)
-            elif len(definition) == 0:
-                kind, identifier, entity_filter = (object, None, None)
-            else:
-                raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
             # python >= 3.10
-            #match definition:
-            #    case (k, ident, ef):
-            #        kind = k; identifier = ident; entity_filter = ef
-            #    case (k, ident):
-            #        kind = k; identifier = ident; entity_filter = None
-            #    case (k,):
-            #        kind = k; identifier = None; entity_filter = None
-            #    case ():
-            #        kind = object; identifier = None; entity_filter = None
-            #    case _:
-            #        raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
+            match definition:
+                case (k, ident, ef):
+                    kind = k; identifier = ident; entity_filter = ef
+                case (k, ident):
+                    kind = k; identifier = ident; entity_filter = None
+                case (k,):
+                    kind = k; identifier = None; entity_filter = None
+                case ():
+                    kind = object; identifier = None; entity_filter = None
+                case _:
+                    raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
             return kind, self._make_policy(kind, identifier), entity_filter or self.get_entity_filter(kind)
         else:
             raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
 
-    def new_template(self, *bases: GraphTemplate, **properties: Union[TemplateProperty, type, GraphTemplate]) -> GraphTemplate:
+    def new_template(self, *bases: GraphTemplate, **properties: TemplateProperty | GraphTemplate) -> GraphTemplate:
         """
         Creates a graph template with definitions of template properties.
 

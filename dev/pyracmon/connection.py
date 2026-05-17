@@ -6,7 +6,7 @@ import secrets
 import string
 import threading
 import types
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable
 from typing_extensions import Self
 from . import dbapi
 from .sql import Sql
@@ -46,7 +46,7 @@ class Connection(dbapi.Connection):
     """
     _characters = string.ascii_letters + string.digits + ".="
 
-    def __init__(self, api, conn: dbapi.Connection, context_factory: Optional[Callable[[], ConnectionContext]] = None):
+    def __init__(self, api, conn: dbapi.Connection, context_factory: Callable[[], ConnectionContext] | None = None):
         #: A string which identifies a connection.
         self.identifier = self._gen_identifier()
         #: DB-API 2.0 module.
@@ -114,7 +114,7 @@ class Connection(dbapi.Connection):
         self._context = None
         return self
 
-    def stmt(self, context: Optional[ConnectionContext] = None) -> 'Statement':
+    def stmt(self, context: ConnectionContext | None = None) -> 'Statement':
         """
         Creates new `Statement` which executes queries on this connection.
 
@@ -183,7 +183,7 @@ class Statement:
         Returns:
             Cursor object used for the query execution.
         """
-        def prepare(ps: Union[list[Any], dict[str, Any]]):
+        def prepare(ps: list[Any] | dict[str, Any]):
             args = list(ps) if isinstance(ps, (list, tuple)) else []
             kwargs = ps if isinstance(ps, dict) else {}
             return self.prepare(sql, *args, **kwargs)

@@ -3,7 +3,7 @@ This module provides mixin type which supplies each model type various DB operat
 """
 from collections.abc import Mapping, Sequence, Callable
 from functools import reduce
-from typing import Any, Optional, TypeVar, Union, Literal, cast, overload, Protocol, TYPE_CHECKING
+from typing import Any, TypeVar, Literal, cast, overload, Protocol, TYPE_CHECKING
 from typing_extensions import Self
 from .connection import Connection
 from .dbapi import Cursor
@@ -27,7 +27,7 @@ else:
 
 
 M = TypeVar('M', bound='CRUDMixin')
-C = TypeVar('C', bound=Union[str, AliasedColumn], covariant=True)
+C = TypeVar('C', bound=str | AliasedColumn, covariant=True)
 
 
 class CRUDMixin(SelectMixin, CRUDInternalMeta):
@@ -90,7 +90,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         return c.fetchone()[0] # type: ignore
 
     @classmethod
-    def fetch(cls: type[M], db: Connection, pks: PKS, lock: Optional[Any] = None) -> Optional[M]:
+    def fetch(cls: type[M], db: Connection, pks: PKS, lock: Any | None = None) -> 'M | None':
         """
         Fetch a record by primary key(s).
 
@@ -115,7 +115,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         return read_row(row, *s)[0] if row else None
 
     @classmethod
-    def fetch_many(cls: type[M], db: Connection, seq_pks: Sequence[PKS], lock: Optional[Any] = None, /, per_page: int = 1000) -> list[M]:
+    def fetch_many(cls: type[M], db: Connection, seq_pks: Sequence[PKS], lock: Any | None = None, /, per_page: int = 1000) -> list[M]:
         """
         Fetch a record by sequence of primary key(s).
 
@@ -163,9 +163,9 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         db: Connection,
         condition: Conditional = Q.of(),
         orders: Mapping[C, ORDER] = {},
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-        lock: Optional[Any] = None,
+        limit: int | None = None,
+        offset: int | None = None,
+        lock: Any | None = None,
     ) -> list[M]:
         """
         Fetch records which satisfy the condition.
@@ -196,8 +196,8 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
         cls: type[M],
         db: Connection,
         condition: Conditional = Q.of(),
-        lock: Optional[Any] = None,
-    ) -> Optional[M]:
+        lock: Any | None = None,
+    ) -> 'M | None':
         """
         Fetch a record which satisfies the condition.
 
@@ -226,7 +226,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
             raise ValueError(f"{len(rs)} records are found on the invocation of fetch_one().")
 
     @classmethod
-    def _insert_sql(cls: type[M], record: Union[M, dict[str, Any]], qualifier: Mapping[str, Qualifier] = {}) -> tuple[str, list[str], list[Any]]:
+    def _insert_sql(cls: type[M], record: 'M | dict[str, Any]', qualifier: Mapping[str, Qualifier] = {}) -> tuple[str, list[str], list[Any]]:
         model: M = record if isinstance(record, cls) else cls(**cast(dict, record))
         value_dict = model_values(cls, model)
         check_columns(cls, value_dict)
@@ -257,7 +257,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
     def insert(
         cls: type[M],
         db: Connection,
-        record: Union[M, dict[str, Any]],
+        record: 'M | dict[str, Any]',
         qualifier: Mapping[str, Qualifier] = {},
         /,
         returning: bool = False,
@@ -303,17 +303,17 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
 
     @classmethod
     @overload
-    def insert_many(cls: type[M], db: Connection, records: list[Union[M, dict[str, Any]]], qualifier: Mapping[str, Qualifier] = {},
+    def insert_many(cls: type[M], db: Connection, records: 'list[M | dict[str, Any]]', qualifier: Mapping[str, Qualifier] = {},
                     /, returning: Literal[False] = False) -> list[M]: ...
     @classmethod
     @overload
-    def insert_many(cls: type[M], db: Connection, records: list[Union[M, dict[str, Any]]], qualifier: Mapping[str, Qualifier] = {},
+    def insert_many(cls: type[M], db: Connection, records: 'list[M | dict[str, Any]]', qualifier: Mapping[str, Qualifier] = {},
                     /, returning: Literal[True] = True) -> list[M]: ...
     @classmethod
     def insert_many(
         cls: type[M],
         db: Connection,
-        records: list[Union[M, dict[str, Any]]],
+        records: 'list[M | dict[str, Any]]',
         qualifier: Mapping[str, Qualifier] = {},
         /,
         returning: bool = False,
@@ -400,7 +400,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
     @classmethod
     @overload
     def update(cls: type[M], db: Connection, pks: PKS, record: Record, qualifier: Mapping[str, Qualifier] = {},
-               /, returning: Literal[True] = True) -> Optional[M]: ...
+               /, returning: Literal[True] = True) -> 'M | None': ...
     @classmethod
     def update(
         cls: type[M],
@@ -488,7 +488,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
             return acc
 
         seq_of_values: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        target_columns: Optional[set[str]] = None
+        target_columns: set[str] | None = None
 
         for vs in [model_values(cls, r, excludes_pk=False) for r in records]:
             if not keys < vs.keys():
@@ -575,7 +575,7 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
     def delete(cls, db: Connection, pks: PKS, /, returning: Literal[False] = False) -> bool: ...
     @classmethod
     @overload
-    def delete(cls: type[M], db: Connection, pks: PKS, /, returning: Literal[True] = True) -> Optional[M]: ...
+    def delete(cls: type[M], db: Connection, pks: PKS, /, returning: Literal[True] = True) -> 'M | None': ...
     @classmethod
     def delete(cls: type[M], db: Connection, pks: PKS, /, returning: bool = False):
         """
@@ -603,12 +603,12 @@ class CRUDMixin(SelectMixin, CRUDInternalMeta):
 
     @classmethod
     @overload
-    def delete_many(cls, db: Connection, pks: Union[Sequence[PKS], Sequence[Record]], /, returning: Literal[False] = False) -> int: ...
+    def delete_many(cls, db: Connection, pks: 'Sequence[PKS] | Sequence[Record]', /, returning: Literal[False] = False) -> int: ...
     @overload
     @classmethod
-    def delete_many(cls: type[M], db: Connection, pks: Union[Sequence[PKS], Sequence[Record]], /, returning: Literal[True] = True) -> list[M]: ...
+    def delete_many(cls: type[M], db: Connection, pks: 'Sequence[PKS] | Sequence[Record]', /, returning: Literal[True] = True) -> list[M]: ...
     @classmethod
-    def delete_many(cls: type[M], db: Connection, pks: Union[Sequence[PKS], Sequence[Record]], /, returning: bool = False):
+    def delete_many(cls: type[M], db: Connection, pks: 'Sequence[PKS] | Sequence[Record]', /, returning: bool = False):
         """
         Delete a records by set of primary key(s).
 

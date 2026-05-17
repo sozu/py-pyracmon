@@ -1,13 +1,13 @@
 """
 This module provides a type specifying graph structure.
 """
-from typing import Any, Optional, Callable, TypeVar, Union, overload
-from typing_extensions import Self, dataclass_transform
+from typing import Any, Callable, overload
+from typing_extensions import Self
 from collections.abc import Iterable, Iterator
-from pyracmon.graph.identify import IdentifyPolicy, neverPolicy
+from .identify import IdentifyPolicy, neverPolicy
 
 
-T = TypeVar('T')
+type PropDef[_PT] = tuple[type[_PT] | GraphTemplate | GraphTemplate.Property, IdentifyPolicy | None, Callable[[_PT], bool] | None]
 
 
 class GraphTemplate:
@@ -31,7 +31,7 @@ class GraphTemplate:
 
     Use `GraphSpec.new_template` or other factory functions to create a template instead of using constructor directly.
     """
-    class Property:
+    class Property[T]:
         """
         Template property which determines various behaviors of graph nodes.
         """
@@ -39,10 +39,10 @@ class GraphTemplate:
             self,
             template: 'GraphTemplate',
             name: str,
-            kind: Union[type[T], 'GraphTemplate'],
+            kind: type[T] | 'GraphTemplate',
             policy: IdentifyPolicy,
-            entity_filter: Optional[Callable[[T], bool]],
-            origin: Optional[Self] = None,
+            entity_filter: Callable[[T], bool] | None,
+            origin: Self | None = None,
         ):
             #: Graph template this property belongs to.
             self.template = template
@@ -79,7 +79,7 @@ class GraphTemplate:
             return map(lambda r: r[1], filter(lambda r: r[0] == self, self.template._relations))
 
         @property
-        def parent(self) -> Optional['GraphTemplate.Property']:
+        def parent(self) -> 'GraphTemplate.Property | None':
             """
             Returns parent property if exists.
             """
@@ -121,7 +121,7 @@ class GraphTemplate:
         def __lshift__(self, children: 'GraphTemplate.Property') -> 'GraphTemplate.Property': ...
         @overload
         def __lshift__(self, children: list['GraphTemplate.Property']) -> list['GraphTemplate.Property']: ...
-        def __lshift__(self, children: Union['GraphTemplate.Property', list['GraphTemplate.Property']]) -> Union['GraphTemplate.Property', list['GraphTemplate.Property']]:
+        def __lshift__(self, children: 'GraphTemplate.Property | list[GraphTemplate.Property]') -> 'GraphTemplate.Property | list[GraphTemplate.Property]':
             """
             Makes this property as a parent of given properties.
 
@@ -149,7 +149,7 @@ class GraphTemplate:
             self.template._relations += [(self, parent)]
             return parent
 
-        def __rrshift__(self, children: Union['GraphTemplate.Property', list['GraphTemplate.Property']]) -> 'GraphTemplate.Property':
+        def __rrshift__(self, children: 'GraphTemplate.Property | list[GraphTemplate.Property]') -> 'GraphTemplate.Property':
             """
             Reversed version of `__lshift__()` prepared to locate a list of properties on the left side.
 
@@ -161,12 +161,7 @@ class GraphTemplate:
             self.__lshift__(children)
             return self
 
-    def __init__(self, definitions: list[tuple[
-        str,
-        Union[type[T], Self, Property],
-        Optional[IdentifyPolicy],
-        Optional[Callable[[T], bool]],
-    ]]):
+    def __init__(self, definitions: list[tuple[str, *PropDef]]):
         """
         Construct template with its properties.  Don't use this constructor directly.
 
@@ -241,7 +236,7 @@ def _set_template_property(template: GraphTemplate, prop: GraphTemplate.Property
     template._properties[prop.name] = prop
 
 
-def _walk_properties(properties: dict[str, GraphTemplate.Property], parent: Optional[GraphTemplate.Property] = None):
+def _walk_properties(properties: dict[str, GraphTemplate.Property], parent: 'GraphTemplate.Property | None' = None):
     def walk(p):
         yield p
         for q in p.children:

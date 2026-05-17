@@ -6,7 +6,7 @@ import inspect
 import os
 from pathlib import Path
 import types
-from typing import Union, get_origin, get_args
+from typing import get_origin, get_args
 from typing_extensions import dataclass_transform
 from pyracmon.model import Model
 from pyracmon.mixin import CRUDMixin
@@ -15,7 +15,7 @@ from pyracmon.testing import TestingMixin
 
 
 default_imports = [
-    ("typing", ["Any", "Optional"]),
+    ("typing", ["Any"]),
     ("pyracmon", ["Model", "CRUDMixin"]),
     ("pyracmon.model_graph", ["GraphEntityMixin"]),
     ("pyracmon.stub", ["ModelTransform"]),
@@ -93,7 +93,7 @@ def render_models(
         for c in m.columns:
             ct = coltype(c.ptype)
             if c.nullable:
-                ct = f"Optional[{ct}]"
+                ct = f"{ct} | None"
             if c.name.isidentifier() and not iskeyword(c.name):
                 lines.append(f"    {c.name}: {ct} = ...")
             else:
@@ -103,7 +103,7 @@ def render_models(
 
 
 def output_stub(
-    stubdir: Union[str, Path, None],
+    stubdir: str | Path | None,
     module: types.ModuleType,
     models: list[type[Model]],
     dialect: types.ModuleType,

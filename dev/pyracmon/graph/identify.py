@@ -1,6 +1,6 @@
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 from collections.abc import Iterable, Mapping
-from .protocol import *
+from .protocol import NodePropType, MapNodeType
 
 
 class IdentifyPolicy:
@@ -9,7 +9,7 @@ class IdentifyPolicy:
 
     Identification mechanism is based on the equality of identification keys extracted by entities.
     """
-    def __init__(self, identifier: Optional[Callable[[Any], Any]]):
+    def __init__(self, identifier: Callable[[Any], Any] | None):
         #: A function to extract the identification key from an entity.
         self.identifier = identifier
 
@@ -22,14 +22,14 @@ class IdentifyPolicy:
         Returns:
             Identification key.
         """
-        return self.identifier(value) if self.identifier else None
+        return self.identifier(value) if self.identifier and value is not None else None
 
-    def identify(
+    def identify[MN: MapNodeType](
         self,
         prop: NodePropType,
         candidates: Iterable[MN],
         ancestors: Mapping[str, Iterable[MapNodeType[MapNodeType[MN, str], str]]],
-    ) -> tuple[list[Optional[MN]], list[MN]]:
+    ) -> tuple[list[MN | None], list[MN]]:
         """
         Select parent nodes and identical nodes of a new entity.
 
@@ -54,7 +54,7 @@ class HierarchicalPolicy(IdentifyPolicy):
     This policy identifies nodes whose entity has the same identification key as the key of appending entity
     and whose parent is also identical to the parent of the entity.
     """
-    def identify(
+    def identify[MN: MapNodeType](
         self,
         prop: NodePropType,
         candidates: Iterable[MN],

@@ -7,7 +7,7 @@ import logging
 from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
-from typing import Any, Union, Optional, Callable
+from typing import Any, Callable
 from typing_extensions import Self, TypeAlias, Unpack, TypeVarTuple
 from .model import Table, Column
 from .model_graph import ConfigurableSpec
@@ -20,8 +20,8 @@ __all__ = [
 
 
 #Ts = TypeVarTuple("Ts")
-#TypeMap: TypeAlias = Callable[[str, Unpack[Ts]], Optional[type]]
-TypeMap: TypeAlias = Callable[..., Optional[type]]
+#TypeMap: TypeAlias = Callable[[str, Unpack[Ts]], type | None]
+TypeMap: TypeAlias = Callable[..., type | None]
 """Signature of a function which takes at least a type name and returns a python type if possible.
 
 According to DBMS, the function will be called with additional arguments.
@@ -36,7 +36,7 @@ class PyracmonConfiguration:
     """
     name: str = "default"
     """Name of this configuration. This value has no effect on any behavior of modules. """
-    logger: Union[str, logging.Logger, None] = None
+    logger: str | logging.Logger | None = None
     """Logger or the name of logger used for internal logs such as query logging."""
     log_level: int = logging.DEBUG
     """Logging level of internal logs."""
@@ -44,13 +44,13 @@ class PyracmonConfiguration:
     """Maximum length of query log. Queries longer than this value are output being trimmed."""
     parameter_log: bool = False
     """Flag to log query parameters also."""
-    paramstyle: Optional[str] = None
+    paramstyle: str | None = None
     """Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module."""
-    type_mapping: Optional[TypeMap] = None
+    type_mapping: TypeMap | None = None
     """Function estimating python type from type name in database and optional arguments dependent on DBMS."""
     graph_spec: ConfigurableSpec = ConfigurableSpec.create()
     """Graph specification used as default."""
-    fixture_mapping: Optional[Callable[[Table, Column, int], Any]] = None
+    fixture_mapping: Callable[[Table, Column, int], Any] | None = None
     """Function generating fixture value for a column and an index."""
     fixture_tz_aware: bool = True
     """Flag to make fixture datetime being aware of timezone."""
@@ -109,7 +109,7 @@ class PyracmonConfiguration:
 
 def contextualConfiguration(
     config_var: Callable[[], ContextVar[PyracmonConfiguration]],
-    base: Optional[PyracmonConfiguration] = None
+    base: PyracmonConfiguration | None = None
 ) -> PyracmonConfiguration:
     @dataclass
     class contextual(PyracmonConfiguration):

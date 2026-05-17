@@ -9,7 +9,7 @@ In most cases, classes of this module should not be used directly.
 The use of `SelectMixin.select` and `read_row` is sufficient way to benefit from this module.
 """
 from collections.abc import Iterator
-from typing import Any, Union, TypeVar, Generic, Optional, Literal, Protocol, cast, overload
+from typing import Any, TypeVar, Generic, Literal, Protocol, cast, overload
 from typing_extensions import Self
 from .model import Model, Column
 from .query import Q, QueryableT
@@ -32,7 +32,7 @@ class AliasedColumn(QueryableT[Any]): # type: ignore
     Condition: 't.col = $_' -- [3]
     ```
     """
-    def __init__(self, alias: str, column: Union[Column, str]) -> None:
+    def __init__(self, alias: str, column: Column | str) -> None:
         #: Alias string.
         self.alias = alias
         #: Column name or schema.
@@ -110,7 +110,7 @@ class Consumable:
 
     def __len__(self) -> int: ...
     @property
-    def name(self) -> Optional[str]: ...
+    def name(self) -> str | None: ...
     def consume(self, values: list[Any]) -> Any: ...
 
 
@@ -125,7 +125,7 @@ class StrConsumable(Consumable):
         return 1
 
     @property
-    def name(self) -> Optional[str]:
+    def name(self) -> str | None:
         return self.key
 
     def consume(self, values: list[Any]) -> Any:
@@ -140,7 +140,7 @@ class EmptyConsumable(Consumable):
         return 1
 
     @property
-    def name(self) -> Optional[str]:
+    def name(self) -> str | None:
         return None
 
     def consume(self, values: list[Any]) -> Any:
@@ -365,7 +365,7 @@ class RowValues:
         self._values.append(value)
 
 
-def read_row(row, *selections: Union[Consumable, str, tuple], allow_redundancy: bool = False) -> RowValues:
+def read_row(row, *selections: Consumable | str | tuple, allow_redundancy: bool = False) -> RowValues:
     """
     Read values in a row according to given selections.
 

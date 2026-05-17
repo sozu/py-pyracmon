@@ -2,7 +2,7 @@
 Utility types and functions for internal use.
 """
 from collections.abc import Mapping, Sequence, Callable
-from typing import Any, Union, TypeVar
+from typing import Any, TypeVar
 try:
     from typing import TypeAlias
 except:
@@ -10,7 +10,7 @@ except:
 
 
 T = TypeVar('T')
-CI = TypeVar('CI', bound=Union[str, int], covariant=True)
+CI = TypeVar('CI', bound=str | int, covariant=True)
 
 
 #----------------------------------------------------------------
@@ -18,7 +18,7 @@ CI = TypeVar('CI', bound=Union[str, int], covariant=True)
 #----------------------------------------------------------------
 Qualifier: TypeAlias = Callable[[str], str]
 
-PKS = Union[Any, dict[str, Any]]
+PKS = Any | dict[str, Any]
 """Primary key(s)."""
 
 

@@ -2,7 +2,7 @@
 This module provides the type for query generation from a template string containing unified marker.
 """
 from string import digits, Template
-from typing import Any, Union
+from typing import Any
 from .marker import Marker
 
 
@@ -30,7 +30,7 @@ class Sql:
         #: SQL template.
         self.template = template
 
-    def render(self, *args: Any, **kwargs: Any) -> tuple[str, Union[list[Any], dict[str, Any]]]:
+    def render(self, *args: Any, **kwargs: Any) -> tuple[str, list[Any] | dict[str, Any]]:
         """
         Renders SQL and converts parameters into the form available for current database driver.
 

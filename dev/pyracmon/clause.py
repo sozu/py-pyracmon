@@ -2,7 +2,7 @@
 This module provides functions to generate miscellaneous clauses in query.
 """
 from collections.abc import Mapping, Sequence, Callable
-from typing import Any, Union, Optional
+from typing import Any
 try:
     from typing import TypeAlias
 except:
@@ -12,7 +12,7 @@ from .query import Expression
 from .util import Qualifier
 
 
-ORDER: TypeAlias = Union[bool, tuple[bool, bool], str]
+ORDER: TypeAlias = bool | tuple[bool, bool] | str
 """Column order.
 
 Boolean represents `ASC` or `DESC` by itself or as the first item of tuple. 
@@ -20,10 +20,10 @@ The second item of tuple represents `NULLS FIRST` or `NULLS LAST` .
 `str` value is used as is.
 """
 
-HolderKeys: TypeAlias = Union[str, int, None, Expression]
+HolderKeys: TypeAlias = str | int | None | Expression
 
 
-def order_by(columns: Mapping[Union[str, AliasedColumn], ORDER], **defaults: ORDER) -> str:
+def order_by(columns: Mapping[str | AliasedColumn, ORDER], **defaults: ORDER) -> str:
     """
     Generates `ORDER BY` clause from columns and directions.
 
@@ -46,7 +46,7 @@ def order_by(columns: Mapping[Union[str, AliasedColumn], ORDER], **defaults: ORD
     return '' if len(columns) == 0 else f"ORDER BY {', '.join(map(col, columns.items()))}"
 
 
-def ranged_by(limit: Optional[int] = None, offset: Optional[int] = None) -> tuple[str, list[Any]]:
+def ranged_by(limit: int | None = None, offset: int | None = None) -> tuple[str, list[Any]]:
     """
     Generates `LIMIT OFFSET` clause using marker.
 
@@ -69,7 +69,7 @@ def ranged_by(limit: Optional[int] = None, offset: Optional[int] = None) -> tupl
     return ' '.join(clause) if clause else '', params
 
 
-def holders(length_or_keys: Union[int, Sequence[HolderKeys]], qualifier: Optional[Mapping[int, Qualifier]] = None) -> str:
+def holders(length_or_keys: int | Sequence[HolderKeys], qualifier: Mapping[int, Qualifier] | None = None) -> str:
     """
     Generates partial query string containing placeholder markers separated by comma.
 
@@ -99,7 +99,7 @@ def holders(length_or_keys: Union[int, Sequence[HolderKeys]], qualifier: Optiona
     return ', '.join(hs)
 
 
-def values(length_or_key_gen: Union[int, Sequence[Callable[[int], HolderKeys]]], rows: int, qualifier: Optional[Mapping[int, Qualifier]] = None) -> str:
+def values(length_or_key_gen: int | Sequence[Callable[[int], HolderKeys]], rows: int, qualifier: Mapping[int, Qualifier] | None = None) -> str:
     """
     Generates partial query string for `VALUES` clause in insertion query.
 

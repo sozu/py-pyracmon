@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from contextvars import ContextVar
 from datetime import datetime, date, time, timedelta
-from typing import Any, Optional
+from typing import Any
 from ..config import PyracmonConfiguration, default_config, contextualConfiguration
 
 
@@ -78,7 +78,7 @@ class Near(Matcher):
             return low <= actual and actual <= high
 
 
-def near(expected: Any, negative: Optional[Any] = None, positive: Optional[Any] = None, **kwargs: Any) -> Matcher:
+def near(expected: Any, negative: Any | None = None, positive: Any | None = None, **kwargs: Any) -> Matcher:
     """
     Creates a matcher to check actual value is in a range.
 

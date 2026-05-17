@@ -1,16 +1,12 @@
 """
 This module exports types representing graphs.
 """
-from typing import TypeVar, Generic, Protocol, Union, Optional, Any, overload, cast
+from typing import Protocol, Any, overload, cast
 from typing_extensions import Self
 from collections.abc import MutableMapping, Iterable, Iterator
 from typing import Any
 from .identify import IdentifyPolicy, neverPolicy
 from .template import GraphTemplate
-from .protocol import *
-
-
-T = TypeVar('T', covariant=True)
 
 
 class GraphView(Protocol):
@@ -94,13 +90,13 @@ class Graph:
         else:
             return NodeContainer(prop)
 
-    def _container_of(self, prop: GraphTemplate.Property) -> Optional['NodeContainer']:
+    def _container_of(self, prop: GraphTemplate.Property) -> 'NodeContainer | None':
         candidates = [c for c in self.containers.values() if c.prop.is_compatible(prop)]
         if len(candidates) > 1:
             raise ValueError(f"Container can't be determined from property '{prop.name}'.")
         return candidates[0] if candidates else None
 
-    def __add__(self, another: Union[Self, GraphView]) -> 'Graph':
+    def __add__(self, another: Self | GraphView) -> 'Graph':
         """
         Create new graph by adding this graph and another graph.
 
@@ -119,7 +115,7 @@ class Graph:
 
         return graph
 
-    def __iadd__(self, another: Union[Self, GraphView]) -> Self:
+    def __iadd__(self, another: Self | GraphView) -> Self:
         """
         Append nodes from another graph.
 
@@ -223,7 +219,7 @@ class Graph:
         return self._append(True, entities)
 
 
-def new_graph(template: GraphTemplate, *bases: Union[Graph, GraphView]) -> Graph:
+def new_graph(template: GraphTemplate, *bases: Graph | GraphView) -> Graph:
     """
     Create a graph from a template.
 
@@ -243,7 +239,7 @@ def new_graph(template: GraphTemplate, *bases: Union[Graph, GraphView]) -> Graph
     return graph
 
 
-class ContainerView(Protocol, Generic[T]):
+class ContainerView[T](Protocol):
     """
     The interface of the view of a node set, i.e. `NodeContainer` and `Node.Children` .
     """
@@ -263,7 +259,7 @@ class ContainerView(Protocol, Generic[T]):
     def __getitem__(self, index: int) -> 'NodeView': ...
     @overload
     def __getitem__(self, index: slice) -> Iterable['NodeView']: ...
-    def __getitem__(self, index: Union[int, slice]) -> Union['NodeView', Iterable['NodeView']]:
+    def __getitem__(self, index: int | slice) -> 'NodeView | Iterable[NodeView]':
         """Returns a view of a node at the index."""
         ...
     def __getattr__(self, key) -> 'ContainerView':
@@ -358,7 +354,7 @@ class NodeContainer:
                 def __getitem__(self, index: int) -> 'NodeView': ...
                 @overload
                 def __getitem__(self, index: slice) -> Iterable['NodeView']: ...
-                def __getitem__(self, index: Union[int, slice]) -> Union['NodeView', Iterable['NodeView']]:
+                def __getitem__(self, index: int | slice) -> 'NodeView | Iterable[NodeView]':
                     """Returns a view of a node at the index."""
                     if isinstance(index, slice):
                         return [n.view for n in container.nodes[index]]
@@ -534,7 +530,7 @@ class Node:
                 self.keys.add(node)
                 self.nodes.append(node)
 
-    def __init__(self, prop: GraphTemplate.Property, entity: Any, key: Optional[Any], index: int):
+    def __init__(self, prop: GraphTemplate.Property, entity: Any, key: Any | None, index: int):
         #: Template property.
         self.prop = prop
         #: An entity value.
@@ -567,6 +563,9 @@ class Node:
             class _NodeView(NodeView):
                 def __call__(self, alt: Any = None) -> Any:
                     """Returns an entity of this node."""
+                    # Special key for internal use.
+                    if alt is ...:
+                        return node
                     return node.entity
                 def __getattr__(self, key: str) -> ContainerView:
                     """Returns a view of child nodes by its name."""

@@ -1,7 +1,7 @@
 from pyracmon.graph.spec import GraphSpec
 import pytest
 from dataclasses import dataclass
-from typing import Generic, TypeVar, get_type_hints
+from typing import Generic, TypeVar, get_type_hints, get_args, get_origin
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
@@ -66,7 +66,10 @@ class TestAggregator:
         r = a([node(1), node(2), node(3)])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == list[T] # type: ignore
+        # list[T]
+        rt = signature(a).return_annotation
+        assert get_origin(rt) == list
+        assert isinstance(get_args(rt)[0], TypeVar)
         assert [n.entity for n in r] == [1, 2, 3] # type: ignore
 
     def test_fold(self):
@@ -90,7 +93,7 @@ class TestAggregator:
         r = a([node(1), node(2), node(3)])
 
         assert ns.be_singular
-        assert signature(a).return_annotation == T
+        assert isinstance(signature(a).return_annotation, TypeVar)
         assert r == 3
 
     def test_select(self):
@@ -114,7 +117,10 @@ class TestAggregator:
         r = a([node(1), node(2), node(3)])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == list[T] # type: ignore
+        # list[T]
+        rt = signature(a).return_annotation
+        assert get_origin(rt) == list
+        assert isinstance(get_args(rt)[0], TypeVar)
         assert [n.entity for n in r] == [1, 2] # type: ignore
 
     def test_invalid_fold(self):
@@ -213,9 +219,9 @@ class TestEach:
             return cxt.value
         def f1(cxt) -> int:
             return cxt.value
-        def f2(cxt) -> G[T]:
+        def f2[T](cxt) -> G[T]:
             return cxt.value
-        def f3(cxt) -> G[T]:
+        def f3[T](cxt) -> G[T]:
             return cxt.value
 
         s = NodeSerializer().each(f0).each(f1).each(f2).each(f3).serializer

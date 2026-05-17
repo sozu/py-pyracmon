@@ -6,7 +6,6 @@ from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 from uuid import UUID
 from itertools import groupby
-from typing import Optional
 from pyracmon.connection import Connection
 from pyracmon.model import Table, Column, ForeignKey, Relations
 from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
@@ -17,7 +16,7 @@ from pyracmon.clause import holders
 SequencePattern = re.compile(r"nextval\(\'([a-zA-Z0-9_]+)\'(\:\:regclass)?\)")
 
 
-def read_schema(db: Connection, excludes: Optional[list[str]] = None, includes: Optional[list[str]] = None) -> list[Table]:
+def read_schema(db: Connection, excludes: list[str] | None = None, includes: list[str] | None = None) -> list[Table]:
     """
     Collect tables in current database.
 

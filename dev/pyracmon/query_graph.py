@@ -1,11 +1,11 @@
 from collections.abc import Callable, Iterable
-from typing import Any, Union
+from typing import Any
 from pyracmon.dbapi import Cursor
 from pyracmon.select import Selection, Consumable, RowValues, read_row
 from pyracmon.graph import Graph
 
 
-def append_rows(cursor: Cursor, exp: Iterable[Union[Consumable, Any]], graph: Graph, /, **assign: Union[Selection, Any]) -> Graph:
+def append_rows(cursor: Cursor, exp: Iterable[Consumable | Any], graph: Graph, /, **assign: Selection | Any) -> Graph:
     """
     Adds all rows in cursor into the graph.
 

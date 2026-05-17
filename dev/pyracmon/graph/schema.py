@@ -5,11 +5,7 @@ Schema is a `TypedDict` type estimated by template property and type hinting ann
 It is obtained statically, thus it is available for, for example, documentation such as JsonSchema.
 """
 from collections.abc import Iterator
-from typing import TypeVar, Any, Optional, get_args, get_type_hints, cast
-try:
-    from typing import is_typeddict
-except:
-    from typing_extensions import is_typeddict
+from typing import TypeVar, Any, get_args, get_type_hints, cast, is_typeddict
 from inspect import signature, Signature
 from .graph import GraphView
 from .template import GraphTemplate
@@ -145,7 +141,7 @@ class GraphSchema:
                 else:
                     annotations[ns.namer(c.name)] = document_type(list[t], d)
 
-            td_type: Optional[type] = cast(type, return_type) if is_typeddict(return_type) else None
+            td_type: type | None = cast(type, return_type) if is_typeddict(return_type) else None
 
             return document_type(generate_schema(annotations, td_type), doc)
         else:

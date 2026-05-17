@@ -1,27 +1,22 @@
 from collections.abc import Iterator, Iterable
 from inspect import signature, Signature, getmembers, isfunction
-from typing import Any, Mapping, Optional, Union, Callable, Protocol, TypeVar, cast
-try:
-    from typing import ParamSpec, TypeAlias
-except:
-    from typing_extensions import ParamSpec, TypeAlias
+from typing import Any, Mapping, Callable, Protocol, TypeVar, cast
 from .template import GraphTemplate
 from .graph import Node, NodeContainer, GraphView
 from .typing import Shrink, Extend, Typeable, issubgeneric, to_rawdict
 
 
-T = TypeVar('T')
-P = ParamSpec('P')
+_T = TypeVar('_T')
 
 
 # type aliases.
-Serializer: TypeAlias = Callable[['NodeContext'], Any]
+type Serializer = Callable[['NodeContext'], Any]
 
 
 class NodeSerializing(Protocol):
     def doc(self, document: str, **options: Any) -> 'NodeSerializer': ...
     def name(self, name: str) -> 'NodeSerializer': ...
-    def merge(self, namer: Optional[Callable[[str], str]] = None) -> 'NodeSerializer': ...
+    def merge(self, namer: Callable[[str], str] | None = None) -> 'NodeSerializer': ...
     def at(self, index: int, alt: Any = None) -> 'NodeSerializer': ...
     def head(self, alt: Any = None) -> 'NodeSerializer': ...
     def last(self, alt: Any = None) -> 'NodeSerializer': ...
@@ -31,9 +26,9 @@ class NodeSerializing(Protocol):
     def sub(self, **settings) -> 'NodeSerializer': ...
     def alter(
         self,
-        generator: Optional[Serializer] = None,
-        excludes: Optional[Iterable[str]] = None,
-        includes: Optional[Iterable[str]] = None,
+        generator: Serializer | None = None,
+        excludes: Iterable[str] | None = None,
+        includes: Iterable[str] | None = None,
     ) -> 'NodeSerializer': ...
 
 
@@ -103,8 +98,8 @@ class NodeSerializer(NodeSerializing):
     """
     def __init__(
         self,
-        namer: Optional[Union[str, Callable[[str], str]]] = None,
-        aggregator: Optional[Union[Callable[[list[Node]], Node], Callable[[list[Node]], list[Node]]]] = None,
+        namer: str | Callable[[str], str] | None = None,
+        aggregator: Callable[[list[Node]], Node] | Callable[[list[Node]], list[Node]] | None = None,
         *serializers: Serializer,
     ):
         self._namer = namer
@@ -129,17 +124,17 @@ class NodeSerializer(NodeSerializing):
         return f
 
     @property
-    def aggregator(self) -> Callable[[list[Node]], Union[list[Node], Node, Any]]:
+    def aggregator(self) -> Callable[[list[Node]], list[Node] | Node | Any]:
         """
         Returns *aggregator* supplied with correct return annotation.
         """
         if self._aggregator is None:
-            def agg1(values: list[T]) -> list[T]:
+            def agg1(values: list[_T]) -> list[_T]:
                 return values
             return agg1
         elif signature(self._aggregator).return_annotation == Signature.empty:
             # TODO: No return annotation implies list to list aggregation.
-            def agg2(values: list[T]) -> list[T]:
+            def agg2(values: list[_T]) -> list[_T]:
                 return self._aggregator(values) # type: ignore
             return agg2
         else:
@@ -177,7 +172,7 @@ class NodeSerializer(NodeSerializing):
             rt = Signature.empty
 
         if rt == Signature.empty:
-            def agg(vs: list[T]) -> (T if folds else list[T]):
+            def agg(vs: list[_T]) -> (_T if folds else list[_T]): # type: ignore
                 return aggregator(vs)
             self._aggregator = agg
         elif issubgeneric(rt, list) ^ (not folds):
@@ -224,7 +219,7 @@ class NodeSerializer(NodeSerializing):
         self._be_merged = False
         return self
 
-    def merge(self, namer: Optional[Callable[[str], str]] = None) -> 'NodeSerializer':
+    def merge(self, namer: Callable[[str], str] | None = None) -> 'NodeSerializer':
         """
         Set a naming function for merging into parent.
 
@@ -257,9 +252,8 @@ class NodeSerializer(NodeSerializing):
         Returns:
             This instance.
         """
-        def agg(vs: list[T]) -> (Optional[T] if alt is None else T):
+        def agg(vs: list[_T]) -> ((_T | None) if alt is None else _T): # type: ignore
             return vs[index] if len(vs) > index else alt
-        #return self.fold(lambda vs: vs[index] if len(vs) > index else alt)
         return self.fold(agg)
 
     def head(self, alt: Any = None) -> 'NodeSerializer':
@@ -282,9 +276,8 @@ class NodeSerializer(NodeSerializing):
         Returns:
             This instance.
         """
-        def agg(vs: list[T]) -> (Optional[T] if alt is None else T):
+        def agg(vs: list[_T]) -> ((_T | None) if alt is None else _T): # type: ignore
             return vs[-1] if len(vs) > 0 else alt
-        #return self.fold(lambda vs: vs[-1] if len(vs) > 0 else alt)
         return self.fold(agg)
 
     def fold(self, aggregator: Callable[[list[Node]], Any]) -> 'NodeSerializer':
@@ -342,14 +335,14 @@ class NodeSerializer(NodeSerializing):
             This instance.
         """
         from pyracmon.graph.schema import GraphSchema
-        class SubGraph(Typeable[T]):
+        class SubGraph[_T](Typeable[_T]):
             serializers = settings.copy()
 
             @staticmethod
             def resolve(sub_graph, bound, arg, spec):
                 return GraphSchema(spec, arg.template, **sub_graph.serializers).schema
 
-        def to_dict(cxt: NodeContext) -> SubGraph[T]:
+        def to_dict(cxt: NodeContext) -> SubGraph[_T]:
             vv = cxt.serialize()
             return SerializationContext(
                 settings,
@@ -361,9 +354,9 @@ class NodeSerializer(NodeSerializing):
 
     def alter(
         self,
-        generator: Optional[Serializer] = None,
-        excludes: Optional[Iterable[str]] = None,
-        includes: Optional[Iterable[str]] = None,
+        generator: Serializer | None = None,
+        excludes: Iterable[str] | None = None,
+        includes: Iterable[str] | None = None,
     ) -> 'NodeSerializer':
         """
         Extends and shrinks the dictionary obtained as a result of *serializer*s applied beforehand.
@@ -383,17 +376,17 @@ class NodeSerializer(NodeSerializing):
         """
         excludes = excludes or []
 
-        class EachExtend(Extend[T]):
+        class EachExtend(Extend[_T]):
             @classmethod
             def schema(cls, bound, arg):
                 return signature(generator).return_annotation if generator else Signature.empty
 
-        class EachShrink(Shrink[T]):
+        class EachShrink(Shrink[_T]):
             @classmethod
             def select(cls, td, bound):
                 return excludes, includes
 
-        def convert(cxt) -> EachShrink[EachExtend[T]]:
+        def convert(cxt) -> EachShrink[EachExtend[_T]]:
             ext = generator(cxt) if generator else {}
             vv = cxt.serialize()
             vv.update(**to_rawdict(ext, True))
@@ -407,7 +400,7 @@ class NodeParams:
     def __init__(self, params) -> None:
         self._params: dict[str, Any] = params
 
-    def __getattr__(self, key) -> Optional[Any]:
+    def __getattr__(self, key) -> Any | None:
         """
         Returns a value by key from values passed from invoking scope being bound for the node.
         """
@@ -435,8 +428,8 @@ class NodeContext:
         #: Arbitrary values passed by outside for the node.
         self.params = params
         # Set on demand.
-        self._node: Optional[Node] = None
-        self._iterator: Optional[Iterator[Any]] = None
+        self._node: Node | None = None
+        self._iterator: Iterator[Any] | None = None
 
     def __enter__(self):
         return self
@@ -520,14 +513,14 @@ class SerializationContext:
         self,
         settings: dict[str, NodeSerializer],
         finder: Callable[[type], list[Serializer]],
-        node_params: Optional[dict[str, dict[str, Any]]] = None,
+        node_params: dict[str, dict[str, Any]] | None = None,
     ):
         self.settings: dict[str, NodeSerializer] = settings
         self.finder: Callable[[type], list[Serializer]] = finder
         self._node_params: dict[str, dict[str, Any]] = node_params or {}
         self._context_factories: dict[str, NodeContextFactory] = {}
 
-    def __getitem__(self, node: Union[Node, str]) -> Any:
+    def __getitem__(self, node: Node | str) -> Any:
         """
         Returns an accessor to parameters for given node.
 
@@ -559,7 +552,7 @@ class SerializationContext:
             self.serialize_to(c.name, c, result)
         return result
 
-    def serialize_to(self, name: str, container: Union[NodeContainer, Node.Children], parent: dict[str, Any]) -> None:
+    def serialize_to(self, name: str, container: NodeContainer | Node.Children, parent: dict[str, Any]) -> None:
         """
         Serialize nodes and appends them into the dictionary.
 
@@ -575,7 +568,7 @@ class SerializationContext:
             return
 
         # First, aggregate nodes into its subset or a single node.
-        nodes: Union[list[Node], Node, Any] = ns.aggregator(container.nodes)
+        nodes: list[Node] | Node | Any = ns.aggregator(container.nodes)
 
         if ns.be_singular:
             if isinstance(nodes, list):
@@ -659,8 +652,8 @@ class S(metaclass=SerializerMeta):
     @classmethod
     def of(
         cls,
-        namer: Optional[Union[str, Callable[[str], str]]] = None,
-        aggregator: Optional[Union[Callable[[list[Node]], Node], Callable[[list[Node]], list[Node]]]] = None,
+        namer: str | Callable[[str], str] | None = None,
+        aggregator: Callable[[list[Node]], Node] | Callable[[list[Node]], list[Node]] | None = None,
         *serializers: Serializer,
     ) -> 'NodeSerializer':
         """
@@ -691,7 +684,7 @@ def chain_serializers(serializers: list[Serializer]) -> Serializer:
             t = signature(f).return_annotation
             if t != Signature.empty:
                 try:
-                    t[T]
+                    t[_T]
                     rt = t if rt == Signature.empty else rt[t] # type: ignore
                 except TypeError:
                     try:
