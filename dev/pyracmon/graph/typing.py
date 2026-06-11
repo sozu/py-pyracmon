@@ -1,7 +1,7 @@
 from collections.abc import Callable
 from dataclasses import is_dataclass, fields
 from inspect import Signature
-from typing import Any, TypeVar, Optional, TypedDict, Annotated, Union, get_args, get_origin, get_type_hints, is_typeddict
+from typing import Any, TypeVar, Literal, Optional, TypedDict, Annotated, Union, get_args, get_origin, get_type_hints, is_typeddict, overload
 from types import UnionType
 
 
@@ -66,6 +66,7 @@ def replace_optional_typevar(t: Any, actual: Any) -> Any:
 
     Args:
         t: Annotation value.
+        actual: Actual type to replace the type variable with.
     Returns:
         Annotation value with replaced type variable.
     """
@@ -209,7 +210,7 @@ class Typeable[T]:
     - `spec` is passed through as it is.
     """
     @staticmethod
-    def resolve(typeable, arg: type, spec: Any) -> type:
+    def resolve(typeable, arg: Any, spec: Any) -> type:
         """
         Resolve a `Typeable` type into a concrete type by a type for its type parameter.
 
@@ -368,18 +369,32 @@ def document_type(t: type, doc: str) -> Annotated:
     return Annotated[t, doc]
 
 
-def decompose_document(t: type) -> tuple[type, str]:
-    if get_origin(t) == Annotated:
-        args = get_args(t)
+def decompose_document(hint: Any) -> tuple[Any, str]:
+    """
+    Decomposes a type hint into a type-like object and a document.
+
+    Args:
+        hint: A type hint.
+    Returns:
+        A type-like object and a document.
+    """
+    if get_origin(hint) == Annotated:
+        args = get_args(hint)
         # Annotated must have at least 2 arguments.
         # Last annotated string is used as document.
         t, d = args[0], args[-1]
         return t, d if isinstance(d, str) else d.__doc__
     else:
-        return t, ""
+        return hint, ""
 
 
-def walk_schema(td, with_doc=False) -> dict[str, type | tuple[type, str]]:
+@overload
+def walk_schema(td: Any, with_doc: Literal[False] = False) -> dict[str, type]:
+    ...
+@overload
+def walk_schema(td: Any, with_doc: Literal[True] = True) -> dict[str, tuple[type, str]]:
+    ...
+def walk_schema(td: Any, with_doc = False):
     """
     Returns a dictionary as a result of walking a schema object from its root.
 
@@ -389,10 +404,7 @@ def walk_schema(td, with_doc=False) -> dict[str, type | tuple[type, str]]:
     Returns:
         Key value representation of the schema. If `with_doc` is `True`, each value is `Annotated`.
     """
-    #if '__annotations__' not in td.__dict__:
-    #    return {}
-
-    result: dict[str, type | tuple[type, str]] = {}
+    result: dict[str, Any] = {}
 
     def put(k: str, t: type, doc: str):
         if with_doc:
@@ -400,20 +412,20 @@ def walk_schema(td, with_doc=False) -> dict[str, type | tuple[type, str]]:
         else:
             result[k] = t
 
-    def expand(t: type) -> tuple[type, Callable]:
+    def handle_type(t: Any) -> tuple[Any, Callable]:
+        # Convert a type hint into a type-like object and a function to represent it in the result.
         return (get_args(t)[0], lambda x:[x]) if issubgeneric(t, list) else (t, lambda x:x)
 
-    for k, t in get_type_hints(td, include_extras=True).items():
-        t, doc = decompose_document(t)
-
-        t, conv = expand(t)
+    for k, hint in get_type_hints(td, include_extras=True).items():
+        t, doc = decompose_document(hint)
+        t, conv = handle_type(t)
 
         opt_type = is_optional(t)
 
-        if is_typeddict(t):
-            put(k, conv(walk_schema(t, with_doc)), doc)
-        elif opt_type is not None and is_typeddict(opt_type):
-            put(k, conv(walk_schema(opt_type, with_doc)), doc)
+        # TypedDict should be walked recursively to generate schema of nested objects.
+        core_type = opt_type or t
+        if is_typeddict(core_type):
+            put(k, conv(walk_schema(core_type, with_doc)), doc)
         else:
             put(k, conv(t), doc)
     

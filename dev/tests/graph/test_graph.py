@@ -1,6 +1,6 @@
 import pytest
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.identify import *
+from pyracmon.graph.identify import HierarchicalPolicy, AlwaysPolicy, NeverPolicy
 from pyracmon.graph.graph import *
 
 
@@ -29,7 +29,6 @@ class TestNode:
         t = self._template()
         na = Node(t.a, 1, 1, 0)
         nb = Node(t.b, 2, 2, 0)
-        nc = Node(t.c, 3, 3, 0)
 
         na.add_child(nb)
 
@@ -63,6 +62,25 @@ class TestNode:
         assert not na.has_child(nb1) and not na.has_child(nb2)
         na.add_child(nb1)
         assert na.has_child(nb1) and not na.has_child(nb2)
+
+    def test_asdict(self):
+        t = self._template()
+        na = Node(t.a, 1, 1, 0)
+        for i in range(3):
+            nb = Node(t.b, 10+i, 10+i, i)
+            na.add_child(nb)
+            for j in range(2):
+                nc = Node(t.c, 100+i*10+j, 100+i*10+j, j)
+                nb.add_child(nc)
+
+        assert na.asdict() == {
+            "": 1,
+            "b": [
+                {"": 10, "c": [{"": 100}, {"": 101}]},
+                {"": 11, "c": [{"": 110}, {"": 111}]},
+                {"": 12, "c": [{"": 120}, {"": 121}]},
+            ],
+        }
 
 
 class TestNodeView:
@@ -185,8 +203,12 @@ class TestNodeContainer:
         assert container.name == "a"
 
     def _prepare(self, policy) -> tuple[NodeContainer, NodeContainer, list[Node], list[Node]]:
+        # a - b
+        # 0 - [10, 11]
+        # 1 - [10, 11]
+        # 2 - [10, 11]
         t = self._template(policy)
-        ca = NodeContainer(t.a); cb = NodeContainer(t.b)
+        ca, cb = NodeContainer(t.a), NodeContainer(t.b)
         nas = [Node(t.a, i, i, i) for i in range(3)]
         nbs = [Node(t.b, 10+(i%2), 10+(i%2), i) for i in range(6)]
         for i in range(3):
@@ -357,6 +379,14 @@ class TestNodeContainer:
             assert [(na(), [nb() for nb in na.b]) for na in ca.view] == [(0, [10, 11, 12, 12]), (1, [10, 11]), (2, [10, 11, 12])]
             assert anc == {"a":[nas[0], nas[2]], "b": [cb.nodes[7], cb.nodes[8]]}
 
+    def test_aslist(self):
+        ca, cb, nas, nbs = self._prepare("hierarchy")
+
+        assert ca.aslist() == [
+            {"": 0, "b": [{"": 10, "d": []}, {"": 11, "d": []}], "c": []},
+            {"": 1, "b": [{"": 10, "d": []}, {"": 11, "d": []}], "c": []},
+            {"": 2, "b": [{"": 10, "d": []}, {"": 11, "d": []}], "c": []},
+        ]
 
 class TestNodeContainerReplace:
     def _template(self):
@@ -577,6 +607,46 @@ class TestGraph:
         assert [n() for n in v.d] == [1, 1]
         assert [[m() for m in n.b] for n in v.a] == [[0, 1], [1], [2]]
         assert [[[l() for l in m.d] for m in n.b] for n in v.a] == [[[], [1]], [[1]], [[]]]
+
+    def test_asdict(self):
+        t = self._template("hierarchy")
+        graph = Graph(t)
+
+        graph.append(a=0, b=10, c=20, d=30)
+        graph.append(a=0, b=10, c=21, d=31)
+        graph.append(a=0, b=11, c=21, d=30)
+        graph.append(a=0, b=11, c=22, d=30)
+        graph.append(a=0, b=12, c=22, d=30)
+        graph.append(a=0, b=11, c=22, d=32)
+        graph.append(a=1, b=10, c=20, d=30)
+        graph.append(a=2, b=10, c=20, d=30)
+        graph.append(a=2, b=10, c=21, d=31)
+
+        assert graph.asdict() == {
+            "a": [
+                {
+                    "": 0,
+                    "b": [
+                        {"": 10, "d": [{"": 30}, {"": 31}]},
+                        {"": 11, "d": [{"": 30}, {"": 32}]},
+                        {"": 12, "d": [{"": 30}]}
+                    ],
+                    "c": [{"": 20}, {"": 21}, {"": 22}]
+                },
+                {
+                    "": 1,
+                    "b": [
+                        {"": 10, "d": [{"": 30}]}
+                    ],
+                    "c": [{"": 20}],
+                },
+                {
+                    "": 2,
+                    "b": [{"": 10, "d": [{"": 30}, {"": 31}]}],
+                    "c": [{"": 20}, {"": 21}]
+                },
+            ]
+        }
 
 
 class TestGraphReplace:

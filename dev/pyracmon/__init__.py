@@ -1,5 +1,5 @@
 """
-Base module of pyracmon exporting commonly used objects.  Use `*` simply to import them.
+Base module of pyracmon, exporting commonly used objects. Import them all with `*`.
 
 >>> from pyracmon import *
 """
@@ -25,6 +25,7 @@ from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.schema import document_type, Typeable, GraphSchema
 from pyracmon.graph.serialize import NodeContext
 from pyracmon.graph.typing import walk_schema
+from pyracmon.graph.typed import TNode, TGraph, TypedGraph, new_typed_graph, dump_typed_graph
 from pyracmon.testing import TestingMixin
 
 
@@ -73,6 +74,11 @@ __all__ = [
     "graph_template",
     "graph_dict",
     "graph_schema",
+    "TNode",
+    "TGraph",
+    "TypedGraph",
+    "new_typed_graph",
+    "dump_typed_graph",
 ]
 
 
@@ -92,16 +98,19 @@ def declare_models(
     write_stub: bool = False,
 ) -> list[type[M]]:
     """
-    Declare model types read from database into the specified module.
+    Declare model types read from the database into the specified module.
 
     Args:
-        dialect: A module exporting `read_schema` function and `mixins` classes.
+        dialect: A module exporting a `read_schema` function and `mixins` classes.
             `pyracmon.dialect.postgresql` and `pyracmon.dialect.mysql` are available.
-        db: Connection already connected to database.
-        module: A module or module name where the declarations will be located.
+        db: A `Connection` already connected to the database.
+        module: A module, or its name, where the declared model types are defined.
         mixins: Additional mixin classes for declaring model types.
-        excludes: Excluding table names.
-        includes: Including table names. When this argument is omitted, all tables except for specified in `excludes` are declared.
+        excludes: Table names to exclude.
+        includes: Table names to include. When this argument is omitted, all tables except those specified in `excludes` are declared.
+        testing: If `True`, declared models additionally inherit `TestingMixin`.
+        model_type: Base model type that declared models inherit.
+        write_stub: If `True`, writes stub files for the declared models via `output_stub`.
     Returns:
         Declared model types.
     """
@@ -122,12 +131,12 @@ def declare_models(
 
 def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
     """
-    Create a graph template on the default `GraphSpec` which handles model object in appropriate ways.
+    Create a graph template on the default `GraphSpec`, which handles model objects appropriately.
 
-    See `pyracmon.graph.GraphSpec.new_template` for the detail of definitions.
+    See `pyracmon.graph.GraphSpec.new_template` for details on definitions.
 
     Args:
-        bases: Base templates whose properties and relations are merged into new template.
+        bases: Base templates whose properties and relations are merged into the new template.
         definitions: Definitions of template properties.
     Returns:
         Graph template.
@@ -137,9 +146,9 @@ def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
 
 def graph_dict(graph: GraphView, **settings: NodeSerializer) -> dict[str, Any]:
     """
-    Serialize a graph into a `dict` under the default `GraphSpec` .
+    Serialize a graph into a `dict` under the default `GraphSpec`.
 
-    See `pyracmon.graph.GraphSpec.to_dict` for the detail of serialization settings.
+    See `pyracmon.graph.GraphSpec.to_dict` for details on serialization settings.
 
     Args:
         graph: A view of the graph.
@@ -152,12 +161,12 @@ def graph_dict(graph: GraphView, **settings: NodeSerializer) -> dict[str, Any]:
 
 def graph_schema(template: GraphTemplate, **settings: NodeSerializer) -> GraphSchema:
     """
-    Creates `GraphSchema` under the default `GraphSpec` .
+    Creates a `GraphSchema` under the default `GraphSpec`.
 
-    See `pyracmon.graph.GraphSpec.to_schema` for the detail of serialization settings.
+    See `pyracmon.graph.GraphSpec.to_schema` for details on serialization settings.
 
     Args:
-        template: A template of serializing graph.
+        template: The template of the graph to serialize.
         settings: Serialization settings where each key denotes a node name.
     Returns:
         Schema of serialization result.

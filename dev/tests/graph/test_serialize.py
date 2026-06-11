@@ -1,14 +1,15 @@
-from pyracmon.graph.spec import GraphSpec
+# pyright: reportUnusedExpression=false
 import pytest
 from dataclasses import dataclass
-from typing import Generic, TypeVar, get_type_hints, get_args, get_origin
+from typing import Any, Generic, TypedDict, TypeVar, get_type_hints, get_args, get_origin, is_typeddict
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
+from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.identify import HierarchicalPolicy
-from pyracmon.graph.serialize import *
 from pyracmon.graph.schema import Typeable, issubgeneric
-from pyracmon.graph.typing import TypedDict
+from pyracmon.graph.typing import walk_schema
+from pyracmon.graph.serialize import NodeSerializer, S, NodeContextFactory, SerializationContext, NodeContext
 
 
 template = GraphTemplate([("x", object, None, None)])
@@ -219,9 +220,9 @@ class TestEach:
             return cxt.value
         def f1(cxt) -> int:
             return cxt.value
-        def f2[T](cxt) -> G[T]:
+        def f2[T](cxt) -> G[T]: # type: ignore
             return cxt.value
-        def f3[T](cxt) -> G[T]:
+        def f3[T](cxt) -> G[T]: # type: ignore
             return cxt.value
 
         s = NodeSerializer().each(f0).each(f1).each(f2).each(f3).serializer
@@ -274,6 +275,18 @@ class TestSub:
                     "a0": 2, "a1": 3,
                     "b": [{ "b0": 12, "b1": 13, "d": [31]}],
                     "c": [21],
+                },
+            ]
+        }
+        typ = signature(s).return_annotation
+        assert issubgeneric(typ, Typeable)
+        schema = Typeable.resolve(typ, sub, GraphSpec())
+        assert is_typeddict(schema)
+        assert walk_schema(schema) == {
+            "a": [
+                {
+                    "b": [{"d": [int]}],
+                    "c": [int],
                 },
             ]
         }
@@ -346,8 +359,6 @@ class TestContext:
 
         return graph.view
 
-    # TODO test_reuse
-
     def test_no_serializer(self):
         cxt = SerializationContext(dict(), lambda t:[])
         r = cxt.execute(self._graph())
@@ -374,8 +385,6 @@ class TestContext:
             d=S.of(),
         ), lambda t: [])
         r = cxt.execute(self._graph())
-
-        print(r)
 
         assert r == {"a": [
             {"A": 0, "b": [{"B": 10, "d": [30, 31]}]},
@@ -490,7 +499,7 @@ class TestContext:
             {"A": 2, "B": 3, "C": 4, "D": 6},
         ]}
 
-    def test_alter_shrink(self):
+    def test_alter_excludes(self):
         cxt = SerializationContext(dict(
             a=S.each(lambda cxt: {"A": cxt.value, "B": cxt.value+1, "C": cxt.value+2}).alter(excludes=["B"]),
         ), lambda t: [])

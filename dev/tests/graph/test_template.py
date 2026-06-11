@@ -1,5 +1,6 @@
+# pyright: reportUnusedExpression=false
 import pytest
-from pyracmon.graph.template import *
+from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.identify import IdentifyPolicy
 
 
@@ -34,8 +35,8 @@ class TestCreateGraphTemplate:
             ])
 
 
-class TestCopiedProperty:
-    def test_copy_property(self):
+class TestMoveProperty:
+    def test_move_property(self):
         t = GraphTemplate([
             ("a", int, None, None),
             ("b", int, None, None),
@@ -55,8 +56,9 @@ class TestCopiedProperty:
         assert u.d.parent is u.f
         assert u.c.parent is u.d
         assert u.e.parent is u.c
+        assert u.c is not t.c
 
-    def test_copy_template(self):
+    def test_move_template(self):
         t = GraphTemplate([
             ("a", int, None, None),
             ("b", int, None, None),
@@ -74,6 +76,7 @@ class TestCopiedProperty:
         assert list(u) == [u.e, u.f, u.d]
         assert u.d.parent is u.f
         assert u.e.parent is None
+        assert u.d.kind is t
 
 
 class TestShift:

@@ -1,36 +1,38 @@
 """
-This module exports model mixin types having model methods available in some RDBMS.
+This module exports model mixin types that provide methods available in certain RDBMSs.
 """
-from collections.abc import Sequence
-from typing import Any
-from typing_extensions import Self
+from collections.abc import Sequence, Mapping
+from typing import Any, TypeVar
 from ..connection import Connection
 from ..clause import values
 from ..model import model_values, check_columns
-from ..mixin import CRUDInternalMeta
+from ..mixin import CRUDMixinBase
 from ..util import key_to_index, Qualifier
 
 
-class MultiInsertMixin(CRUDInternalMeta):
+M = TypeVar('M', bound='MultiInsertMixin')
+
+
+class MultiInsertMixin(CRUDMixinBase):
     """
-    This class provides methods to execute queries which is not standard SQL but common to some RDBMS.
+    This class provides methods to execute queries that are not standard SQL but are common across several RDBMSs.
     """
     @classmethod
     def inserts(
-        cls,
+        cls: type[M],
         db: Connection,
-        rows: Sequence[Self | dict[str, Any]],
-        qualifier: dict[str, Qualifier] = {},
+        rows: Sequence[M | dict[str, Any]],
+        qualifier: Mapping[str, Qualifier] = {},
         rows_per_insert: int = 1000,
     ) -> int:
         """
         Insert multiple records.
 
         Args:
-            db: DB connection.
-            rows: Rows to insert. Each item should be a model object or dictionary of columns and values.
-            qualifier: Functions qualifying placeholder markers.
-            rows_per_insert: Maximum number of rows to insert in one query execution.
+            db: The DB connection.
+            rows: The rows to insert. Each item should be a model object or a dictionary of columns and values.
+            qualifier: A mapping from column names to functions that qualify their placeholder markers.
+            rows_per_insert: The maximum number of rows to insert per query execution.
         Returns:
             The number of inserted rows.
         """
@@ -78,4 +80,10 @@ class MultiInsertMixin(CRUDInternalMeta):
 class TruncateMixin:
     @classmethod
     def truncate(cls, db: Connection):
+        """
+        Truncate the table associated with this model.
+
+        Args:
+            db: The DB connection.
+        """
         raise NotImplementedError()

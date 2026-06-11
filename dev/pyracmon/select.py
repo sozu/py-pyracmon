@@ -1,30 +1,22 @@
 """
 This module exports types and functions used for `SELECT` queries.
 
-Main purpose is providing a type which contains information of selecting columns,
-i.e. which columns are selected and how they are rendered in the query.
-Using the same instance of the type in both of query genration and reading results enables consistent reconstruction of model objects.
-
 In most cases, classes of this module should not be used directly.
-The use of `SelectMixin.select` and `read_row` is sufficient way to benefit from this module.
+The use of `SelectMixin.select` and `read_row` is a sufficient way to benefit from this module.
 """
 from collections.abc import Iterator
-from typing import Any, TypeVar, Generic, Literal, Protocol, cast, overload
+from typing import Any, Literal, cast, overload
 from typing_extensions import Self
 from .model import Model, Column
 from .query import Q, QueryableT
 
 
-S = TypeVar('S')
-M = TypeVar('M', bound=Model)
-
-
 class AliasedColumn(QueryableT[Any]): # type: ignore
     """
-    The representation of column and the alias of its belonging table.
+    A representation of a column and the alias of the table it belongs to.
 
-    The instance of this class works as `Q` 's attribute as well.
-    i.e. Condition on the column can be generated similarly to 'Q' via methods like `eq` .
+    An instance of this class also works as an attribute of `Q`.
+    i.e., a condition on the column can be generated similarly to `Q`, via methods like `eq`.
 
     ```python
     >>> c = AliasedColumn("t", "col")
@@ -33,9 +25,9 @@ class AliasedColumn(QueryableT[Any]): # type: ignore
     ```
     """
     def __init__(self, alias: str, column: Column | str) -> None:
-        #: Alias string.
+        #: The alias string.
         self.alias = alias
-        #: Column name or schema.
+        #: The column name or schema.
         self.column = column
 
     def __hash__(self) -> int:
@@ -50,7 +42,7 @@ class AliasedColumn(QueryableT[Any]): # type: ignore
     @property
     def name(self) -> str:
         """
-        Aliased column name. If alias is empty, column name is returns as it is.
+        The aliased column name. If the alias is empty, the column name is returned as is.
         """
         if isinstance(self.column, Column):
             return f"{self.alias}.{self.column.name}" if self.alias else self.column.name
@@ -65,17 +57,27 @@ class AliasedColumn(QueryableT[Any]): # type: ignore
         return invoke
 
 
-class Aliased(Generic[M]):
+class Aliased[M: Model]:
     """
     A wrapper of a model type with an alias for it.
     """
     def __init__(self, alias: str, model: type[M]) -> None:
-        #: Alias string.
+        #: The alias string.
         self.alias = alias
-        #: Model type.
+        #: The model type.
         self.model = model
 
     def __getattr__(self, key: str) -> AliasedColumn:
+        """
+        Returns an aliased column for the given column name.
+
+        Args:
+            key: The name of the column.
+        Returns:
+            An `AliasedColumn` instance.
+        Raises:
+            KeyError: If the column name is not valid for the model.
+        """
         try:
             col = next(filter(lambda c: c.name == key, self.model.columns))
             return AliasedColumn(self.alias, col)
@@ -84,17 +86,19 @@ class Aliased(Generic[M]):
 
     def select(self, includes: list[str] = [], excludes: list[str] = []) -> 'Selection[M]':
         """
-        Creates a selection object containing selected columns in the model.
+        Creates a selection object containing the selected columns of the model.
 
         Args:
-            includes: Column names to select. All columns except specified in `excludes` are selected if empty.
-            excludes: Column names not to select.
+            includes: The column names to select. If empty, all columns except those specified in `excludes` are selected.
+            excludes: The column names not to select.
         Returns:
-            Selection object.
+            A `Selection` object.
         """
-        columns = [c for c in self.model.columns if c.name not in excludes] \
-            if not bool(includes) else \
-                [c for c in self.model.columns if c.name not in excludes and c.name in includes]
+        columns = (
+            [c for c in self.model.columns if c.name not in excludes]
+            if not bool(includes) else
+            [c for c in self.model.columns if c.name not in excludes and c.name in includes]
+        )
         return cast(Selection[M], Selection(self.model, self.alias, columns))
 
 
@@ -147,14 +151,14 @@ class EmptyConsumable(Consumable):
         return values[0]
 
 
-class Selection(Consumable, Generic[S]):
+class Selection[S](Consumable):
     """
-    A representation of table and its columns used in query.
+    A representation of a table and its columns, used in a query.
 
     This class is designed to be a bridge from query generation to reading results.
-    String expression of the instance is comma-separated column names prepended with alias, which can be embedded in the select query.
+    The string expression of the instance is a comma-separated list of column names prepended with the alias, which can be embedded in the SELECT query.
 
-    Due to `SelectMixin`, factory method is available on every model type.
+    Due to `SelectMixin`, a factory method is available on every model type.
 
     ```python
     >>> s1 = table1.select("t1", includes = ["col11", "col12"])
@@ -176,17 +180,17 @@ class Selection(Consumable, Generic[S]):
     ```
     """
     def __init__(self, table: type[S], alias: str, columns: list[Column]):
-        #: Model type.
+        #: The model type.
         self.table = table
         #: An alias.
         self.alias = alias
-        #: Columns to select.
+        #: The columns to select.
         self.columns = columns
 
     @property
     def name(self) -> str:
         """
-        Returns alias or name of the table.
+        The alias, if set; otherwise the name of the table.
         """
         return self.alias if self.alias else cast(type[Model], self.table).name
 
@@ -214,37 +218,51 @@ class Selection(Consumable, Generic[S]):
         Construct a model object from a row.
 
         Args:
-            values: Values of row. The length must be equal to the number of columns in this.
+            values: The values from a row. The length must equal the number of columns in this selection.
         Returns:
-            Model object where column values obtained from the row are set. 
+            A model object with the column values from the row set on it.
         """
         return self.table(**dict([(c.name, v) for c, v in zip(self.columns, values)]))
 
 
 class FieldExpressions:
     """
-    The instance of this class works as the composition of selections.
+    The composition of `Selection` objects, used in both query construction and reading results.
 
-    `+` operation on `Selection` s creates an instance of `FieldExpressions`. Each selection can be accessed via attributes of its name.
-    Also, `FieldExpression` can be extended by `+=`.
+    A `FieldExpressions` instance is created by adding (`+`) `Selection` objects.
+    It can be embedded in the SELECT query directly.
 
     ```python
-    >>> exp = table1.select("t1", includes=["col11", "col12"]) + table2.select("t2")
+    >>> exp: FieldExpressions = table1.select("t1", includes=["col11", "col12"]) + table2.select("t2")
     >>> c.execute(f"SELECT {exp} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
-    >>> for row in c.fetchall():
-    >>>     r = read_row(row, *exp)
-    >>>     assert isinstance(r.t1, table1)
-    >>>     assert isinstance(r.t2, table2)
     ```
 
-    Here, empty tuple and string are also available instead of `Selection` instance.
-    They are replaced with index arguments (tuple) or keywords arguments (string) respectively by the invocation of the instance.
+    Also, an empty tuple (`()`) and a string can be added as well.
+    These items are replaced, respectively, with the positional and keyword arguments used to invoke the instance.
+    An arbitrary string can be used for each argument, and it is embedded in the query as is.
 
     ```python
     >>> exp = table1.select("t1", includes=["col11", "col12"]) + () + "a" + () + "b"
     >>> f"{exp("t2.col21", "t2.col23", a="t2.col22", b="t2.col24")}"
     t1.col11, t1.col12, t2.col21, t2.col22, t2.col23, t2.col24
     ```
+
+    The rows obtained by the query can be read according to the internal `Selection` objects, by passing the instance to `read_row`,
+    which returns a `RowValues` instance that exposes the values corresponding to the `Selection` objects as attributes named after them.
+
+    ```python
+    >>> exp = table1.select("t1", includes=["col11", "col12"]) + table2.select("t2") + "now"
+    >>> c.execute(f"SELECT {exp(now='now()')} FROM table1 AS t1 INNER JOIN table2 AS t2 ON ...")
+    >>> for row in c.fetchall():
+    >>>     r: RowValues = read_row(row, *exp)
+    >>>     assert isinstance(r.t1, table1)
+    >>>     assert isinstance(r.t2, table2)
+    >>>     assert isinstance(r.now, datetime)
+    ```
+
+    The example above shows the usage of `FieldExpressions` in both query construction and reading results.
+    Because it knows the structure of the selected rows, it can reconstruct model objects by consuming as many values as needed.
+    Like `Selection` objects, items added as strings are also available via the attributes, and their types are determined by how the DB driver returns them.
     """
     def __init__(self):
         self.__selections: list[Consumable] = []
@@ -256,7 +274,7 @@ class FieldExpressions:
         exp += other
         return exp
 
-    def __iadd__(self, other) -> Self:
+    def __iadd__(self, other: 'Selection | FieldExpressions | str | tuple') -> Self:
         if isinstance(other, Selection):
             self.__selections.append(other)
             self.__keys[other.name] = other
@@ -270,7 +288,7 @@ class FieldExpressions:
         elif other == ():
             self.__selections.append(EmptyConsumable())
         else:
-            raise ValueError(f"Operand of + for FieldExpressions must be a Selection or FieldExpressions but {type(other)} is given.")
+            raise ValueError(f"Operand of + for FieldExpressions must be a Selection, FieldExpressions, str, or tuple but {type(other)} is given.")
         return self
 
     def __getitem__(self, index: int) -> Consumable:
@@ -310,33 +328,19 @@ class FieldExpressions:
 
 class RowValues:
     """
-    This class provides attribute access to each row in query result.
+    Holds the values of a row in a query result and provides attribute access to reconstructed values.
 
-    Each instance returned by `read_row` behaves as if it is a list of consumed values of containing `Selection` s.
-    Index access returns the value at the index and iteration yields values in order.
-
-    ```python
-    >>> exp = table1.select("t1"), table2.select()
-    >>> r = read_row(row, *exp)
-    >>> r[0]
-    ...
-    >>> [v for v in r]
-    ...
-    ```
-
-    It also exposes attributes returns a `Selection` by its alias or table name.
-
-    ```python
-    >>> r.t1
-    ...
-    >>> r.table2
-    ...
-    ```
-
-    Args:
-        selections: List of selections which assign each value in row to a column.
+    A `RowValues` instance basically works as a list of the values in a row, and provides basic list operations like iteration and indexing.
+    Additionally, its attributes are reconstructed values corresponding to the `Selection` objects.
+    See `FieldExpressions` for details about the feature.
     """
     def __init__(self, selections: list[Consumable]):
+        """
+        Initializes the instance with the given selections.
+
+        Args:
+            selections: A list of selections used to construct the query.
+        """
         self._key_map = dict([(s.name, i) for i, s in enumerate(selections) if s.name is not None])
         self._values = []
 
@@ -357,29 +361,30 @@ class RowValues:
 
     def append(self, value: Any):
         """
-        Appends a value in the row.
+        Appends a value to the row.
 
         Args:
-            value: A value in the row.
+            value: The value to append.
         """
         self._values.append(value)
 
 
 def read_row(row, *selections: Consumable | str | tuple, allow_redundancy: bool = False) -> RowValues:
     """
-    Read values in a row according to given selections.
+    Read the values from a row according to the given selections.
 
-    This function returns `RowValues` where each value is created by each selection respectively.
-    The type of the selection determines how values in the row are handled:
+    This function returns a `RowValues` instance, in which each value is created by the corresponding selection.
+    The type of the selection determines how the values in the row are handled:
 
-    - `Selection` consumes as many values as the number of columns in it and creates a model instance.
-    - Empty tuple or a string consumes a value, which is stored in `RowValues` as it is.
+    - A `Selection` consumes as many values as the number of columns in it, and creates a model instance.
+    - An empty tuple or a string consumes a value, which is stored in the result as is.
 
     Args:
-        selections: List of selections or their equivalents.
-        allow_redundancy: If `False`, `ValueError` is thrown when not all values in a row are consumed.
+        row: A row of the query result.
+        selections: A list of selections or their equivalents.
+        allow_redundancy: If `False`, a `ValueError` is raised when not all values in the row are consumed.
     Returns:
-        Values read from the row accoding to the selections.
+        The values read from the row according to the selections.
     """
     consumables = [Consumable.to_consumable(s) for s in selections]
 
@@ -396,6 +401,9 @@ def read_row(row, *selections: Consumable | str | tuple, allow_redundancy: bool 
 
 
 class SelectMixin:
+    """
+    A mixin class that provides every model type with a method to select its columns.
+    """
     @overload
     @classmethod
     def select(cls, alias: str = "", includes: list[str] = [], excludes: list[str] = [], single: Literal[False] = False) -> FieldExpressions: ...
@@ -405,14 +413,15 @@ class SelectMixin:
     @classmethod
     def select(cls, alias: str = "", includes: list[str] = [], excludes: list[str] = [], single: bool = False):
         """
-        Default mixin class of every model type providing method to generate `Selection` by Selecting columns with alias.
+        Generates a `Selection` for the columns of this model type, with the given alias.
 
         Args:
             alias: An alias string of this table.
-            includes: Column names to select. All columns except specified in `excludes` are selected if empty.
-            excludes: Column names not to select.
+            includes: The column names to select. If empty, all columns except those specified in `excludes` are selected.
+            excludes: The column names not to select.
+            single: If `True`, only a `Selection` of this table is returned. Otherwise, the `Selection` is wrapped in `FieldExpressions`.
         Returns:
-            Selection object.
+            A `FieldExpressions` instance, or a single `Selection`.
         """
         if single:
             return Aliased(alias, cast(type, cls)).select(includes, excludes)

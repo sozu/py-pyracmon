@@ -6,6 +6,8 @@ from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 from uuid import UUID
 from itertools import groupby
+from typing import Any
+from pyracmon.config import TypeMap
 from pyracmon.connection import Connection
 from pyracmon.model import Table, Column, ForeignKey, Relations
 from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
@@ -18,13 +20,13 @@ SequencePattern = re.compile(r"nextval\(\'([a-zA-Z0-9_]+)\'(\:\:regclass)?\)")
 
 def read_schema(db: Connection, excludes: list[str] | None = None, includes: list[str] | None = None) -> list[Table]:
     """
-    Collect tables in current database.
+    Collect the tables in the current database.
 
     Args:
-        excludes: Excluding table names.
-        includes: Including table names. If not specified, all tables are collected.
+        excludes: Table names to exclude.
+        includes: Table names to include. If not specified, all tables are collected.
     Returns:
-        Table schemas.
+        The table schemas.
     """
     q = Q(excludes = excludes, includes = includes)
 
@@ -58,26 +60,27 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
         ORDER BY c.table_name ASC, c.ordinal_position ASC
         """, *params)
 
-    def map_types(t, udt):
-        base = db.context.config.type_mapping
-        ptype = base and base(t, udt_name=udt)
-        return ptype or _map_types(t)
+    #def map_types(t, udt):
+    #    base = db.context.config.type_mapping
+    #    ptype = base and base(t, udt_name=udt)
+    #    return ptype or _map_types(t)
 
-    def column_of(n, t, udt, nullable, et, eudt, constraint, default, pos):
-        m = SequencePattern.match(default or "")
-        cs = (constraint or "").split(',')
-        seq = m.group(1) if m else None
-        null = nullable == 'YES'
-        ptype = map_types(t, udt) if t != 'ARRAY' else list[map_types(et, eudt)]
-        info = (t, udt) if t != 'ARRAY' else (et, eudt)
-        return Column(n, ptype, info, 'PRIMARY KEY' in cs, Relations() if 'FOREIGN KEY' in cs else None, seq, null)
+    #def column_of(n, t, udt, nullable, et, eudt, constraint, default, pos):
+    #    m = SequencePattern.match(default or "")
+    #    cs = (constraint or "").split(',')
+    #    seq = m.group(1) if m else None
+    #    null = nullable == 'YES'
+    #    ptype = map_types(t, udt) if t != 'ARRAY' else list[map_types(et, eudt)]
+    #    info = (t, udt) if t != 'ARRAY' else (et, eudt)
+    #    return Column(n, ptype, info, 'PRIMARY KEY' in cs, Relations() if 'FOREIGN KEY' in cs else None, seq, null)
 
-    tables = []
+    tables: list[Table] = []
     column_positions = {}
+    base_mapping = db.context.config.type_mapping
 
     for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
         cols = list(cols)
-        columns = [column_of(*c[1:]) for c in cols]
+        columns = [_to_column(base_mapping, *c[1:]) for c in cols]
         tables.append(Table(t, columns))
         column_positions[t] = {c[1]:c[-1] for c in cols}
 
@@ -102,6 +105,7 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
         col_from = table_from.find(row[1]) if table_from else None
 
         if col_from:
+            assert col_from.fk is not None
             table_to = table_map.get(row[2], None)
             col_to = table_to.find(row[3]) if table_to else None
             col_from.fk.add(ForeignKey(table_to or row[2], col_to or row[3]))
@@ -127,14 +131,14 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
             c.oid ASC, a.attnum ASC
         """, *params)
 
-    def mv_column_of(n, not_null, udt, eudt, pos):
-        ptype = map_types(_map_alternates(udt), udt) if eudt is None else list[map_types(_map_alternates(eudt), eudt)]
-        info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
-        return Column(n, ptype, info, False, None, None, not not_null)
+    #def mv_column_of(n, not_null, udt, eudt, pos):
+    #    ptype = map_types(_map_alternates(udt), udt) if eudt is None else list[map_types(_map_alternates(eudt), eudt)]
+    #    info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
+    #    return Column(n, ptype, info, False, None, None, not not_null)
 
     for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
         cols = list(cols)
-        columns = [mv_column_of(*c[1:]) for c in cols]
+        columns = [_to_mv_column(base_mapping, *c[1:]) for c in cols]
         tables.append(Table(t, columns))
         column_positions[t] = {c[1]:c[-1] for c in cols}
 
@@ -171,7 +175,79 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
     return tables
 
 
-def _map_types(t):
+def _to_type(base: TypeMap | None, t: str | None, udt: str | None) -> type:
+    """
+    Converts a database type to a Python type.
+
+    Args:
+        base: A type mapping function.
+        t: The type name in the database.
+        udt: The user-defined type name in the database, if any.
+    Returns:
+        The Python type corresponding to the database type.
+    """
+    ptype = base and base(t, udt_name=udt)
+    return ptype or _map_types(t)
+
+
+def _to_column(
+    base: TypeMap | None,
+    n: str, t: str, udt: str | None, nullable: bool, et: str | None, eudt: str | None, constraint: str | None, default: str | None, pos: int,
+) -> Column:
+    """
+    Creates a column schema from information about a database column.
+
+    Args:
+        n: The column name.
+        t: The type name in the database.
+        udt: The user-defined type name in the database, if any.
+        nullable: Whether the column is nullable.
+        et: The element type name in the database, if the column is an array.
+        eudt: The user-defined element type name in the database, if any.
+        constraint: The column's constraint types, as a comma-separated string.
+        default: The default value of the column.
+        pos: The position of the column in the table.
+    Returns:
+        The created column schema.
+    """
+    # Check auto-increment by whether default value is nextval of a sequence.
+    m = SequencePattern.match(default or "")
+    seq = m.group(1) if m else None
+
+    # Expand constraints such as "PRIMARY KEY", "FOREIGN KEY".
+    cs = (constraint or "").split(',')
+
+    # Check nullability.
+    null = nullable == 'YES'
+
+    # Get python type of the column.
+    ptype = _to_type(base, t, udt) if t != 'ARRAY' else list[_to_type(base, et, eudt)]
+
+    # Pass type information as is for later use.
+    info = (t, udt) if t != 'ARRAY' else (et, eudt)
+
+    return Column(n, ptype, info, 'PRIMARY KEY' in cs, Relations() if 'FOREIGN KEY' in cs else None, seq, null)
+
+
+def _to_mv_column(base: TypeMap | None, n: str, not_null: bool, udt: str | None, eudt: str | None, pos: int) -> Column:
+    """
+    Creates a column schema for a materialized view, from information about a database column.
+
+    Args:
+        n: The column name.
+        not_null: Whether the column is non-nullable.
+        udt: The user-defined type name in the database, if any.
+        eudt: The user-defined element type name in the database, if any.
+        pos: The position of the column in the table.
+    Returns:
+        The created column schema.
+    """
+    ptype = _to_type(base, _map_alternates(udt), udt) if eudt is None else list[_to_type(base, _map_alternates(eudt), eudt)]
+    info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
+    return Column(n, ptype, info, False, None, None, not not_null)
+
+
+def _map_types(t) -> type:
     if t == "boolean":
         return bool
     elif t == "real" or t == "double precision":
@@ -195,9 +271,9 @@ def _map_types(t):
     elif t == "uuid":
         return UUID
     elif t == "json" or t == "jsonb":
-        return dict
+        return Any # type: ignore
     else:
-        return object
+        return Any # type: ignore
 
 
 def _map_alternates(n):
@@ -229,7 +305,7 @@ def _map_alternates(n):
 
 class PostgreSQLMixin(MultiInsertMixin, TruncateMixin):
     """
-    Model mixin whose methods are available in PostgreSQL.
+    A model mixin whose methods are available in PostgreSQL.
     """
     @classmethod
     def last_sequences(cls, db: Connection, num: int) -> list[tuple[Column, int]]:

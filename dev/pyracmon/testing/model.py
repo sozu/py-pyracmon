@@ -1,15 +1,16 @@
+from collections.abc import Mapping
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid1, uuid3
-from typing import TypeVar, Any, overload, TYPE_CHECKING
-from typing_extensions import Self
+from typing import TypeVar, Any, Self, overload, TYPE_CHECKING
 from pyracmon.config import PyracmonConfiguration
 from pyracmon.connection import Connection
 from pyracmon.mixin import CRUDMixin
-from pyracmon.model import Model
+from pyracmon.model import Model, Table, Column
 from pyracmon.graph.typing import issubgeneric
 from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
+from pyracmon.util import Qualifier
 from .util import default_test_config, Matcher
 
 
@@ -47,7 +48,7 @@ class TestingMixin(TestingModel):
     Mixin class for model types providing methods designed for testing.
     """
     @classmethod
-    def by(cls, index: int) -> Self:
+    def by(cls: type[M], index: int) -> M:
         """
         Set current fixture index.
 
@@ -62,65 +63,72 @@ class TestingMixin(TestingModel):
     @overload
     @classmethod
     def fixture(
-        cls,
+        cls: type[M],
         db: Connection | None,
         variable: None = None,
         index: int | None = None,
         cfg: PyracmonConfiguration | None = None,
-    ) -> list[Self]: ...
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
     @overload
     @classmethod
     def fixture(
-        cls,
+        cls: type[M],
         db: Connection | None,
         variable: int,
         index: int | None = None,
         cfg: PyracmonConfiguration | None = None,
-    ) -> list[Self]: ...
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
     @overload
     @classmethod
     def fixture(
-        cls,
+        cls: type[M],
         db: Connection | None,
-        variable: Self,
+        variable: M,
         index: int | None = None,
         cfg: PyracmonConfiguration | None = None,
-    ) -> Self: ...
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> M: ...
     @overload
     @classmethod
     def fixture(
-        cls,
+        cls: type[M],
         db: Connection | None,
         variable: dict[str, Any],
         index: int | None = None,
         cfg: PyracmonConfiguration | None = None,
-    ) -> Self: ...
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> M: ...
     @overload
     @classmethod
     def fixture(
-        cls,
+        cls: type[M],
         db: Connection | None,
-        variable: list[Self],
+        variable: list[M],
         index: int | None = None,
         cfg: PyracmonConfiguration | None = None,
-    ) -> list[Self]: ...
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
     @overload
     @classmethod
     def fixture(
-        cls,
+        cls: type[M],
         db: Connection | None,
         variable: list[dict[str, Any]],
         index: int | None = None,
         cfg: PyracmonConfiguration | None = None,
-    ) -> list[Self]: ...
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
     @classmethod
     def fixture(
-        cls,
+        cls: type[M],
         db: Connection | None,
-        variable: int | dict[str, Any] | Self | list[dict[str, Any]] | list[Self] | None = None,
+        variable: int | dict[str, Any] | M | list[dict[str, Any]] | list[M] | None = None,
         index: int | None = None,
         cfg: PyracmonConfiguration | None = None,
-    ) -> 'Self | list[Self]':
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> M | list[M]:
         """
         Inserts record(s) with auto-generated column values.
 
@@ -131,6 +139,7 @@ class TestingMixin(TestingModel):
             index: Use this to specify index used to generate column values explicitly. If set, indexing state is not updated.
             cfg: Configuration used to control the generation of fixuture values.
                 This argument is prepared only for internal use and can be changed or removed in future version.
+            qualifier: Functions qualifying placeholder markers.
         Returns:
             Inserted model(s).
         """
@@ -139,7 +148,7 @@ class TestingMixin(TestingModel):
             index = TestingState.inc(cls, num) if index is None else index
             models = [_generate_model(cls, index+i, None, cfg) for i in range(num)]
             if db:
-                cls.inserts(db, models)
+                cls.inserts(db, models, qualifier=qualifier)
             return models
         elif isinstance(variable, (cls, dict)):
             num = 1
@@ -197,15 +206,17 @@ def truncate(db: Connection, *models: type[TruncateMixin]):
         m.truncate(db)
 
 
-def _generate_model(model: type[M], index, model_or_dict, cfg) -> M:
-    values = {}
+def _generate_model(model: type[M], index: int, model_or_dict: M | dict | None, cfg: PyracmonConfiguration | None) -> M:
+    values: dict[str, Any] = {}
 
     if isinstance(model_or_dict, TestingMixin):
         values = {c.name:v for c, v in model_or_dict}
     elif isinstance(model_or_dict, dict):
         values = dict(**model_or_dict)
 
-    values.update(**{c.name:_generate_value(model.table, c, index, cfg) for c in model.columns if c.name not in values and not c.pk})
+    config: PyracmonConfiguration = cfg or default_test_config()
+
+    values.update(**{c.name:_generate_value(model.table, c, index, config) for c in model.columns if c.name not in values and not c.pk})
 
     return model(**values)
 
@@ -213,19 +224,7 @@ def _generate_model(model: type[M], index, model_or_dict, cfg) -> M:
 fixed_uuid=uuid1(0, 0)
 
 
-def _generate_value(table, column, index, cfg):
-    """
-    Generates a value for the column on an index.
-
-    Args:
-        table: Table.
-        column: Column.
-        index: Index
-    Returns:
-        Generated value.
-    """
-    cfg = cfg or default_test_config()
-
+def _generate_value(table: Table, column: Column, index: int, cfg: PyracmonConfiguration) -> Any:
     mapping = cfg.fixture_mapping
     if mapping:
         value = mapping(table, column, index)

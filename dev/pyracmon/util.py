@@ -3,10 +3,6 @@ Utility types and functions for internal use.
 """
 from collections.abc import Mapping, Sequence, Callable
 from typing import Any, TypeVar
-try:
-    from typing import TypeAlias
-except:
-    from typing_extensions import TypeAlias
 
 
 T = TypeVar('T')
@@ -14,12 +10,13 @@ CI = TypeVar('CI', bound=str | int, covariant=True)
 
 
 #----------------------------------------------------------------
-# Utility Types
+# Type aliases
 #----------------------------------------------------------------
-Qualifier: TypeAlias = Callable[[str], str]
+#: Type alias for a qualifier function that qualifies placeholder markers.
+type Qualifier = Callable[[str], str]
 
-PKS = Any | dict[str, Any]
-"""Primary key(s)."""
+#: Type alias for primary key value(s).
+type PKS = Any | dict[str, Any]
 
 
 #----------------------------------------------------------------
@@ -27,13 +24,13 @@ PKS = Any | dict[str, Any]
 #----------------------------------------------------------------
 def key_to_index(values: Mapping[CI, T], ordered_keys: Sequence[str]) -> dict[int, T]:
     """
-    Replace keys of a `dict` with its index in ordered list.
+    Replace the keys of a `dict` with their indices in an ordered list of keys.
 
     Args:
-        values: A dictionary.
-        ordered_keys: Ordered keys.
+        values: The dictionary whose keys are replaced.
+        ordered_keys: The keys that define the index for each string key in `values`.
     Returns:
-        New dictionary where keys are replaced.
+        A new dictionary with the keys replaced by their indices.
     """
     def index(k):
         if isinstance(k, int):

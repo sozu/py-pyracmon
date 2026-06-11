@@ -1,9 +1,10 @@
 import pytest
 from pyracmon.connection import Connection
-from pyracmon.model import Table, Column, define_model, COLUMN, Model
-from pyracmon.query import Q
-from tests.db_api import PseudoAPI, PseudoConnection
-from pyracmon.mixin import *
+from pyracmon.model import define_model, Model
+from pyracmon.query import Q, Conditional
+from tests.db_api import PseudoAPI
+from pyracmon.mixin import CRUDMixin
+from .fixtures import *
 
 
 class CRUDInternal:
@@ -18,18 +19,7 @@ class CRUDInternal:
         return True
 
 
-table1 = Table("t1", [
-    Column("c1", int, None, True, None, "seq", False),
-    Column("c2", int, None, False, None, None, False),
-    Column("c3", int, None, False, None, None, True),
-])
 class T1(Model, CRUDMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
-
-table2 = Table("t2", [
-    Column("c1", int, None, True, None, "seq", False),
-    Column("c2", int, None, True, None, None, True),
-    Column("c3", int, None, False, None, None, False),
-])
 class T2(Model, CRUDMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
 
 model1 = define_model(table1, [CRUDInternal, CRUDMixin], model_type=T1)
@@ -99,6 +89,56 @@ class TestFetch:
         assert list(db.params_list[0]) == [1]
         assert r
         assert (r.c1, r.c2, r.c3) == (1, "abc", 3)
+
+
+class TestFetchMany:
+    def test_fetch_empty(self):
+        db = PseudoAPI().connect()
+
+        rs = model1.fetch_many(db, [])
+
+        assert not db.query_list
+        assert not db.params_list
+        assert len(rs) == 0
+
+    def test_fetch_many(self):
+        db = PseudoAPI().connect()
+
+        db.reserve([[1, "abc", 3], [2, "def", 4]])
+        rs = model1.fetch_many(db, [1, 2])
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE (c1 = ?) OR (c1 = ?)"
+        assert list(db.params_list[0]) == [1, 2]
+        assert len(rs) == 2
+        assert (rs[0].c1, rs[0].c2, rs[0].c3) == (1, "abc", 3)
+        assert (rs[1].c1, rs[1].c2, rs[1].c3) == (2, "def", 4)
+
+    def test_multiple_pks(self):
+        db = PseudoAPI().connect()
+
+        db.reserve([[1, "abc", 3], [2, "def", 4]])
+        rs = model2.fetch_many(db, [dict(c1 = 1, c2 = "abc"), dict(c1 = 2, c2 = "def")])
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t2 WHERE ((c1 = ?) AND (c2 = ?)) OR ((c1 = ?) AND (c2 = ?))"
+        assert list(db.params_list[0]) == [1, "abc", 2, "def"]
+        assert len(rs) == 2
+        assert (rs[0].c1, rs[0].c2, rs[0].c3) == (1, "abc", 3)
+        assert (rs[1].c1, rs[1].c2, rs[1].c3) == (2, "def", 4)
+
+    def test_page(self):
+        db = PseudoAPI().connect()
+
+        db.reserve([[1, "abc", 3], [2, "def", 4]])
+        db.reserve([[3, "ghi", 5], [4, "jkl", 6]])
+        db.reserve([[5, "mno", 7]])
+        rs = model1.fetch_many(db, [1, 2, 3, 4, 5], per_page = 2)
+
+        assert db.query_list[0] == "SELECT c1, c2, c3 FROM t1 WHERE (c1 = ?) OR (c1 = ?)"
+        assert len(db.query_list) == 3
+        assert [list(v) for v in db.params_list] == [[1, 2], [3, 4], [5]]
+        assert len(db.params_list) == 3
+        assert len(rs) == 5
+        assert [r.c1 for r in rs] == [1, 2, 3, 4, 5]
 
 
 class TestFetchWhere:
@@ -264,7 +304,7 @@ class TestInsert:
     def test_insert_by_expression(self):
         db = PseudoAPI().connect()
 
-        r = model1.insert(db, dict(c1=1, c2=Expression("now()", []), c3=Expression("$_ + $_", [3, 4])))
+        r = model1.insert(db, dict(c1=1, c2=Conditional("now()", []), c3=Conditional("$_ + $_", [3, 4])))
 
         assert db.query_list[0] == "INSERT INTO t1 (c1, c2, c3) VALUES (?, now(), ? + ?)"
         assert list(db.params_list[0]) == [1, 3, 4]
@@ -300,16 +340,6 @@ class TestInsertMany:
         assert (rs[0].c1, rs[0].c2, rs[0].c3) == (99, 4, 3)
         assert (rs[1].c1, rs[1].c2, rs[1].c3) == (100, 10, 6)
 
-    # Not use RETURNING clause
-    #def test_insert_returning(self):
-    #    db = PseudoAPI().connect()
-
-    #    db.reserve([[1, 2, 3], [4, 5, 6]])
-    #    rs = model1.insert_many(db, [dict(c2=2, c3=3), dict(c2=5, c3=6)], dict(c2 = lambda h: f"{h} * 2"), returning=True)
-
-    #    assert db.query_list[0] == "INSERT INTO t1 (c2, c3) VALUES (? * 2, ?) RETURNING *"
-    #    assert list(db.params_list) == [[2, 3], [5, 6]]
-
     def test_insert_inconsistent_columns(self):
         db = PseudoAPI().connect()
 
@@ -320,8 +350,8 @@ class TestInsertMany:
         db = PseudoAPI().connect()
 
         model2.insert_many(db, [
-            dict(c1=1, c2=Expression("now()", []), c3=Expression("$_ + $_", [3, 4])),
-            dict(c1=2, c2=Expression("dummy()", []), c3=Expression("", [5, 6])),
+            dict(c1=1, c2=Conditional("now()", []), c3=Conditional("$_ + $_", [3, 4])),
+            dict(c1=2, c2=Conditional("dummy()", []), c3=Conditional("", [5, 6])),
         ])
 
         assert db.query_list[0] == "INSERT INTO t2 (c1, c2, c3) VALUES (?, now(), ? + ?)"

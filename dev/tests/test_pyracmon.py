@@ -1,14 +1,12 @@
 import sys
 import psycopg2
-import pytest
 from datetime import date, datetime, time, timedelta
-from typing import Annotated, TypedDict
+from typing import Any, Annotated, TypedDict
 from uuid import UUID
 from tests import models as m
 from pyracmon import *
 from pyracmon import default_config
 from pyracmon.dialect import postgresql
-from pyracmon.graph.schema import document_type
 
 
 def _connect():
@@ -189,12 +187,12 @@ class TestModelGraph:
                     "time_": (time, ""),
                     "delta_": (timedelta, ""),
                     "uuid_": (UUID, ""),
-                    "enum_": (object, ""),
-                    "record_": (object, ""),
+                    "enum_": (Any, ""),
+                    "record_": (Any, ""),
                     "array_": ([int], ""),
                     "deeparray_": ([int], ""),
-                    "json_": (dict, ""),
-                    "jsonb_": (dict, ""),
+                    "json_": (Any, ""),
+                    "jsonb_": (Any, ""),
                 }
             ], ""),
         }

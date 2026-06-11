@@ -2,7 +2,7 @@ from collections.abc import Callable
 from contextvars import ContextVar
 from datetime import datetime, date, time, timedelta
 from typing import Any
-from ..config import PyracmonConfiguration, default_config, contextualConfiguration
+from pyracmon.config import PyracmonConfiguration, default_config, contextualConfiguration
 
 
 config: ContextVar[PyracmonConfiguration] = ContextVar('config', default=contextualConfiguration(lambda: config, default_config()))

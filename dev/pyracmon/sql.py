@@ -1,5 +1,5 @@
 """
-This module provides the type for query generation from a template string containing unified marker.
+This module provides a type for generating queries from a template string containing unified markers.
 """
 from string import digits, Template
 from typing import Any
@@ -8,9 +8,9 @@ from .marker import Marker
 
 class Sql:
     """
-    Provides functionalities to render SQL string from the template containing placeholder markers.
+    Provides functionality to render an SQL string from a template containing placeholder markers.
 
-    SQL rendering is conform to the way of `string.Template` which replaces `$` prefixed variables with parameters.
+    SQL rendering follows the convention of `string.Template`, which replaces `$`-prefixed variables with parameters.
     """
     class Substitute:
         def __init__(self, marker: Marker):
@@ -25,22 +25,22 @@ class Sql:
                 return self.marker(key)
 
     def __init__(self, marker: Marker, template: str) -> None:
-        #: Marker used in the template
+        #: Marker used in the template.
         self.marker = marker
         #: SQL template.
         self.template = template
 
     def render(self, *args: Any, **kwargs: Any) -> tuple[str, list[Any] | dict[str, Any]]:
         """
-        Renders SQL and converts parameters into the form available for current database driver.
+        Renders SQL and converts parameters into the form expected by the current database driver.
 
-        Arguments type should be consistent to marker paramstyle, otherwise exception is raised.
+        Argument types should be consistent with the marker's paramstyle, otherwise an exception is raised.
 
         Args:
             args: Positional parameters.
             kwargs: Keyed parameters.
         Returns:
-            SQL and parameters available in it.
+            The rendered SQL string and the parameters referenced in it.
         """
         self.marker.reset()
 

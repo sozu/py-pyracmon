@@ -1,14 +1,13 @@
 """
-This module exports types and functions for configurations.
+This module exports types and functions for configuration.
 
-Attributes of `PyracmonConfiguration` are the complete set of configurations which control the behaviors of this library.
+The attributes of `PyracmonConfiguration` form the complete set of settings that control the behavior of this library.
 """
 import logging
 from contextvars import ContextVar
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from typing import Any, Callable
-from typing_extensions import Self, TypeAlias, Unpack, TypeVarTuple
 from .model import Table, Column
 from .model_graph import ConfigurableSpec
 
@@ -19,47 +18,45 @@ __all__ = [
 ]
 
 
-#Ts = TypeVarTuple("Ts")
-#TypeMap: TypeAlias = Callable[[str, Unpack[Ts]], type | None]
-TypeMap: TypeAlias = Callable[..., type | None]
-"""Signature of a function which takes at least a type name and returns a python type if possible.
+type TypeMap = Callable[..., type | None]
+"""Signature of a function that takes at least a type name and returns a Python type if possible.
 
-According to DBMS, the function will be called with additional arguments.
-It is recommended to add keyword arguments to the function even if you don't need them.
+Depending on the DBMS, the function may be called with additional arguments.
+For example, in PostgreSQL, the function is called with a `udt_name` keyword argument, which is the user-defined type name.
 """
 
 
 @dataclass
 class PyracmonConfiguration:
     """
-    A dataclass whose attirubutes are the complete set of configurations.
+    A dataclass whose attributes form the complete set of configuration values.
     """
     name: str = "default"
-    """Name of this configuration. This value has no effect on any behavior of modules. """
+    """Name of this configuration. This value does not affect the behavior of any module."""
     logger: str | logging.Logger | None = None
-    """Logger or the name of logger used for internal logs such as query logging."""
+    """A `Logger` instance, or the name of a logger, used for internal logs such as query logging."""
     log_level: int = logging.DEBUG
-    """Logging level of internal logs."""
+    """The logging level for internal logs."""
     sql_log_length: int = 4096
-    """Maximum length of query log. Queries longer than this value are output being trimmed."""
+    """Maximum length of a logged query. Queries longer than this value are trimmed before being output."""
     parameter_log: bool = False
-    """Flag to log query parameters also."""
+    """Flag to also log query parameters."""
     paramstyle: str | None = None
-    """Parameter style defined in DB-API 2.0. This value overwrites the style obtained via DB module."""
+    """Parameter style defined in DB-API 2.0. This value overwrites the style obtained from the DB module."""
     type_mapping: TypeMap | None = None
-    """Function estimating python type from type name in database and optional arguments dependent on DBMS."""
+    """Function that estimates a Python type from a type name in the database, plus optional arguments that depend on the DBMS."""
     graph_spec: ConfigurableSpec = ConfigurableSpec.create()
-    """Graph specification used as default."""
+    """The graph specification used by default."""
     fixture_mapping: Callable[[Table, Column, int], Any] | None = None
-    """Function generating fixture value for a column and an index."""
+    """Function that generates a fixture value for a column and an index."""
     fixture_tz_aware: bool = True
-    """Flag to make fixture datetime being aware of timezone."""
+    """Flag to make fixture datetime values timezone-aware."""
     fixture_ignore_fk: bool = True
-    """Flag not to generate fixuture value on foreign key columns."""
+    """Flag not to generate fixture values for foreign key columns."""
     fixture_ignore_nullable: bool = True
-    """Flag not to generate fixuture value on nullable columns."""
+    """Flag not to generate fixture values for nullable columns."""
     timedelta_unit: dict[str, Any] = field(default_factory=lambda: dict(seconds=1))
-    """Default keyword arguments to pass `datetime.timedelta` used in `near` matcher."""
+    """Default keyword arguments to pass to `datetime.timedelta`, used in the `near` matcher."""
 
     def _copy_to(self, other: 'PyracmonConfiguration', **kwargs: Any):
         for f in fields(self):
@@ -74,14 +71,14 @@ class PyracmonConfiguration:
 
     def derive(self, **kwargs: Any) -> 'PyracmonConfiguration':
         """
-        Creates new configuration instance deriving this configuration.
+        Creates a new configuration instance derived from this configuration.
 
-        Each keyword argument overwrites corresponding configuration value unless it is `None`.
+        Each keyword argument overwrites the corresponding configuration value unless it is `None`.
 
         Args:
             kwargs: New configuration values. Each key must be a valid configuration key.
         Returns:
-            Derived configuration.
+            The derived configuration.
         """
         self._check_fields(**kwargs)
         derived = PyracmonConfiguration()
@@ -90,7 +87,7 @@ class PyracmonConfiguration:
 
     def set(self, **kwargs: Any) -> None:
         """
-        Updates this configuration by setting given configuration values.
+        Updates this configuration by setting the given configuration values.
 
         Args:
             kwargs: New configuration values. Each key must be a valid configuration key.
@@ -133,23 +130,23 @@ config: ContextVar[PyracmonConfiguration] = ContextVar('config', default=context
 
 def default_config() -> PyracmonConfiguration:
     """
-    Returns a global configuration.
+    Returns the global configuration.
 
-    Global configuration is managed in *context* provided by `contextvars` module.
-    Update on the returned object will change the behaviors of library modules globally.
+    The global configuration is managed in the *context* provided by the `contextvars` module.
+    Updates to the returned object will change the behavior of library modules globally.
 
-    The object works as a context manager by `with` block where another object can be used as global configuration.
+    The object works as a context manager: inside a `with` block, a different object is used as the global configuration.
 
     ```python
     with default_config() as cfg:
-        # Updates to cfg are not affect the global configurations.
+        # Updates to cfg do not affect the global configuration.
         cfg.name = "another"
         assert default_config().name == "another"
-    # Updates inside with block is no longer valid.
+    # Updates inside the with block are no longer valid.
     assert default_config().name == "default"
     ```
 
     Returns:
-        Global configuration.
+        The global configuration.
     """
     return config.get()

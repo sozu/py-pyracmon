@@ -9,7 +9,7 @@ from .typing import Shrink, Extend, Typeable, issubgeneric, to_rawdict
 _T = TypeVar('_T')
 
 
-# type aliases.
+#: Type alias for serialization function.
 type Serializer = Callable[['NodeContext'], Any]
 
 
@@ -34,27 +34,27 @@ class NodeSerializing(Protocol):
 
 class NodeSerializer(NodeSerializing):
     """
-    This class provides ways to configure serialization result for a node container.
+    This class provides methods to configure serialization of a node container.
 
     Graph is serialized into `dict` from root node containers to their descendants.
     `NodeSerializer` should be set to each container (= template property) to control how to serialize nodes in it.
 
-    At first, nodes to be serialized are selected by a node container using *aggregator*
-    which is a function or sequence of functions extracting a node or nodes from a node container.
+    At first, nodes to be serialized are selected from a node container using *aggregator*
+    which is a function or sequence of functions extracting a node or nodes.
     `fold` and `select` are the general methods to set *aggregator* to `NodeSerializer` .
 
     ```python
     >>> # NodeSerializer to select first node in the container.
     >>> S.fold(lambda ns: ns[0])
     >>> # NodeSerializer to select every other node.
-    >>> S.fold(lambda ns: ns[0::2])
+    >>> S.select(lambda ns: ns[0::2])
     ```
 
     Each selected node is serialized in the way determined by the type of corresponding template property.
     Serialization function (= *serializer* ) is obtained usually from `pyracmon.graph.spec.GraphSpec`
-    where *serializer* are stored with being related with applicable types respectively.
+    which stores *serializer*s in association with types.
     Additionally, *serializer*s can be set to `NodeSerializer` directly by `each` or some other methods.
-    For each node, all valid *serializer*s are collected and merged into a function which finally is applied to its entity.
+    For each node, all *serializer*s are collected and merged into a function which finally is applied to its entity.
 
     ```python
     >>> spec = GraphSpec()
@@ -71,15 +71,13 @@ class NodeSerializer(NodeSerializing):
     {"a": [{"v": 2}, {"v": 4}]}
     ```
 
-    Only when a node is serialized into `dict` ,
-    its child nodes are serialized succeedingly and the result is put into the `dict` with the same keys as their property names.
+    By default, child nodes are also serialized and put into the serialized parent node only when the parent node is serialized into `dict` .
+    Serialized value of each child node is put into the `dict` with the same key as the property name.
     The key can be changed by set *namer* to the `NodeSerializer` by `name` .
 
-    Here, `merge` is a special configuration of `NodeSerializer` ,
-    which can be used for the case that a child node is also serialized into `dict` and it is wanted to be merged into parent `dict` .
-    It can take a callable which converts key in original child `dict` into another key used in parent `dict` .
-
-    Whether the child should be put or merge into parent `dict` is determined whether *namer* is `str` (or `None`) or `Callable` .
+    Here, `merge` is a special configuration of `NodeSerializer` available only when the node is serialized into `dict` .
+    The child `dict` is merged into parent `dict` in the same way as `update` method of `dict` .
+    In this case, the key of child `dict` can be changed by a callable passed to `merge` as follows.
 
     ```python
     >>> graph.append(a=dict(a1=1, a2=2), b=dict(b1=3, b2=4))
@@ -90,11 +88,6 @@ class NodeSerializer(NodeSerializing):
     >>> )
     {"a": [{"a1":1, "a2":2, "__b1__":3, "__b2__":4}]}
     ```
-
-    Args:
-        namer: A string or a function determining the key in parent `dict` .
-        aggregator: A function to select node(s) from the node container.
-        serializers: List of *serializer* s.
     """
     def __init__(
         self,
@@ -102,6 +95,14 @@ class NodeSerializer(NodeSerializing):
         aggregator: Callable[[list[Node]], Node] | Callable[[list[Node]], list[Node]] | None = None,
         *serializers: Serializer,
     ):
+        """
+        Create an instance.
+
+        Args:
+            namer: A string or a function determining the key in parent `dict` .
+            aggregator: A function to select node(s) from the node container.
+            serializers: List of *serializer* s.
+        """
         self._namer = namer
         self._aggregator = aggregator
         self._serializers = list(serializers)
@@ -131,11 +132,13 @@ class NodeSerializer(NodeSerializing):
         if self._aggregator is None:
             def agg1(values: list[_T]) -> list[_T]:
                 return values
+            #agg1.__annotations__['return'] = list[_T] # type: ignore
             return agg1
         elif signature(self._aggregator).return_annotation == Signature.empty:
             # TODO: No return annotation implies list to list aggregation.
             def agg2(values: list[_T]) -> list[_T]:
                 return self._aggregator(values) # type: ignore
+            #agg2.__annotations__['return'] = list[_T] # type: ignore
             return agg2
         else:
             return self._aggregator
@@ -172,8 +175,9 @@ class NodeSerializer(NodeSerializing):
             rt = Signature.empty
 
         if rt == Signature.empty:
-            def agg(vs: list[_T]) -> (_T if folds else list[_T]): # type: ignore
+            def agg(vs: list[_T]):
                 return aggregator(vs)
+            agg.__annotations__['return'] = _T if folds else list[_T] # type: ignore
             self._aggregator = agg
         elif issubgeneric(rt, list) ^ (not folds):
             raise ValueError(f"Return annotation of function is not valid.")
@@ -252,9 +256,16 @@ class NodeSerializer(NodeSerializing):
         Returns:
             This instance.
         """
-        def agg(vs: list[_T]) -> ((_T | None) if alt is None else _T): # type: ignore
-            return vs[index] if len(vs) > index else alt
-        return self.fold(agg)
+        if alt is None:
+            def agg_opt(vs: list[_T]) -> _T | None:
+                return vs[index] if len(vs) > index else alt
+            #agg_opt.__annotations__['return'] = _T | None # type: ignore
+            return self.fold(agg_opt)
+        else:
+            def agg(vs: list[_T]) -> _T:
+                return vs[index] if len(vs) > index else alt
+            #agg.__annotations__['return'] = _T # type: ignore
+            return self.fold(agg)
 
     def head(self, alt: Any = None) -> 'NodeSerializer':
         """
@@ -312,7 +323,7 @@ class NodeSerializer(NodeSerializing):
         *serializer* is a function which will be invoked with a single argument of `NodeContext` ,
         from which internal code of *serializer* can get information of the node.
 
-        For the sake of static typing, the *serializer* should have correct returns annotation.
+        For the sake of static typing, the *serializer* should have correct return annotation.
 
         Args:
             func: A function converting a node entity into a value.
@@ -400,7 +411,13 @@ class NodeParams:
     def __init__(self, params) -> None:
         self._params: dict[str, Any] = params
 
-    def __getattr__(self, key) -> Any | None:
+    def __getitem__(self, key: str):
+        """
+        Returns a value by key from values passed from invoking scope being bound for the node.
+        """
+        return self._params.get(key, None)
+
+    def __getattr__(self, key: str) -> Any | None:
         """
         Returns a value by key from values passed from invoking scope being bound for the node.
         """
@@ -409,18 +426,19 @@ class NodeParams:
 
 class NodeContext:
     """
-    A class containing informations for serialization of a single node.
+    Represents a context for serialization of a node.
 
-    The instance of this class is passed to the serialization function.
-    Properties listed below are available to control serialization.
+    The instance of this class appears as an argument of serialization function
+    in order to implement the function by using information of the node seriazlization inside the function.
 
-    - context: `SerializationContext` for the serialization of the graph.
-    - node: `Node` to serialize.
-    - value: Entity value of the `Node` .
-    - params: Arbitrary values which is passed from invoking scope with being bound to the key of node name.
+    Properties listed below are available:
 
-    Every serializer has to call `serialize()` to get the result of preceeding serializers,
-    or make a result direcly from the node.
+    - `context` : `SerializationContext` for the serialization of the graph.
+    - `node` : `Node` to serialize.
+    - `value` : Entity value of the `Node` .
+    - `params` : Arbitrary values which is passed from invoking scope with being bound to the key of node name.
+
+    In addition, you can get the result of preceding serializers by calling `serialize`.
     """
     def __init__(self, context: 'SerializationContext', params: NodeParams) -> None:
         #: `SerializationContext` for the serializaion of the graph.`
@@ -429,7 +447,7 @@ class NodeContext:
         self.params = params
         # Set on demand.
         self._node: Node | None = None
-        self._iterator: Iterator[Any] | None = None
+        self._iterator: Iterator[Serializer] | None = None
 
     def __enter__(self):
         return self
@@ -440,31 +458,35 @@ class NodeContext:
 
     @property
     def node(self) -> Node:
+        """
+        A node to serialize.
+        """
         # Node must be set when passed to serialization function.
         return cast(Node, self._node)
 
     @property
     def value(self) -> Any:
+        """
+        An entity value of the node to serialize.
+        """
         return cast(Node, self._node).entity
 
     def serialize(self) -> Any:
         """
         Obtain a value serialized by preceeding serializers.
+
+        Returns:
+            A value serialized by preceding serializers.
         """
         try:
-            return next(cast(Iterator[Any], self._iterator))(self)
+            return next(cast(Iterator[Serializer], self._iterator))(self)
         except StopIteration:
             return self.node.entity
 
 
 class NodeContextFactory:
     """
-    This class generates a `NodeContext` for nodes bound to a template property.
-
-    Args:
-        context: `SerializationContext` for the serialization of a graph.
-        serializers: Globally registered serializers for the type of node entity.
-        params: Parameters given at the serialization by caller.
+    Factory class to generate a `NodeContext` for a node.
     """
     def __init__(
         self,
@@ -472,11 +494,28 @@ class NodeContextFactory:
         serializers: list[Serializer],
         params: dict[str, Any],
     ) -> None:
+        """
+        Create an instance.
+
+        Args:
+            context: `SerializationContext` for the serialization of a graph.
+            serializers: Globally registered serializers for the type of node entity.
+            params: Parameters given at the serialization by caller.
+        """
         self.serializers = serializers
         # Generate and keep an instance of NodeContext to save memory for big graph.
         self.node_context = NodeContext(context, NodeParams(params))
 
-    def begin(self, node, serializers) -> NodeContext:
+    def begin(self, node: Node, serializers: list[Serializer]) -> NodeContext:
+        """
+        Create a `NodeContext` for a node.
+
+        Args:
+            node: A node to serialize.
+            serializers: Serializers registered for the node.
+        Returns:
+            A `NodeContext` for the node.
+        """
         self.node_context._node = node
         self.node_context._iterator = iter((self.serializers + serializers)[::-1])
         return self.node_context
@@ -486,28 +525,22 @@ class SerializationContext:
     """
     This class implements actual serialization flow applied to a graph.
 
-    `node_params` is a `dict` whose values will be passed to *serializer* via `params` attribute of `NodeContext` .
-    The property name of the node is used to get values (also a `dict` ) from the `dict`
-    and the `params` exposes them as its attributes of the same names as their keys.
-
-    Arbitrary values can be passed in `node_params` which is a `dict` 
-
-    Following code shows the example passing a parameter to a *serializer* .
+    `node_params` is a mapping of node name to parameters for the node.
+    It should be passed when starting serialization and can be accessed via `params` property of `NodeContext` in serialization function.
+    The type of the property value is `NodeParams` which is a wrapper of `dict` and exposes values as attributes.
 
     ```python
     cxt = SerializationContext(
         dict(
-            a = S.each(lambda cxt: cxt.value*c.params.value),
+            a = S.each(lambda cxt: cxt.value*cxt.params.key),
         ),
         finder,
-        dict(a={"value": 10})
+        dict(a={"key": 10})
     )
     ```
 
-    Args:
-        settings: Mapping of node name to `NodeSerializer` .
-        finder: A function to find base *serializer* s by a `type` .
-        node_params: Arbitrary parameters passed to *serializer*s.
+    In above example, third argument is the `node_params` which contains parameters for node with name `a` .
+    The parameters are accessed in the serialization function via `cxt.params` whose type is `NodeParams` .
     """
     def __init__(
         self,
@@ -515,6 +548,14 @@ class SerializationContext:
         finder: Callable[[type], list[Serializer]],
         node_params: dict[str, dict[str, Any]] | None = None,
     ):
+        """
+        Create an instance.
+
+        Args:
+            settings: Mapping of node name to `NodeSerializer` .
+            finder: A function to find base *serializer* s by a `type` .
+            node_params: Arbitrary parameters passed to *serializer*s.
+        """
         self.settings: dict[str, NodeSerializer] = settings
         self.finder: Callable[[type], list[Serializer]] = finder
         self._node_params: dict[str, dict[str, Any]] = node_params or {}
@@ -558,7 +599,7 @@ class SerializationContext:
 
         Args:
             name: Name of the template property associated with the nodes.
-            container: Container of nodes. 
+            container: Container of nodes to serialize. 
             parent: A parent dictionary to which serialized values will be appended.
         """
         ns = self.settings.get(name, None)
@@ -598,7 +639,8 @@ class SerializationContext:
     def _find_serializer(self, prop: GraphTemplate.Property) -> list[Serializer]:
         return self.finder(prop.kind) if isinstance(prop.kind, type) else []
 
-    def _serialize_node(self, node: Node, node_serializer: NodeSerializer):
+    def _serialize_node(self, node: Node, node_serializer: NodeSerializer) -> Any:
+        # Cache values to generate NodeContext as NodeContextFactory for each node name.
         if not node.prop.name in self._context_factories:
             self._context_factories[node.prop.name] = NodeContextFactory(
                 self,
@@ -635,7 +677,7 @@ class S(metaclass=SerializerMeta):
     """
     An utility class to build `NodeSerializer` .
 
-    This class provides factory class methods to create `NodeSerializer`
+    This class provides class methods to create `NodeSerializer`
     each of which works in the same way as the method of the same name declared on `NodeSerializer` .
 
     Use them to supply `NodeSerializer`s to functions to serialize a graph or to create a graph schema
@@ -678,24 +720,38 @@ def chain_serializers(serializers: list[Serializer]) -> Serializer:
     Returns:
         Chained serializer.
     """
-    def merge(fs) -> type:
-        rt = Signature.empty
-        for f in fs[::-1]:
-            t = signature(f).return_annotation
-            if t != Signature.empty:
-                try:
-                    t[_T]
-                    rt = t if rt == Signature.empty else rt[t] # type: ignore
-                except TypeError:
-                    try:
-                        return rt[t] # type: ignore
-                    except TypeError:
-                        return t
-        return rt
-
-    rt = merge(serializers)
-    def composed(cxt) -> rt: # type: ignore
-        cxt._iterator = iter(serializers[::-1] + list(cxt._iterator))
+    rt = inspect_serializers(serializers)
+    def composed(cxt: NodeContext) -> rt: # type: ignore
+        cxt_serializerrs = list(cxt._iterator) if cxt._iterator is not None else []
+        cxt._iterator = iter(serializers[::-1] + cxt_serializerrs)
         return cxt.serialize()
 
+    #composed.__annotations__['return'] = rt
     return composed
+
+
+def inspect_serializers(serializers: list[Serializer]) -> type:
+    """
+    Inspects the return type of merged serializers.
+
+    Args:
+        serializers: A list of serializers.
+    Returns:
+        The return type of merged serializers.
+    """
+    # The last return type given explicitly is the return type of merged serializers.
+    rt: type = Signature.empty
+    for s in serializers[::-1]:
+        t = signature(s).return_annotation
+        if t != Signature.empty:
+            try:
+                # If the return annnotation is a generic type which takes a type parameter,
+                # it is assumed that the actual type of the parameter is determined by the previous return type.
+                t[_T]
+                rt = t if rt == Signature.empty else rt[t] # type: ignore
+            except TypeError:
+                try:
+                    return rt[t] # type: ignore
+                except TypeError:
+                    return t
+    return rt

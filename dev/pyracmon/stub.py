@@ -1,13 +1,12 @@
 """
-This module exports functions to output type stub of model types.
+This module exports functions to output type stubs for model types.
 """
 from keyword import iskeyword
 import inspect
 import os
 from pathlib import Path
 import types
-from typing import get_origin, get_args
-from typing_extensions import dataclass_transform
+from typing import get_origin, get_args, dataclass_transform
 from pyracmon.model import Model
 from pyracmon.mixin import CRUDMixin
 from pyracmon.model_graph import GraphEntityMixin
@@ -35,14 +34,15 @@ def render_models(
     testing: bool = False,
 ) -> list[str]:
     """
-    Generate lines of type stub file (.pyi).
+    Generate the lines of a type stub file (.pyi).
 
     Args:
-        models: List of model types.
-        dialect: Dialect type of DB.
-        mixins: Mixin types used to declare model types.
+        models: A list of model types.
+        dialect: The database dialect module.
+        mixins: Mixin types used to declare the model types.
+        testing: If `True`, the model classes additionally inherit `TestingMixin`.
     Returns:
-        Lines of type stub file.
+        The lines of the generated type stub file.
     """
     lines = []
 
@@ -111,14 +111,15 @@ def output_stub(
     testing: bool = False,
 ):
     """
-    Output type stub file (.pyi) into the specified location.
+    Output a type stub file (.pyi) to the specified location.
 
     Args:
-        stubdir: Directory to output. If `None` , stub file will be output in the same directory of the module.
-        module: Module where model types are declared.
-        models: Model types.
-        dialect: Dialect type of DB.
-        mixins: Mixin types used to declare model types.
+        stubdir: The directory to output to. If `None`, the stub file is written to the same directory as the module.
+        module: The module where the model types are declared.
+        models: The model types to generate stubs for.
+        dialect: The database dialect module.
+        mixins: The mixin types used to declare the model types.
+        testing: If `True`, the model classes additionally inherit `TestingMixin`.
     """
     modpath = module.__name__.split(".")
 

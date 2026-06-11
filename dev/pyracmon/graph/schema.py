@@ -1,15 +1,15 @@
 """
-This module provides the way to generate schema of the graph after being serialized.
+This module provides a way to generate the schema of a graph after it has been serialized.
 
-Schema is a `TypedDict` type estimated by template property and type hinting annotated to serializer components.
-It is obtained statically, thus it is available for, for example, documentation such as JsonSchema.
+The schema is a `TypedDict` type, estimated from the template properties and the type hints annotated on the serializer components.
+It is obtained statically, so it can be used for purposes such as generating documentation, e.g., a JSON Schema.
 """
 from collections.abc import Iterator
-from typing import TypeVar, Any, get_args, get_type_hints, cast, is_typeddict
+from typing import Protocol, TypeVar, Any, get_args, get_type_hints, cast, is_typeddict
 from inspect import signature, Signature
 from .graph import GraphView
 from .template import GraphTemplate
-from .serialize import NodeSerializer, chain_serializers
+from .serialize import Serializer, NodeSerializer, chain_serializers
 from .typing import Typeable, issubgeneric, replace_optional_typevar, generate_schema, document_type, decompose_document
 
 
@@ -19,23 +19,27 @@ def _templateType(t):
     return Template
 
 
+# Avoid recursive import.
+class SpecType(Protocol):
+    def find_serializers(self, t: type) -> list[Serializer]: ...
+    def to_dict(self, graph: GraphView, _params_: dict[str, dict[str, Any]] = {}, **settings: NodeSerializer) -> dict[str, Any]: ...
+
+
 class GraphSchema:
     """
-    This class exposes a property to get the schema of serialization result of a graph.
-
-    TODO: Dependency to `GraphSpec` should be replaced in another way.
+    This class exposes a property to get the schema of the serialization result of a graph.
     """
-    def __init__(self, spec: Any, template: GraphTemplate, **serializers: NodeSerializer):
-        #: Specification of graph operations.
+    def __init__(self, spec: SpecType, template: GraphTemplate, **serializers: NodeSerializer):
+        #: The specification of graph operations.
         self.spec = spec
-        #: Graph template to serialize.
+        #: The graph template to serialize.
         self.template = template
-        #: `NodeSerializer`s used for the serialization.
+        #: The `NodeSerializer`s used for the serialization.
         self.serializers = serializers
 
     def _return_from(self, prop: GraphTemplate.Property) -> type:
         """
-        Get a type the node of passed property will be serialized.
+        Returns the type to which the node of the given property will be serialized.
         """
         ns = self.serializers[prop.name]
 
@@ -82,26 +86,15 @@ class GraphSchema:
                 if args:
                     # origin is generics.
                     type_params = list(filter(lambda ia: isinstance(ia[1], TypeVar), enumerate(args)))
-                    # python < 3.10
-                    param_num = len(type_params)
-                    if param_num == 0:
-                        return origin
-                    elif param_num == 1:
-                        # Replace type parameter
-                        param = resolve(it)
-                        return origin[param] # type: ignore
-                    else:
-                        return Signature.empty
-                    # python >= 3.10
-                    #match len(type_params):
-                    #    case 0:
-                    #        return origin
-                    #    case 1:
-                    #        # Replace type parameter
-                    #        param = resolve(it)
-                    #        return origin[param] # type: ignore
-                    #    case _:
-                    #        return Signature.empty
+                    match len(type_params):
+                        case 0:
+                            return origin
+                        case 1:
+                            # Replace type parameter
+                            param = resolve(it)
+                            return origin[param] # type: ignore
+                        case _:
+                            return Signature.empty
                 else:
                     return origin
 
@@ -109,12 +102,12 @@ class GraphSchema:
 
     def schema_of(self, prop: GraphTemplate.Property) -> type:
         """
-        Generates structured and documented schema for a template property.
+        Generates a structured and documented schema for a template property.
 
         Args:
-            prop: A template property.
+            prop: The template property.
         Returns:
-            Schema with documentation.
+            The schema, along with its documentation.
         """
         return_type = self._return_from(prop)
 
@@ -150,7 +143,7 @@ class GraphSchema:
     @property
     def schema(self) -> type:
         """
-        Generates `TypedDict` which represents the schema of serialized graph.
+        Generates a `TypedDict` that represents the schema of the serialized graph.
         """
         annotations: dict[str, Any] = {}
 
@@ -180,12 +173,12 @@ class GraphSchema:
 
     def serialize(self, graph: GraphView, **node_params: dict[str, Any]) -> dict[str, Any]:
         """
-        Serialize graph into a dictionary.
+        Serializes a graph into a dictionary.
 
         Args:
-            graph: A view of a graph.
-            node_params: Parameters passed to `SerializationContext` and used by *serializer* s.
+            graph: A view of the graph to serialize.
+            node_params: The parameters passed to `SerializationContext` and used by *serializers*.
         Returns:
-            Serialization result.
+            The serialization result.
         """
         return self.spec.to_dict(graph, node_params, **self.serializers)

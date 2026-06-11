@@ -1,9 +1,9 @@
-# This module provides type safe access to graphs.
-# Currently, it is an experimental implementation which has some constraints.
-# - All fields to TNode subclasses must have unique names in a TGraph.
+# This module provides type-safe access to a graph.
+# Currently, it is an experimental implementation that has some constraints:
+# - All fields of `TNode` subclasses must have unique names within a `TGraph`.
 #
-# This feature is planned to be merged into core graph module in the future version.
-# Therefore, any object exposed in this module will be deprecated and be available by other names and ways.
+# This feature is planned to be merged into the core graph module in a future version.
+# Until then, any object exposed by this module is subject to change and may be renamed or relocated.
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, dataclass_transform, get_type_hints, get_args, get_origin, overload
 from pyracmon.config import default_config
@@ -17,11 +17,11 @@ from pyracmon.graph.typing import is_optional, issubgeneric
 @dataclass_transform()
 class TNode[ENTITY]:
     """
-    View of a graph node which has an entity of type `ENTITY` and edges to child nodes.
+    A view of a graph node that has an entity of type `ENTITY` and edges to child nodes.
 
-    Subclasses can declare fields similar to dataclass fields, each of which corresponds to edges to child nodes.
-    Although the nodes must be contained in a node container in the actual graph instance,
-    the edge fields can be declared without specifying `TEdge` if a single node is expected as a child.
+    Subclasses can declare fields similar to those of a dataclass, each of which corresponds to an edge to child nodes.
+    Although the nodes are always held in a node container in the underlying graph,
+    an edge field can be declared without `TEdge` if a single node is expected as the child.
 
     ```python
     @dataclass
@@ -57,11 +57,11 @@ class TNode[ENTITY]:
         total: int
     ```
 
-    The above code is an example of a graph view which contains recent blog posts.
-    An important point is that the declarations just provide type safe access to the graph structure, and do not change the behavior of the graph.
+    The code above is an example of a graph view for a graph that contains recent blog posts.
+    An important point is that these declarations only provide type-safe access to the graph's structure; they do not change the graph's behavior.
 
     Args:
-        ENTITY: Type of entity of the node.
+        ENTITY: The type of the entity held by the node.
     """
     def __init__(self, node: Node):
         self.__node = node
@@ -80,14 +80,14 @@ class TNode[ENTITY]:
         cls._entity_type_: type = entity_type
 
     def __call__(self) -> ENTITY:
-        """Return an entity of the node."""
+        """Returns the entity of the node."""
         return self.__node.entity
 
     def _get_children(self, name: str) -> ContainerView:
         return self.__node.children[name].view
 
     def __getattr__(self, name: str):
-        """Returns a view of child node along with declared type."""
+        """Returns a view of the child node with its declared type."""
         if conv := type(self)._fields_.get(name):
             return conv(self)
         else:
@@ -97,13 +97,16 @@ class TNode[ENTITY]:
 class TEdge[ENTITY]:
     """
     Represents edges from a node to its child nodes.
+
+    Args:
+        ENTITY: The type of the entities of the child nodes.
     """
     def __init__(self, container: ContainerView[Node.Children], child_type: Any, to_view: bool):
-        #: Container view of child nodes.
+        #: The container view of the child nodes.
         self.__container = container
-        #: Type of entities of child nodes.
+        #: The type of the entities of the child nodes.
         self.__child_type = child_type
-        #: Whether to return views of child nodes or their entities.
+        #: Whether to return views of the child nodes or their entities.
         self.__to_view = to_view
 
     def __to_entity(self, node: Node) -> ENTITY:
@@ -117,7 +120,7 @@ class TEdge[ENTITY]:
         return bool(self.__container)
 
     def __call__(self) -> Node.Children:
-        """Returns a base container."""
+        """Returns the underlying container."""
         return self.__container()
 
     def __len__(self) -> int:
@@ -125,7 +128,7 @@ class TEdge[ENTITY]:
         return len(self.__container)
 
     def __iter__(self) -> Iterator[ENTITY]:
-        """Iterates views of nodes."""
+        """Iterates over the child nodes, yielding a value of type `ENTITY` for each."""
         for n in self.__container().nodes:
             yield self.__to_entity(n)
 
@@ -134,7 +137,7 @@ class TEdge[ENTITY]:
     @overload
     def __getitem__(self, index: slice) -> Iterable[ENTITY]: ...
     def __getitem__(self, index: int | slice) -> ENTITY | Iterable[ENTITY]:
-        """Returns a view of a node at the index."""
+        """Returns the value of type `ENTITY` for the child node at the given index, or a list of such values if `index` is a slice."""
         if isinstance(index, slice):
             return [self.__to_entity(n) for n in self.__container().nodes[index]]
         else:
@@ -145,7 +148,7 @@ class TEdge[ENTITY]:
 @dataclass_transform()
 class TGraph:
     """
-    View of a graph whose schema is defined by the subclass of this class.
+    The base class for graph views that provide type-safe access to a graph's structure.
     """
     def __init__(self, graph: Graph):
         self.__graph = graph
@@ -164,7 +167,7 @@ class TGraph:
         return self.__graph.containers[name].view
 
     def __getattr__(self, name: str):
-        """Returns a view of an attribute along with declared type."""
+        """Returns a view of the named property with its declared type."""
         if conv := type(self)._fields_.get(name):
             return conv(self)
         else:
@@ -173,10 +176,10 @@ class TGraph:
 
 class TypedGraph[GRAPH: TGraph](Graph):
     """
-    Graph class which provides `TGraph` as a view of itself.
+    A `Graph` subclass that provides a `TGraph` instance as a view of itself.
 
     Args:
-        GRAPH: Type of graph view.
+        GRAPH: The type of the graph view.
     """
     def __init__(self, typed: type[GRAPH], template: GraphTemplate):
         super().__init__(template)
@@ -191,13 +194,13 @@ class TypedGraph[GRAPH: TGraph](Graph):
 
 def new_typed_graph[GRAPH: TGraph](cls: type[GRAPH], spec: GraphSpec | None = None) -> TypedGraph[GRAPH]:
     """
-    Create a new `TypedGraph` with the schema defined by the given graph view class.
+    Creates a new `TypedGraph` with the schema defined by the given graph view class.
 
     Args:
-        cls: A graph view class which defines the schema of the graph.
-        spec: A graph specification which defines how to serialize model objects. If not given, the default graph specification is used.
+        cls: A graph view class that defines the schema of the graph.
+        spec: A graph specification that defines how to serialize model objects. If not given, the default graph specification is used.
     Returns:
-        Created `TypedGraph` instance.
+        The created `TypedGraph` instance.
     """
     # Convert declared fields into pairs of name and simple type which are available for graph template properties.
     def conv(t: Any) -> Any:
@@ -236,10 +239,10 @@ def dump_typed_graph(graph: TGraph | TNode) -> dict[str, Any]:
 
 def _to_properties(cls: type[TGraph | TNode]) -> tuple[dict[str, type], list[tuple[str, str]]]:
     """
-    Parse fields declared in a `TGraph` / `TNode` into properties and relations.
+    Parse the fields declared in a `TGraph` / `TNode` into properties and relations.
 
-    This function walks given class and its child nodes recursively,
-    and returns a mapping from property names to their types and a list of relations between properties.
+    This function walks the given class and its child nodes recursively,
+    and returns a mapping of property names to their types, along with a list of relations between properties.
     """
     props: dict[str, type] = {}
     rels: list[tuple[str, str]] = []
@@ -280,9 +283,9 @@ def _to_properties(cls: type[TGraph | TNode]) -> tuple[dict[str, type], list[tup
 
 def _parse_fields[TMPL: TGraph | TNode](cls: type[TMPL]) -> dict[str, Callable[[TMPL], Any]]:
     """
-    Parse fields declared in a TGraph or TNode subclass and return a mapping from field names to functions which convert a graph view into the field value.
+    Parse the fields declared in a `TGraph` or `TNode` subclass, and return a mapping from field names to functions that convert a graph view into the field's value.
 
-    Unlike untyped graph view, fields which are not declared as `TEdge` return a single value of the declared type.
+    Unlike an untyped graph view, fields that are not declared as `TEdge` return a single value of the declared type.
     """
     fields: dict[str, Callable[[TMPL], Any]] = {}
 

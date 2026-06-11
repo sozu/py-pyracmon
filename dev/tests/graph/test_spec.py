@@ -1,7 +1,6 @@
-import pytest
-from pyracmon.graph.graph import Graph, Node
-from pyracmon.graph.serialize import S, NodeContextFactory
-from pyracmon.graph.spec import *
+from pyracmon.graph.graph import Graph
+from pyracmon.graph.serialize import S
+from pyracmon.graph.spec import GraphSpec
 
 
 class TestIdentifier:

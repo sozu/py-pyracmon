@@ -14,13 +14,13 @@ from pyracmon.clause import holders
 
 def read_schema(db, excludes: list[str] | None = None, includes: list[str] | None = None) -> list[Table]:
     """
-    Collect tables in current database.
+    Collect the tables in the current database.
 
     Args:
-        excludes: Excluding table names.
-        includes: Including table names. If not specified, all tables are collected.
+        excludes: Table names to exclude.
+        includes: Table names to include. If not specified, all tables are collected.
     Returns:
-        Table schemas.
+        The table schemas.
     """
     q = Q(excludes = excludes, includes = includes)
 
@@ -124,7 +124,7 @@ def _map_types(t):
 
 class MySQLMixin(MultiInsertMixin, TruncateMixin):
     """
-    Model mixin whose methods are available in MySQL.
+    A model mixin whose methods are available in MySQL.
     """
     @classmethod
     def last_sequences(cls, db: Connection, num: int) -> list[tuple[Column, int]]:

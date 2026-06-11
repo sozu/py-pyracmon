@@ -1,25 +1,15 @@
 import pytest
 from collections.abc import Sequence
 from typing import Any
-from pyracmon.model import Model, Table, Column, define_model, COLUMN
+from pyracmon.model import Model, define_model
 from pyracmon.graph import GraphTemplate, new_graph
-from pyracmon.select import Selection, SelectMixin
+from pyracmon.select import SelectMixin
 from pyracmon.query_graph import append_rows
 from .db_api import PseudoCursor as Cursor
+from .fixtures import *
 
 
-table1 = Table("t1", [
-    Column("c1", int, None, True, None, "seq", False),
-    Column("c2", int, None, False, None, None, False),
-    Column("c3", int, None, False, None, None, True),
-])
 class T1(Model, SelectMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
-
-table2 = Table("t2", [
-    Column("c1", int, None, True, None, "seq", False),
-    Column("c2", int, None, True, None, None, True),
-    Column("c3", int, None, False, None, None, False),
-])
 class T2(Model, SelectMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
 
 

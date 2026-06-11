@@ -1,6 +1,4 @@
-import pytest
-import logging
-from pyracmon.config import *
+from pyracmon.config import PyracmonConfiguration, default_config
 from pyracmon.model_graph import ConfigurableSpec
 
 

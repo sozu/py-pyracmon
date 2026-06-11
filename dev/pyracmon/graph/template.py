@@ -1,8 +1,7 @@
 """
-This module provides a type specifying graph structure.
+This module provides a type that specifies the structure of a graph.
 """
-from typing import Any, Callable, overload
-from typing_extensions import Self
+from typing import Any, Callable, overload, Self
 from collections.abc import Iterable, Iterator
 from .identify import IdentifyPolicy, neverPolicy
 
@@ -12,13 +11,13 @@ type PropDef[_PT] = tuple[type[_PT] | GraphTemplate | GraphTemplate.Property, Id
 
 class GraphTemplate:
     """
-    This class specifies the structure of a graph.
+    This class represents the structure of a graph.
 
-    The template is composed of template properties each of which corresponds to a node container of a graph.
-    Each template property can be obtained via an attribute of its name from the template.
+    The template is composed of template properties, each of which corresponds to a node container in a graph.
+    Each template property is accessible as an attribute of the template, named after the property.
 
-    Applying shift operator between properties creates the parent-child relationship between them.
-    In next code, the template is composed of 4 properties where `d` is a child of `c`, and `b` and `c` are children of `a`.
+    Applying a shift operator between properties creates a parent-child relationship between them.
+    In the following code, the template is composed of four properties, where `d` is a child of `c`, and `b` and `c` are children of `a`.
 
     ```python
     template = GraphSpec().new_template(a=int, b=str, c=int, d=float)
@@ -26,37 +25,37 @@ class GraphTemplate:
     template.c << template.d
     ```
 
-    Templates are merged when `+` is applied to them. The result has properties defined in both templates with keeping their relationships.
-    Merging of templates having properties of the same name fails by raising `ValueError`.
+    Templates are merged when `+` is applied to them. The result has the properties defined in both templates, with their relationships preserved.
+    Merging templates that have properties with the same name raises a `ValueError`.
 
-    Use `GraphSpec.new_template` or other factory functions to create a template instead of using constructor directly.
+    Use `GraphSpec.new_template` or other factory functions to create a template, instead of using the constructor directly.
     """
     class Property[T]:
         """
-        Template property which determines various behaviors of graph nodes.
+        A template property that determines various behaviors of graph nodes.
         """
         def __init__(
             self,
             template: 'GraphTemplate',
             name: str,
-            kind: type[T] | 'GraphTemplate',
+            kind: 'type[T] | GraphTemplate',
             policy: IdentifyPolicy,
             entity_filter: Callable[[T], bool] | None,
             origin: Self | None = None,
         ):
-            #: Graph template this property belongs to.
+            #: The graph template this property belongs to.
             self.template = template
-            #: Property name.
+            #: The name of the property.
             self.name = name
-            #: Graph node bound to this property should have entity of this type.
+            #: The entity type of this property. It can be a primitive type or another template.
             self.kind = kind
-            #: Policy of entity identification.
+            #: The policy used for entity identification.
             self.policy = policy
-            #: Entity filter function.
+            #: The entity filter function, if any.
             self.entity_filter = entity_filter
             self._origin = origin
 
-        def _assert_canbe_parent(self, another):
+        def _assert_canbe_parent(self, another: 'GraphTemplate.Property'):
             if another.parent is not None:
                 raise ValueError(f"Graph template property can not have multiple parents.")
             if self.template != another.template:
@@ -72,7 +71,7 @@ class GraphTemplate:
                 p = p.parent
 
         @property
-        def parents(self) -> Iterable['GraphTemplate.Property']:
+        def parents(self) -> 'Iterable[GraphTemplate.Property]':
             """
             Returns all parent properties.
             """
@@ -81,14 +80,14 @@ class GraphTemplate:
         @property
         def parent(self) -> 'GraphTemplate.Property | None':
             """
-            Returns parent property if exists.
+            Returns the parent property, if one exists.
             """
             return next(iter(self.parents), None)
 
         @property
-        def children(self) -> list['GraphTemplate.Property']:
+        def children(self) -> 'list[GraphTemplate.Property]':
             """
-            Returns child properties.
+            Returns the child properties.
             """
             return [r[0] for r in self.template._relations if r[1] == self]
 
@@ -107,28 +106,28 @@ class GraphTemplate:
 
         def _move_template(self, dest: 'GraphTemplate', new_name=None) -> 'GraphTemplate.Property':
             """
-            Copy this property and children with setting their templates to `dest` .
+            Copies this property and its children, setting their template to `dest`.
             """
             new_name = new_name or self.name
             prop = GraphTemplate.Property(dest, new_name, self.kind, self.policy, self.entity_filter, origin=self)
             _set_template_property(dest, prop)
             for c in self.children:
                 cc = c._move_template(dest)
-                prop << cc # pyright: ignore [reportUnusedExpression]
+                _ = prop << cc
             return prop
 
         @overload
         def __lshift__(self, children: 'GraphTemplate.Property') -> 'GraphTemplate.Property': ...
         @overload
-        def __lshift__(self, children: list['GraphTemplate.Property']) -> list['GraphTemplate.Property']: ...
+        def __lshift__(self, children: 'list[GraphTemplate.Property]') -> 'list[GraphTemplate.Property]': ...
         def __lshift__(self, children: 'GraphTemplate.Property | list[GraphTemplate.Property]') -> 'GraphTemplate.Property | list[GraphTemplate.Property]':
             """
-            Makes this property as a parent of given properties.
+            Makes this property the parent of the given properties.
 
             Args:
-                children: Property or properties to be children of this property.
+                children: A property, or a list of properties, to become children of this property.
             Returns:
-                The same object as the argument.
+                The same object passed as `children`.
             """
             targets = [children] if isinstance(children, GraphTemplate.Property) else children
             for c in targets:
@@ -138,12 +137,12 @@ class GraphTemplate:
 
         def __rshift__(self, parent: 'GraphTemplate.Property') -> 'GraphTemplate.Property':
             """
-            Makes this property as a child of another property.
+            Makes this property a child of another property.
 
             Args:
-                parent: A Property to be a parent of this property.
+                parent: The property to become the parent of this property.
             Returns:
-                The same object as the argument.
+                The same object passed as `parent`.
             """
             parent._assert_canbe_parent(self)
             self.template._relations += [(self, parent)]
@@ -151,22 +150,22 @@ class GraphTemplate:
 
         def __rrshift__(self, children: 'GraphTemplate.Property | list[GraphTemplate.Property]') -> 'GraphTemplate.Property':
             """
-            Reversed version of `__lshift__()` prepared to locate a list of properties on the left side.
+            The reversed version of `__lshift__()`, provided so that a list of properties can appear on the left-hand side of the operator.
 
             Args:
-                children: Property or properties to be children of this property.
+                children: A property, or a list of properties, to become children of this property.
             Returns:
-                The same object as the argument.
+                This property.
             """
             self.__lshift__(children)
             return self
 
-    def __init__(self, definitions: list[tuple[str, *PropDef]]):
+    def __init__(self, definitions: 'list[tuple[str, *PropDef]]'):
         """
-        Construct template with its properties.  Don't use this constructor directly.
+        Initializes the template with the given properties. Don't use this constructor directly.
 
         Args:
-            definitions: Definitions of template properties.
+            definitions: The definitions of the template's properties.
         """
         self._properties: dict[str, GraphTemplate.Property] = {}
         self._relations: list[tuple[GraphTemplate.Property, GraphTemplate.Property]] = []
@@ -187,12 +186,12 @@ class GraphTemplate:
     def __getattr__(self, key) -> 'GraphTemplate.Property':
         return self._properties[key]
 
-    def __iter__(self) -> Iterator['GraphTemplate.Property']:
+    def __iter__(self) -> 'Iterator[GraphTemplate.Property]':
         """
-        Iterates properties in parent-to-child order.
+        Iterates the properties in parent-to-child order.
 
         Returns:
-            Property iterator.
+            An iterator over the properties.
         """
         return _walk_properties(self._properties)
 
@@ -201,7 +200,7 @@ class GraphTemplate:
         Adds another template to this template.
 
         Args:
-            another: Another template.
+            another: The template to add.
         Returns:
             This instance.
         """
@@ -210,18 +209,18 @@ class GraphTemplate:
             _set_template_property(self, prop)
 
         for n, p in another._relations:
-            getattr(self, n.name) >> getattr(self, p.name) # pyright: ignore [reportUnusedExpression]
+            _ = getattr(self, n.name) >> getattr(self, p.name)
 
         return self
 
     def __add__(self, another: 'GraphTemplate') -> 'GraphTemplate':
         """
-        Creates new template by merging this template and another one.
+        Creates a new template by merging this template with another.
 
         Args:
-            another: Another template.
+            another: The template to merge with this one.
         Returns:
-            New template.
+            The merged template.
         """
         template = GraphTemplate([])
         template += self
@@ -236,7 +235,7 @@ def _set_template_property(template: GraphTemplate, prop: GraphTemplate.Property
     template._properties[prop.name] = prop
 
 
-def _walk_properties(properties: dict[str, GraphTemplate.Property], parent: 'GraphTemplate.Property | None' = None):
+def _walk_properties(properties: dict[str, GraphTemplate.Property], parent: GraphTemplate.Property | None = None):
     def walk(p):
         yield p
         for q in p.children:

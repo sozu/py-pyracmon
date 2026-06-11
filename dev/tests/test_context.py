@@ -1,9 +1,7 @@
-import pytest
 import logging
-import threading
 from pyracmon.config import default_config
-from pyracmon.context import *
-from tests.db_api import *
+from pyracmon.context import ConnectionContext
+from .db_api import *
 
 
 class TestConfigure:

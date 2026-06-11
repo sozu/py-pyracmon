@@ -6,8 +6,7 @@ import secrets
 import string
 import threading
 import types
-from typing import Any, Callable
-from typing_extensions import Self
+from typing import Any, Callable, Self
 from . import dbapi
 from .sql import Sql
 from .marker import Marker
@@ -16,9 +15,9 @@ from .context import ConnectionContext, PARAMS
 
 def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
     """
-    Connects to DB by passing arguments to DB-API 2.0 module.
+    Connects to a DB by passing arguments to a DB-API 2.0 module.
 
-    Every optional argument is passed to `api.connect` and returns the `Connection` object which wraps obtained DB connection.
+    All `args` and `kwargs` are passed to `api.connect`, and its result is wrapped in the returned `Connection` object.
 
     ```python
     import psycopg2
@@ -29,29 +28,29 @@ def connect(api: types.ModuleType, *args: Any, **kwargs: Any) -> 'Connection':
     ```
 
     Args:
-        api: DB-API 2.0 module which exports `connect` function.
+        api: A DB-API 2.0 module that exports a `connect` function.
         args: Positional arguments passed to `api.connect`.
         kwargs: Keyword arguments passed to `api.connect`.
     Returns:
-        Wrapper of DB-API 2.0 connection.
+        A wrapper around the DB-API 2.0 connection.
     """
     return Connection(api, api.connect(*args, **kwargs), None)
 
 
 class Connection(dbapi.Connection):
     """
-    Wrapper class of DB-API 2.0 Connection.
+    A wrapper class for a DB-API 2.0 `Connection`.
 
-    Every instance works as the proxy object to original connection, therefore any attribute in it is still available.
+    Every instance works as a proxy for the original connection, so any attribute of the original connection is still accessible.
     """
     _characters = string.ascii_letters + string.digits + ".="
 
     def __init__(self, api, conn: dbapi.Connection, context_factory: Callable[[], ConnectionContext] | None = None):
-        #: A string which identifies a connection.
+        #: A string that identifies this connection.
         self.identifier = self._gen_identifier()
-        #: DB-API 2.0 module.
+        #: The DB-API 2.0 module.
         self.api = api
-        #: Original connection object.
+        #: The original connection object.
         self.conn = conn
         self._context_factory = context_factory
         self._context = None
@@ -80,7 +79,7 @@ class Connection(dbapi.Connection):
     @property
     def context(self) -> ConnectionContext:
         """
-        Context object used for this connection.
+        The context object used for this connection.
         """
         if not self._context:
             self._context = (self._context_factory or ConnectionContext)()
@@ -101,12 +100,12 @@ class Connection(dbapi.Connection):
 
     def use(self, factory: Callable[[], ConnectionContext]) -> Self:
         """
-        Sets factory function of `ConnectionContext` to use custom context.
+        Sets the factory function for `ConnectionContext` to use a custom context.
 
-        When the context is already set, it will be replaced with new one.
+        When the context is already set, it is replaced with a new one.
 
         Args:
-            factory: Function returning custom context.
+            factory: A function that returns a custom context.
         Returns:
             This instance.
         """
@@ -116,23 +115,23 @@ class Connection(dbapi.Connection):
 
     def stmt(self, context: ConnectionContext | None = None) -> 'Statement':
         """
-        Creates new `Statement` which executes queries on this connection.
+        Creates a new `Statement` that executes queries on this connection.
 
         Args:
-            context: Context object used in the statement. If `None`, the context of this connection is used.
+            context: The context object used by the statement. If `None`, the context of this connection is used.
         Returns:
-            Created statement.
+            The created statement.
         """
         return Statement(self, context or self.context)
 
 
 class Statement:
     """
-    This class has methods to execute query on containing connection and context.
+    This class provides methods to execute queries on its connection, using its context.
 
-    Be sure to execute queries on this class to benefit from:
+    Executing queries via this class provides the following benefits:
 
-    - Query formatting using unified marker `$_`.
+    - Query formatting using the unified marker `$_`.
     - Query logging.
     """
     def __init__(self, conn: Connection, context: ConnectionContext):
@@ -141,16 +140,16 @@ class Statement:
 
     def prepare(self, sql: str, *args: Any, **kwargs: Any) -> tuple[str, PARAMS]:
         """
-        Generates formatted query and a list of parameters.
+        Generates a formatted query and a list of parameters.
 
-        This method is invoked internally from `execute` to generate actual query and parameters.
+        This method is invoked internally by `execute` to generate the actual query and its parameters.
 
         Args:
-            sql: Query template which can contain unified marker.
-            args: Positional parameters of query.
-            kwargs: Keyword parameters of query.
+            sql: A query template that can contain unified markers.
+            args: Positional parameters of the query.
+            kwargs: Keyword parameters of the query.
         Returns:
-            Formatted query and parameters.
+            The formatted query and its parameters.
         """
         paramstyle = self.context.config.paramstyle or self.conn.api.paramstyle
 
@@ -161,11 +160,11 @@ class Statement:
         Executes a query and returns a cursor object.
 
         Args:
-            sql: Query template which can contain unified marker.
-            args: Positional parameters of query.
-            kwargs: Keyword parameters of query.
+            sql: A query template that can contain unified markers.
+            args: Positional parameters of the query.
+            kwargs: Keyword parameters of the query.
         Returns:
-            Cursor object used for the query execution.
+            The cursor object used for the query execution.
         """
         sql, params = self.prepare(sql, *args, **kwargs)
 
@@ -175,13 +174,13 @@ class Statement:
 
     def executemany(self, sql: str, seq_of_args: Sequence[PARAMS]) -> dbapi.Cursor:
         """
-        Executes a query for each parameters in `seq_of_args` and returns a cursor object.
+        Executes the query once for each set of parameters in `seq_of_args` and returns a cursor object.
 
         Args:
-            sql: Query template which can contain unified marker.
-            seq_of_args: A sequence of parameters of the query.
+            sql: A query template that can contain unified markers.
+            seq_of_args: A sequence of parameter sets, one for each execution of the query.
         Returns:
-            Cursor object used for the query execution.
+            The cursor object used for the query execution.
         """
         def prepare(ps: list[Any] | dict[str, Any]):
             args = list(ps) if isinstance(ps, (list, tuple)) else []

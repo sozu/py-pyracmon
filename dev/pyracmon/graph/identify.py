@@ -5,9 +5,9 @@ from .protocol import NodePropType, MapNodeType
 
 class IdentifyPolicy:
     """
-    Provides entity identification functionalities used during appending entities to a graph.
+    Provides entity identification functionality used while appending entities to a graph.
 
-    Identification mechanism is based on the equality of identification keys extracted by entities.
+    The identification mechanism is based on the equality of identification keys extracted from entities.
     """
     def __init__(self, identifier: Callable[[Any], Any] | None):
         #: A function to extract the identification key from an entity.
@@ -15,12 +15,12 @@ class IdentifyPolicy:
 
     def get_identifier(self, value: Any) -> Any:
         """
-        Returns identification key from an entity.
+        Returns the identification key for the given entity.
 
         Args:
-            value: An entity.
+            value: The entity to identify.
         Returns:
-            Identification key.
+            The identification key, or `None` if `value` is `None` or no identifier function is configured.
         """
         return self.identifier(value) if self.identifier and value is not None else None
 
@@ -31,28 +31,35 @@ class IdentifyPolicy:
         ancestors: Mapping[str, Iterable[MapNodeType[MapNodeType[MN, str], str]]],
     ) -> tuple[list[MN | None], list[MN]]:
         """
-        Select parent nodes and identical nodes of a new entity.
+        Selects the parent nodes and identical nodes for a new entity.
 
-        This method is called during appending an entity to a graph.
+        - Parent nodes:
+            - Nodes to which the node of the new entity should be appended.
+            - When the list contains `None`, it means that the node of the new entity, which has no parent, should also be appended.
+        - Identical nodes:
+            - Nodes that are assumed to hold an **identical** entity, and should therefore be reused as the node for the new entity.
+            - The new node is created under parent nodes that don't have an identical node.
+
+        This method is called while an entity is being appended to a graph.
 
         Args:
-            prop: Template property for new entity.
-            candidates: Nodes having the same identification key as the key of new entity.
-            ancestors: Parent nodes mapped by property names.
-        Returns
-            The first item is a list of Parent nodes to which the node of new entity should be appended newly.
-            `None` means to append a new node without parent. The second item is a list of identical nodes,
-            which will be merged into ancestors and used in subsequent identifications of child entities.
+            prop: The template property of the new entity.
+            candidates: The nodes that can be identical nodes, because they have the same identification key as the new entity.
+            ancestors: The parent nodes, mapped by property name, to which the parent entities were appended during this operation.
+        Returns:
+            A tuple of the parent nodes and the identical nodes.
         """
         raise NotImplementedError()
 
 
 class HierarchicalPolicy(IdentifyPolicy):
     """
-    Default identification policy used in a container where identification function is defined.
+    An identification policy that depends on identification keys and parent-child relationships.
 
-    This policy identifies nodes whose entity has the same identification key as the key of appending entity
-    and whose parent is also identical to the parent of the entity.
+    - Parent nodes are selected from the ancestors if they don't have a child with the same identification key.
+    - Identical nodes are selected from the candidates if they belong to a parent contained in the ancestors.
+
+    This policy is designed to handle the result of a query that joins multiple tables.
     """
     def identify[MN: MapNodeType](
         self,
@@ -70,7 +77,7 @@ class HierarchicalPolicy(IdentifyPolicy):
                 if all([n not in pn.children[prop.name] for n in candidates]):
                     parent_nodes.append(pn)
 
-            # Find identical nodes from candidates by checking whether the node belogs to a parent contained in ancestors.
+            # Find identical nodes from candidates by checking whether the node belongs to a parent contained in ancestors.
             identical_nodes = [n for n in candidates if any([n in p.children[prop.name] for p in parents])]
 
             return parent_nodes, identical_nodes
@@ -81,9 +88,9 @@ class HierarchicalPolicy(IdentifyPolicy):
 
 class NeverPolicy(IdentifyPolicy):
     """
-    Identification policy which never identifies nodes.
+    An identification policy that never identifies nodes.
 
-    This policy is used in a container where identification function is not defined.
+    This policy is used in a container where no identification function is defined.
     """
     def identify(self, prop, candidates, ancestors):
         parents = sum((list(ancestors[p.name]) for p in prop.parents if p.name in ancestors), [])
@@ -95,6 +102,9 @@ def neverPolicy(instance=NeverPolicy(None)) -> IdentifyPolicy:
 
 
 class AlwaysPolicy(IdentifyPolicy):
+    """
+    Similar to `HierarchicalPolicy`, but identical nodes are selected only by key equality, without checking parent-child relationships.
+    """
     def identify(self, prop, candidates, ancestors):
         parents = sum((list(ancestors[p.name]) for p in prop.parents if p.name in ancestors), [])
 

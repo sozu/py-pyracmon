@@ -1,16 +1,15 @@
-import sys
 from typing import NamedTuple, TYPE_CHECKING
 import psycopg2
 import pymysql
 import pytest
-from itertools import combinations_with_replacement
 from pyracmon import declare_models
 from pyracmon.connection import Connection, connect
-from pyracmon.model import Model, COLUMN
+from pyracmon.model import Model
 from pyracmon.testing import truncate
 from pyracmon.dialect.shared import TruncateMixin
 from pyracmon.dialect import postgresql, mysql
 from pyracmon.mixin import *
+from .fixtures import COLUMN
 
 
 if TYPE_CHECKING:
@@ -45,7 +44,7 @@ def _connect_mysql():
     )
 
 
-last_dialect: Optional[str] = None
+last_dialect: str | None = None
 
 
 @pytest.fixture(params=["postgresql", "mysql"])
