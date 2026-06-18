@@ -7,10 +7,11 @@ import sys
 import types
 from typing import Any, TypeVar, TYPE_CHECKING
 from pyracmon.config import default_config
-from pyracmon.connection import connect, Connection
-from pyracmon.context import ConnectionContext
+from pyracmon.connection import connect, aconnect, Connection, AsyncConnection
+from pyracmon.context import ConnectionContext, AsyncConnectionContext
 from pyracmon.graph.serialize import NodeSerializer
 from pyracmon.mixin import CRUDMixin
+from pyracmon.mixin_async import AsyncCRUDMixin
 from pyracmon.select import read_row
 from pyracmon.model import define_model, Table, Column
 from pyracmon.model_graph import GraphEntityMixin
@@ -26,7 +27,7 @@ from pyracmon.graph.schema import document_type, Typeable, GraphSchema
 from pyracmon.graph.serialize import NodeContext
 from pyracmon.graph.typing import walk_schema
 from pyracmon.graph.typed import TNode, TGraph, TypedGraph, new_typed_graph, dump_typed_graph
-from pyracmon.testing import TestingMixin
+from pyracmon.testing import TestingMixin, AsyncTestingMixin
 
 
 if TYPE_CHECKING:
@@ -39,9 +40,13 @@ else:
 
 __all__ = [
     "connect",
+    "aconnect",
     "Connection",
+    "AsyncConnection",
     "ConnectionContext",
+    "AsyncConnectionContext",
     "CRUDMixin",
+    "AsyncCRUDMixin",
     "read_row",
     "define_model",
     "Table",
@@ -71,6 +76,7 @@ __all__ = [
     "NodeContext",
     "Model",
     "declare_models",
+    "declare_models_async",
     "graph_template",
     "graph_dict",
     "graph_schema",
@@ -115,17 +121,65 @@ def declare_models(
         Declared model types.
     """
     tables = dialect.read_schema(db, excludes, includes)
+    return _define_models(tables, False, dialect, module, mixins, testing, model_type, write_stub)
+
+
+async def declare_models_async(
+    dialect: types.ModuleType,
+    db: AsyncConnection,
+    module: types.ModuleType | str = __name__,
+    mixins: list[type] = [],
+    excludes: list[str] | None = None,
+    includes: list[str] | None = None,
+    *,
+    testing: bool = False,
+    model_type: type[M] = Model,
+    write_stub: bool = False,
+) -> list[type[M]]:
+    """
+    Declare model types read from the database into the specified module.
+
+    Args:
+        dialect: A module exporting a `read_schema` function and `mixins` classes.
+            `pyracmon.dialect.postgresql` and `pyracmon.dialect.mysql` are available.
+        db: A `Connection` already connected to the database.
+        module: A module, or its name, where the declared model types are defined.
+        mixins: Additional mixin classes for declaring model types.
+        excludes: Table names to exclude.
+        includes: Table names to include. When this argument is omitted, all tables except those specified in `excludes` are declared.
+        testing: If `True`, declared models additionally inherit `AsyncTestingMixin`.
+        model_type: Base model type that declared models inherit.
+        write_stub: If `True`, writes stub files for the declared models via `output_stub`.
+    Returns:
+        Declared model types.
+    """
+    tables = await dialect.read_schema_async(db, excludes, includes)
+    return _define_models(tables, True, dialect, module, mixins, testing, model_type, write_stub)
+
+
+def _define_models(
+    tables: list[Table],
+    is_async: bool,
+    dialect: types.ModuleType,
+    module: types.ModuleType | str,
+    mixins: list[type],
+    testing: bool,
+    model_type: type[M],
+    write_stub: bool,
+):
     models = []
     mod = module if isinstance(module, types.ModuleType) else sys.modules[module]
-    base_mixins = [CRUDMixin, GraphEntityMixin, model_type]
+    crud_mixin = AsyncCRUDMixin if is_async else CRUDMixin
+    base_mixins = [crud_mixin, GraphEntityMixin, model_type]
     if testing:
-        base_mixins[0:0] = [TestingMixin]
+        base_mixins[0:0] = [AsyncTestingMixin] if is_async else [TestingMixin]
     for t in tables:
-        m = define_model(t, mixins + dialect.mixins + base_mixins)
+        dialect_mixins = dialect.async_mixins if is_async else dialect.mixins
+        m = define_model(t, mixins + dialect_mixins + base_mixins)
         mod.__dict__[t.name] = m
         models.append(m)
     if write_stub:
-        output_stub(None, mod, models, dialect, mixins, testing=testing)
+        output_stub(None, mod, models, dialect, mixins, testing=testing, is_async=is_async)
     return models
 
 

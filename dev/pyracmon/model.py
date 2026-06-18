@@ -384,7 +384,7 @@ def parse_pks(model: Meta, pks: PKS) -> tuple[list[str], list[Any]]:
         return ([cols[0]], [pks])
 
 
-def extract_pks(model: Meta, record: Record) -> PKS:
+def extract_pks(model: Meta, record: Record) -> dict[str, Any]:
     """
     Extract primary key values from a record.
 
@@ -392,7 +392,7 @@ def extract_pks(model: Meta, record: Record) -> PKS:
         model: The model type.
         record: The record to extract primary key values from.
     Returns:
-        The primary key values.
+        The primary key values as a dictionary..
     Raises:
         ValueError: If some primary key values are not contained in the given record.
     """

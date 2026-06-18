@@ -48,8 +48,6 @@ last_dialect: str | None = None
 
 
 @pytest.fixture(params=["postgresql", "mysql"])
-#@pytest.fixture(params=["postgresql"])
-#@pytest.fixture(params=["mysql"])
 def db(request):
     global last_dialect
     if request.param == "postgresql":

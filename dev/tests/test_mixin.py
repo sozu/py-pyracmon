@@ -2,8 +2,8 @@ import pytest
 from pyracmon.connection import Connection
 from pyracmon.model import define_model, Model
 from pyracmon.query import Q, Conditional
-from tests.db_api import PseudoAPI
 from pyracmon.mixin import CRUDMixin
+from .db_api import PseudoAPI
 from .fixtures import *
 
 

@@ -2,16 +2,21 @@
 This module provides a mixin type that supplies various DB operations to model types as class methods.
 """
 from collections.abc import Mapping, Sequence
-from functools import reduce
-from typing import Any, TypeVar, Literal, cast, overload, TYPE_CHECKING
+from itertools import batched
+from typing import Any, TypeVar, Literal, overload, TYPE_CHECKING
 from .connection import Connection
-from .model import Column, IModel, Record, parse_pks, check_columns, model_values, extract_pks
+from .dbapi import cursor
+from .model import Column, IModel, Record, parse_pks, extract_pks
 from .select import SelectMixin, AliasedColumn, read_row
-from .query import Q, Expression, Conditional, where
-from .clause import ORDER, ranged_by, order_by, values
-from .util import key_to_index, Qualifier, PKS
+from .query import Q, Conditional, where
+from .clause import ORDER, ranged_by, order_by
+from .util import Qualifier, PKS
+from ._mixin import _render, _render_many, _insert, _update,  _set_sequences, _pk_condition, _pk_condition_many
 
 
+#----------------------------------------------------------------
+# Types.
+#----------------------------------------------------------------
 if TYPE_CHECKING:
     class CRUDMixinBase(IModel):
         @classmethod
@@ -52,6 +57,9 @@ M = TypeVar('M', bound='CRUDMixin')
 C = TypeVar('C', bound=str | AliasedColumn, covariant=True)
 
 
+#----------------------------------------------------------------
+# Mixin
+#----------------------------------------------------------------
 class CRUDMixin(SelectMixin, CRUDMixinBase):
     """
     The default mixin providing class methods available on all model types.
@@ -107,8 +115,8 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
             The number of rows.
         """
         wc, wp = where(condition)
-        c = db.stmt().execute(f"SELECT COUNT(*) FROM {cls.name}{_spacer(wc)}", *wp)
-        return c.fetchone()[0] # type: ignore
+        with cursor(db.stmt().execute(f"SELECT COUNT(*) FROM {cls.name}{_spacer(wc)}", *wp)) as c:
+            return c.fetchone()[0] # type: ignore
 
     @classmethod
     def fetch(cls: type[M], db: Connection, pks: PKS, lock: Any | None = None) -> M | None:
@@ -127,13 +135,13 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         Returns:
             A model object if it exists, otherwise `None`.
         """
-        cols, vals = parse_pks(cls, pks)
-        cond = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
-        wc, wp = where(cond)
+        _, condition = _pk_condition(cls, pks)
+        wc, wp = where(condition)
         s = cls.select()
-        c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}", *wp)
-        row = c.fetchone()
-        return read_row(row, *s)[0] if row else None
+        sql = f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}"
+        with cursor(db.stmt().execute(sql, *wp)) as c:
+            row = c.fetchone()
+            return read_row(row, *s)[0] if row else None
 
     @classmethod
     def fetch_many(cls: type[M], db: Connection, seq_pks: Sequence[PKS], lock: Any | None = None, /, per_page: int = 1000) -> list[M]:
@@ -155,28 +163,25 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         Returns:
             The model objects, in the same order as the given sequence.
         """
-        res = []
-        index = 0
-        while index < len(seq_pks):
-            ordered_pks = []
-            cond = Q.of()
-            for pks in seq_pks[index:index+per_page]:
-                cols, vals = parse_pks(cls, pks)
-                ordered_pks.append(tuple(v for v in vals))
-                cond |= Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
-            wc, wp = where(cond)
+        results: dict[Any, M] = {}
+
+        for page_pks in batched(seq_pks, per_page):
+            condition = Conditional.any([_pk_condition(cls, pks)[1] for pks in page_pks])
+            wc, wp = where(condition)
             s = cls.select()
-            c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}", *wp)
+            with cursor(db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(lock)}", *wp)) as c:
+                # Order the results according to the order of the given primary keys.
+                for row in c.fetchall():
+                    res: M = read_row(row, *s)[0]
+                    results[tuple(extract_pks(cls, res).values())] = res
 
-            record_map = {}
-            for r in [read_row(row, *s)[0] for row in c.fetchall()]:
-                pk_values = {c.name:v for c, v in r if c.pk}
-                record_map[tuple([v for _, v in check_columns(cls, pk_values, lambda c: c.pk, True)])] = r
+        records: list[M] = []
+        for pks in seq_pks:
+            key = tuple(parse_pks(cls, pks)[1])
+            if key in results:
+                records.append(results[key])
 
-            res.extend([record_map[k] for k in ordered_pks if k in record_map])
-            index += per_page
-
-        return res
+        return records
 
     @classmethod
     def fetch_where(
@@ -209,8 +214,9 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         wc, wp = where(condition)
         rc, rp = ranged_by(limit, offset)
         s = cls.select()
-        c = db.stmt().execute(f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(order_by(orders))}{_spacer(rc)}{_spacer(lock)}", *(wp + rp))
-        return [read_row(row, *s)[0] for row in c.fetchall()]
+        sql = f"SELECT {s} FROM {cls.name}{_spacer(wc)}{_spacer(order_by(orders))}{_spacer(rc)}{_spacer(lock)}"
+        with cursor(db.stmt().execute(sql, *(wp + rp))) as c:
+            return [read_row(row, *s)[0] for row in c.fetchall()]
 
     @classmethod
     def fetch_one(
@@ -249,34 +255,6 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
             raise ValueError(f"{len(rs)} records are found on the invocation of fetch_one().")
 
     @classmethod
-    def _insert_sql(cls: type[M], record: M | dict[str, Any], qualifier: Mapping[str, Qualifier] = {}) -> tuple[str, list[str], list[Any]]:
-        model: M = record if isinstance(record, cls) else cls(**cast(dict, record))
-        value_dict = model_values(cls, model)
-        check_columns(cls, value_dict)
-        cols, vals = list(value_dict.keys()), list(value_dict.values())
-        ordered_qs = key_to_index(qualifier, cols)
-
-        def exp(v):
-            return lambda i: v
-
-        if any(isinstance(v, Expression) for v in vals):
-            key_gen = []
-            org_vals = vals
-            vals = []
-            for v in org_vals:
-                if isinstance(v, Expression):
-                    key_gen.append(exp(v))
-                    vals.extend(v.params)
-                else:
-                    key_gen.append(lambda i: None)
-                    vals.append(v)
-            values_clause = values(key_gen, 1, ordered_qs)
-        else:
-            values_clause = values(len(cols), 1, ordered_qs)
-
-        return f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values_clause}", cols, vals
-
-    @classmethod
     def insert(
         cls: type[M],
         db: Connection,
@@ -306,8 +284,8 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         Returns:
             The model of the inserted record.
         """
-        model: M = record if isinstance(record, cls) else cls(**cast(dict, record))
-        sql, _, vals = cls._insert_sql(record, qualifier)
+        model, expressions, vals = _render(cls, record, qualifier)
+        sql = _insert(cls, expressions)
 
         if returning:
             if cls.support_returning(db):
@@ -319,8 +297,8 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
                 pass
 
         db.stmt().execute(sql, *vals)
-        for c, v in cls.last_sequences(db, 1):
-            setattr(model, c.name, v)
+        sequences = cls.last_sequences(db, 1)
+        _set_sequences([model], sequences)
         return model
 
     @classmethod
@@ -349,59 +327,19 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         if len(records) == 0:
             return []
 
-        models: list[M] = [r if isinstance(r, cls) else cls(**cast(dict, r)) for r in records]
+        models, expression, all_params = _render_many(cls, records, qualifier)
+        sql = _insert(cls, expression)
 
-        seq_of_params = []
-
-        sql, cols, params = cls._insert_sql(models[0], qualifier)
-
-        cols = set(cols)
-        seq_of_params.append(params)
-
-        for m in models[1:]:
-            value_dict = model_values(cls, m)
-            check_columns(cls, value_dict, lambda c: c.name in cols, requires_all=True)
-            _, _, params = cls._insert_sql(m, qualifier)
-            seq_of_params.append(params)
-
-        db.stmt().executemany(sql, seq_of_params)
+        db.stmt().executemany(sql, all_params)
         num = len(records)
-        for c, v in cls.last_sequences(db, num):
-            for i, m in enumerate(models):
-                setattr(m, c.name, v - (num - i - 1))
+        sequences = cls.last_sequences(db, num)
+        _set_sequences(models, sequences)
 
         if returning:
             seq_pks = [extract_pks(cls, m) for m in models]
             return cls.fetch_many(db, seq_pks)
         else:
             return models
-
-    @classmethod
-    def _update_sql(cls, record: Record, condition: Conditional, qualifier: Mapping[str, Qualifier] = {}, allow_all: bool = True) -> tuple[str, list[str], list[Any]]:
-        value_dict = model_values(cls, record, excludes_pk=True)
-        check_columns(cls, value_dict)
-        cols, vals = list(value_dict.keys()), list(value_dict.values())
-        ordered_qs = key_to_index(qualifier, cols)
-
-        def set_col(acc: tuple[list[str], list[Any]], icv: tuple[int, tuple[str, Any]]) -> tuple[list[str], list[Any]]:
-            i, (c, v) = icv
-            if isinstance(v, Expression):
-                clause = f"{c} = {ordered_qs.get(i, lambda x:x)(v.expression)}"
-                params = v.params
-            else:
-                clause = f"{c} = {ordered_qs.get(i, lambda x:x)('$_')}"
-                params = [v]
-            acc[0].append(clause)
-            acc[1].extend(params)
-            return acc
-
-        setters, params = reduce(set_col, enumerate(zip(cols, vals)), ([], []))
-
-        wc, wp = where(condition)
-        if wc == "" and not allow_all:
-            raise ValueError("Update query to update all records is not allowed.")
-
-        return f"UPDATE {cls.name} SET {', '.join(setters)}{_spacer(wc)}", cols, params + wp
 
     @classmethod
     @overload
@@ -440,8 +378,7 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         Returns:
             The updated record model if `returning` is `True`, otherwise a boolean indicating whether the record exists and was updated.
         """
-        cols, vals = parse_pks(cls, pks)
-        condition = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
+        _, condition = _pk_condition(cls, pks)
         if returning:
             if cls.support_returning(db):
                 models = cls.update_where(db, record, condition, qualifier, returning=True)
@@ -490,48 +427,26 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         if len(records) == 0:
             return [] if returning else 0
 
-        keys = {c.name for c in cls.columns if c.pk}
-        if len(keys) == 0:
+        if not any(c.pk for c in cls.columns):
             raise ValueError(f"update_many is not available because {cls} does not have primary key columns.")
 
-        def classify(acc: tuple[dict[str, Any], dict[str, Any]], cv: tuple[str, Any]):
-            if cv[0] in keys:
-                acc[0][cv[0]] = cv[1]
-            else:
-                acc[1][cv[0]] = cv[1]
-            return acc
+        models, expressions, upd_params = _render_many(cls, records, qualifier, excludes_pk=True)
+        if len(expressions) == 0:
+            raise ValueError(f"No column values are found to update.")
 
-        seq_of_values: list[tuple[dict[str, Any], dict[str, Any]]] = []
-        target_columns: set[str] | None = None
+        sql = _update(cls, expressions)
 
-        for vs in [model_values(cls, r, excludes_pk=False) for r in records]:
-            if not keys < vs.keys():
-                raise ValueError(f"Every row must contain values of all primary keys and at least one update column value.")
-            pks, rec = reduce(classify, vs.items(), ({}, {}))
-            if target_columns is None:
-                check_columns(cls, rec)
-                target_columns = set(rec.keys())
-            else:
-                check_columns(cls, rec, lambda c: c.name in target_columns, True) # type: ignore
-            seq_of_values.append((pks, rec))
+        wc, all_pks, pk_params, _ = _pk_condition_many(cls, records)
+        sql += _spacer(wc)
 
-        sql_first = ""
-        seq_of_params: list[list[Any]] = []
-
-        for pks, rec in seq_of_values:
-            cols, vals = parse_pks(cls, pks)
-            condition = Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])
-
-            sql, _, params = cls._update_sql(rec, condition, qualifier)
-            if not sql_first:
-                sql_first = sql
-            seq_of_params.append(params)
+        all_params = [upd+pk for upd, pk in zip(upd_params, pk_params)]
 
         if returning:
-            db.stmt().executemany(f"{sql_first}", seq_of_params)
-            return cls.fetch_many(db, [pks for pks, _ in seq_of_values])
+            with cursor(db.stmt().executemany(f"{sql}", all_params)):
+                return cls.fetch_many(db, all_pks)
         else:
-            return db.stmt().executemany(sql_first, seq_of_params).rowcount
+            with cursor(db.stmt().executemany(f"{sql}", all_params)) as c:
+                return c.rowcount
 
     @classmethod
     @overload
@@ -570,19 +485,26 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         Returns:
             The number of affected rows if `returning` is `False`, otherwise the updated record models.
         """
-        sql, _, params = cls._update_sql(record, condition, qualifier, allow_all)
+        _, expressions, params = _render(cls, record, qualifier, excludes_pk=True)
+        sql = _update(cls, expressions)
+
+        wc, wp = where(condition)
+        if wc == "" and not allow_all:
+            raise ValueError("Update query to update all records is not allowed.")
+        if wc:
+            sql += _spacer(wc)
+            params += wp
 
         if returning:
             if cls.support_returning(db):
-                c = db.stmt().execute(f"{sql} RETURNING *", *params)
-                s = cls.select()
-                return [read_row(row, *s)[0] for row in c.fetchall()]
+                with cursor(db.stmt().execute(f"{sql} RETURNING *", *params)) as c:
+                    s = cls.select()
+                    return [read_row(row, *s)[0] for row in c.fetchall()]
             else:
                 raise NotImplementedError(f"RETURNING is not supported and there is no way to fetch updated rows exactly.")
         else:
-            c = db.stmt().execute(sql, *params)
-
-            return c.rowcount
+            with cursor(db.stmt().execute(sql, *params)) as c:
+                return c.rowcount
 
     @classmethod
     @overload
@@ -607,13 +529,12 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
         Returns:
             The deleted record model if `returning` is `True`, otherwise a boolean indicating whether the record exists and was deleted.
         """
-        cols, vals = parse_pks(cls, pks)
-
+        _, condition = _pk_condition(cls, pks)
         if returning:
-            models = cls.delete_where(db, Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)]), returning=True)
+            models = cls.delete_where(db, condition, returning=True)
             return models[0] if models else None
         else:
-            return cls.delete_where(db, Conditional.all([Q.eq(**{c: v}) for c, v in zip(cols, vals)])) == 1
+            return cls.delete_where(db, condition) == 1
 
     @classmethod
     @overload
@@ -637,33 +558,18 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
             The number of affected rows if `returning` is `False`, otherwise the deleted record models.
         """
         if len(seq_pks) == 0:
-            return None
+            return 0 if returning else []
 
-        pks_dicts: list[dict[str, Any]] = []
-        for rec in seq_pks:
-            if isinstance(rec, (dict, cls)):
-                pks_dicts.append(extract_pks(cls, rec))
-            else:
-                cols, vals = parse_pks(cls, rec)
-                pks_dicts.append(dict(zip(cols, vals)))
-
-        condition = Conditional.all([Q.eq(**{c: v}) for c, v in pks_dicts[0].items()])
-        wc, wp = where(condition)
-
+        wc, all_pks, all_params, _ = _pk_condition_many(cls, seq_pks)
         sql = f"DELETE FROM {cls.name}{_spacer(wc)}"
-        seq_of_params: list[list[Any]] = [wp]
-
-        for v in pks_dicts[1:]:
-            condition = Conditional.all([Q.eq(**{c: v}) for c, v in v.items()])
-            _, wp = where(condition)
-            seq_of_params.append(wp)
 
         if returning:
-            models = cls.fetch_many(db, pks_dicts)
-            db.stmt().executemany(sql, seq_of_params)
-            return models
+            models = cls.fetch_many(db, all_pks)
+            with cursor(db.stmt().executemany(sql, all_params)) as c:
+                return models
         else:
-            return db.stmt().executemany(sql, seq_of_params).rowcount
+            with cursor(db.stmt().executemany(sql, all_params)) as c:
+                return c.rowcount
 
     @classmethod
     @overload
@@ -697,14 +603,15 @@ class CRUDMixin(SelectMixin, CRUDMixinBase):
 
         if returning:
             if cls.support_returning(db):
-                c = db.stmt().execute(f"{sql} RETURNING *", *wp)
-                return [read_row(row, *cls.select())[0] for row in c.fetchall()]
+                with cursor(db.stmt().execute(f"{sql} RETURNING *", *wp)) as c:
+                    return [read_row(row, *cls.select())[0] for row in c.fetchall()]
             else:
                 current = cls.fetch_where(db, condition)
-                c = db.stmt().execute(sql, *wp)
-                return current
+                with cursor(db.stmt().execute(sql, *wp)) as c:
+                    return current
         else:
-            return db.stmt().execute(sql, *wp).rowcount
+            with cursor(db.stmt().execute(sql, *wp)) as c:
+                return c.rowcount
 
     @classmethod
     def last_sequences(cls, db: Connection, num: int) -> list[tuple[Column, int]]:

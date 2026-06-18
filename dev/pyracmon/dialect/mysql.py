@@ -148,6 +148,7 @@ class MySQLMixin(MultiInsertMixin, TruncateMixin):
 
 
 mixins = [MySQLMixin]
+async_mixins = []
 
 
 def found_rows(db):

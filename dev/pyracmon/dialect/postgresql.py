@@ -1,16 +1,20 @@
 """
 A dialect module for PostgreSQL.
 """
+import asyncio
 import re
+from collections.abc import Sequence
 from decimal import Decimal
 from datetime import date, datetime, time, timedelta
 from uuid import UUID
+import inspect
 from itertools import groupby
 from typing import Any
+from pyracmon.dbapi import cursor, acursor
 from pyracmon.config import TypeMap
-from pyracmon.connection import Connection
+from pyracmon.connection import Connection, AsyncConnection
 from pyracmon.model import Table, Column, ForeignKey, Relations
-from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin
+from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin, AsyncMultiInsertMixin, AsyncTruncateMixin
 from pyracmon.query import Q, where
 from pyracmon.clause import holders
 
@@ -18,7 +22,24 @@ from pyracmon.clause import holders
 SequencePattern = re.compile(r"nextval\(\'([a-zA-Z0-9_]+)\'(\:\:regclass)?\)")
 
 
+async def _execute(db: Connection | AsyncConnection, sql: str, *params: Any) -> Sequence[Sequence[Any]]:
+    c = db.stmt().execute(sql, *params)
+    if inspect.isawaitable(c):
+        async with acursor(await c) as ac:
+            return await ac.fetchall()
+    else:
+        return c.fetchall()
+
+
 def read_schema(db: Connection, excludes: list[str] | None = None, includes: list[str] | None = None) -> list[Table]:
+    return asyncio.run(_read_schema_async(db, excludes, includes))
+
+
+async def read_schema_async(db: AsyncConnection, excludes: list[str] | None = None, includes: list[str] | None = None) -> list[Table]:
+    return await _read_schema_async(db, excludes, includes)
+
+
+async def _read_schema_async(db: Connection | AsyncConnection, excludes: list[str] | None, includes: list[str] | None) -> list[Table]:
     """
     Collect the tables in the current database.
 
@@ -35,7 +56,11 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
 
     w, params = where(cond)
 
-    cursor = db.stmt().execute(f"""\
+    tables: list[Table] = []
+    column_positions = {}
+    base_mapping = db.context.config.type_mapping
+
+    rows = await _execute(db, f"""\
         SELECT
             c.table_name, c.column_name, c.data_type, c.udt_name, c.is_nullable,
             e.data_type, e.udt_name, k.constraint_type, c.column_default, c.ordinal_position
@@ -60,33 +85,15 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
         ORDER BY c.table_name ASC, c.ordinal_position ASC
         """, *params)
 
-    #def map_types(t, udt):
-    #    base = db.context.config.type_mapping
-    #    ptype = base and base(t, udt_name=udt)
-    #    return ptype or _map_types(t)
-
-    #def column_of(n, t, udt, nullable, et, eudt, constraint, default, pos):
-    #    m = SequencePattern.match(default or "")
-    #    cs = (constraint or "").split(',')
-    #    seq = m.group(1) if m else None
-    #    null = nullable == 'YES'
-    #    ptype = map_types(t, udt) if t != 'ARRAY' else list[map_types(et, eudt)]
-    #    info = (t, udt) if t != 'ARRAY' else (et, eudt)
-    #    return Column(n, ptype, info, 'PRIMARY KEY' in cs, Relations() if 'FOREIGN KEY' in cs else None, seq, null)
-
-    tables: list[Table] = []
-    column_positions = {}
-    base_mapping = db.context.config.type_mapping
-
-    for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
+    for t, cols in groupby(rows, lambda row: row[0]):
         cols = list(cols)
         columns = [_to_column(base_mapping, *c[1:]) for c in cols]
         tables.append(Table(t, columns))
         column_positions[t] = {c[1]:c[-1] for c in cols}
 
-    cursor.close()
+    table_map = {t.name:t for t in tables}
 
-    cursor = db.stmt().execute(f"""\
+    rows = await _execute(db, f"""\
         SELECT
             k.table_name AS t1, k.column_name AS c1, k2.table_name AS t2, k2.column_name AS c2
         FROM
@@ -98,9 +105,7 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
             k.table_name ASC
         """)
 
-    table_map = {t.name:t for t in tables}
-
-    for row in cursor.fetchall():
+    for row in rows:
         table_from = table_map.get(row[0], None)
         col_from = table_from.find(row[1]) if table_from else None
 
@@ -110,15 +115,13 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
             col_to = table_to.find(row[3]) if table_to else None
             col_from.fk.add(ForeignKey(table_to or row[2], col_to or row[3]))
 
-    cursor.close()
-
     # Materialized views
     cond = Q.eq("c", relkind = "m") & Q.ge("a", attnum = 1) \
         & q.excludes.not_in("c.relname") & q.includes.in_("c.relname")
 
     w, params = where(cond)
 
-    cursor = db.stmt().execute(f"""\
+    rows = await _execute(db, f"""\
         SELECT
             c.relname, a.attname, a.attnotnull, t.typname, et.typname, a.attnum
         FROM
@@ -131,23 +134,16 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
             c.oid ASC, a.attnum ASC
         """, *params)
 
-    #def mv_column_of(n, not_null, udt, eudt, pos):
-    #    ptype = map_types(_map_alternates(udt), udt) if eudt is None else list[map_types(_map_alternates(eudt), eudt)]
-    #    info = (_map_alternates(udt), udt) if eudt is None else (_map_alternates(eudt), eudt)
-    #    return Column(n, ptype, info, False, None, None, not not_null)
-
-    for t, cols in groupby(cursor.fetchall(), lambda row: row[0]):
+    for t, cols in groupby(rows, lambda row: row[0]):
         cols = list(cols)
         columns = [_to_mv_column(base_mapping, *c[1:]) for c in cols]
         tables.append(Table(t, columns))
         column_positions[t] = {c[1]:c[-1] for c in cols}
 
-    cursor.close()
-
     if len(tables) == 0:
         return tables
 
-    cursor = db.stmt().execute(f"""\
+    rows = await _execute(db, f"""\
         SELECT
             relname, oid
         FROM
@@ -157,20 +153,16 @@ def read_schema(db: Connection, excludes: list[str] | None = None, includes: lis
         """, *[t.name for t in tables])
 
     table_oids = {}
-    for n, oid in cursor.fetchall():
+    for n, oid in rows:
         table_oids[n] = oid
 
     for t in tables:
-        cc = db.stmt().execute(f"SELECT col_description($_, 0)", *[table_oids[t.name]])
-        t.comment = cc.fetchone()[0] or "" # type: ignore
+        rows = await _execute(db, f"SELECT col_description($_, 0)", *[table_oids[t.name]])
+        t.comment = rows[0][0] or "" # type: ignore
 
         for i, col in enumerate(t.columns):
-            cc = db.stmt().execute(f"SELECT col_description($_, $_)", *[table_oids[t.name], column_positions[t.name][col.name]])
-            col.comment = cc.fetchone()[0] or "" # type: ignore
-
-        cc.close()
-
-    cursor.close()
+            rows = await _execute(db, f"SELECT col_description($_, $_)", *[table_oids[t.name], column_positions[t.name][col.name]])
+            col.comment = rows[0][0] or "" # type: ignore
 
     return tables
 
@@ -331,4 +323,33 @@ class PostgreSQLMixin(MultiInsertMixin, TruncateMixin):
         db.cursor().execute(f"TRUNCATE {cls.name} RESTART IDENTITY CASCADE")
 
 
+class AsyncPostgreSQLMixin(AsyncMultiInsertMixin, AsyncTruncateMixin):
+    """
+    A model mixin whose methods are available in PostgreSQL.
+    """
+    @classmethod
+    async def last_sequences(cls, db: AsyncConnection, num: int) -> list[tuple[Column, int]]:
+        cols = [c for c in cls.columns if c.incremental]
+
+        if len(cols) > 0:
+            sequences = []
+            d = db.cursor()
+            for c in cols:
+                await d.execute(f"SELECT currval('{c.incremental}')")
+                sequences.append((c, (await d.fetchone())[0])) # type: ignore
+            await d.close()
+            return sequences
+        else:
+            return []
+
+    @classmethod
+    async def support_returning(cls, db: AsyncConnection) -> bool:
+        return True
+
+    @classmethod
+    async def truncate(cls, db: AsyncConnection):
+        await db.cursor().execute(f"TRUNCATE {cls.name} RESTART IDENTITY CASCADE")
+
+
 mixins = [PostgreSQLMixin]
+async_mixins = [AsyncPostgreSQLMixin]

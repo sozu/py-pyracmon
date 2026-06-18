@@ -9,16 +9,17 @@ import types
 from typing import get_origin, get_args, dataclass_transform
 from pyracmon.model import Model
 from pyracmon.mixin import CRUDMixin
+from pyracmon.mixin_async import AsyncCRUDMixin
 from pyracmon.model_graph import GraphEntityMixin
-from pyracmon.testing import TestingMixin
+from pyracmon.testing import TestingMixin, AsyncTestingMixin
 
 
 default_imports = [
     ("typing", ["Any"]),
-    ("pyracmon", ["Model", "CRUDMixin"]),
+    ("pyracmon", ["Model", "CRUDMixin", "AsyncCRUDMixin"]),
     ("pyracmon.model_graph", ["GraphEntityMixin"]),
     ("pyracmon.stub", ["ModelTransform"]),
-    ("pyracmon.testing", ["TestingMixin"]),
+    ("pyracmon.testing", ["TestingMixin", "AsyncTestingMixin"]),
 ]
 
 
@@ -32,6 +33,7 @@ def render_models(
     dialect: types.ModuleType,
     mixins: list[type],
     testing: bool = False,
+    is_async: bool = False,
 ) -> list[str]:
     """
     Generate the lines of a type stub file (.pyi).
@@ -41,6 +43,7 @@ def render_models(
         dialect: The database dialect module.
         mixins: Mixin types used to declare the model types.
         testing: If `True`, the model classes additionally inherit `TestingMixin`.
+        is_async: If `True`, the model classes are declared as asynchronous models.
     Returns:
         The lines of the generated type stub file.
     """
@@ -49,7 +52,8 @@ def render_models(
     super_types: list[str] = []
     additional_imports: dict[str, set[str]] = {}
 
-    for mx in mixins + dialect.mixins:
+    dialect_mixins = dialect.async_mixins if is_async else dialect.mixins
+    for mx in mixins + dialect_mixins:
         if isinstance(mx, type):
             mod = inspect.getmodule(mx)
             if mod:
@@ -66,9 +70,9 @@ def render_models(
     for mod, names in (default_imports + [(m,list(ns)) for m, ns in additional_imports.items()]):
         lines.append(f"from {mod} import {', '.join(names)}")
 
-    base_mixins = [CRUDMixin, GraphEntityMixin, ModelTransform, Model]
+    base_mixins = [AsyncCRUDMixin if is_async else CRUDMixin, GraphEntityMixin, ModelTransform, Model]
     if testing:
-        base_mixins[0:0] = [TestingMixin]
+        base_mixins[0:0] = [AsyncTestingMixin if is_async else TestingMixin]
     super_types.extend([m.__name__ for m in base_mixins])
 
     def coltype(t: type) -> str:
@@ -109,6 +113,7 @@ def output_stub(
     dialect: types.ModuleType,
     mixins: list[type],
     testing: bool = False,
+    is_async: bool = False,
 ):
     """
     Output a type stub file (.pyi) to the specified location.
@@ -135,9 +140,49 @@ def output_stub(
 
     path = path.joinpath(f"{modpath[-1]}.pyi")
 
-    pyi = render_models(models, dialect, mixins, testing)
+    pyi = render_models(models, dialect, mixins, testing, is_async=is_async)
 
     with open(path, "w") as f:
         for line in pyi:
             f.write(line)
             f.write('\n')
+
+
+def main():
+    import asyncio
+    import argparse
+    import importlib
+    from pyracmon.connection import connect, aconnect
+    from . import declare_models, declare_models_async
+
+    parser = argparse.ArgumentParser(description="Output type stubs for model types.")
+    parser.add_argument("driver", help="The database driver to connect to the database.")
+    parser.add_argument("dsn", help="The DSN to connect to the database.")
+    parser.add_argument("dialect", help="The database dialect to use.")
+    parser.add_argument("module", help="The module where the model types are declared.")
+    parser.add_argument("--async", help="The name of the function or method to obtain an asynchronous connection.", dest="async_")
+
+    args = parser.parse_args()
+
+    driver = importlib.import_module(args.driver)
+
+    dialect_module = f"pyracmon.dialect.{args.dialect}"
+    dialect = importlib.import_module(dialect_module)
+
+    module = importlib.import_module(args.module)
+
+    if connector_name := args.async_:
+        connector = driver
+        for n in connector_name.split("."):
+            connector = getattr(connector, n)
+        async def run_async():
+            db = await aconnect(connector, args.dsn, api=args.driver)
+            await declare_models_async(dialect, db, module, testing=True, write_stub=True)
+        asyncio.run(run_async())
+    else:
+        db = connect(driver, args.dsn)
+        declare_models(dialect, db, module, testing=True, write_stub=True)
+
+
+if __name__ == "__main__":
+    main()
