@@ -176,7 +176,7 @@ def main():
         for n in connector_name.split("."):
             connector = getattr(connector, n)
         async def run_async():
-            db = await aconnect(connector, args.dsn, api=args.driver)
+            db = await aconnect(connector, args.dsn, api=driver)
             await declare_models_async(dialect, db, module, testing=True, write_stub=True)
         asyncio.run(run_async())
     else:

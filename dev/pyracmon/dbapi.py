@@ -3,7 +3,8 @@ This module provides interfaces defined in DB-API 2.0.
 """
 from collections.abc import Sequence, Generator, AsyncGenerator
 from contextlib import contextmanager, asynccontextmanager
-from typing import Protocol, Any
+import inspect
+from typing import Protocol, Any, Awaitable
 
 
 class Cursor(Protocol):
@@ -69,7 +70,9 @@ def cursor(c: Cursor) -> Generator[Cursor, None, None]:
 
 
 @asynccontextmanager
-async def acursor(c: AsyncCursor) -> AsyncGenerator[AsyncCursor, None]:
+async def acursor(c: AsyncCursor | Awaitable[AsyncCursor]) -> AsyncGenerator[AsyncCursor, None]:
+    if inspect.isawaitable(c):
+        c = await c
     try:
         yield c
     finally:

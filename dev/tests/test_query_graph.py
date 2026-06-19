@@ -80,3 +80,31 @@ class TestAppendRows:
         assert [v() for v in graph.b] == [model2(c1=11, c2=12, c3=13), model2(c1=14, c2=15, c3=16)]
         assert [v() for v in graph.c] == [7, 17]
         assert [v() for v in graph.d] == []
+
+    def test_raw_value(self):
+        exp = model1.select("m1") + "c"
+
+        graph = append_rows(
+            PseudoCursor([
+                [1, 2, 3, 4],
+            ]),
+            exp,
+            new_graph(self.template()),
+            a=exp.m1, c=100,
+        ).view
+
+        assert [v() for v in graph.c] == [100]
+
+    def test_callable(self):
+        exp = model1.select("m1") + model2.select("m2")
+
+        graph = append_rows(
+            PseudoCursor([
+                [1, 2, 3, 4, 5, 6],
+            ]),
+            exp,
+            new_graph(self.template()),
+            a=exp.m1, b=lambda r: model2(c1=r.m2.c1 + 10, c2=r.m2.c2 + 10, c3=r.m2.c3 + 10),
+        ).view
+
+        assert [v() for v in graph.b] == [model2(c1=14, c2=15, c3=16)]

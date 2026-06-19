@@ -3,12 +3,12 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from enum import Enum
 from uuid import UUID, uuid1, uuid3
-from typing import TypeVar, Any, Self, overload, TYPE_CHECKING
+from typing import TypeVar, Any, overload, TYPE_CHECKING
 from pyracmon.config import PyracmonConfiguration
 from pyracmon.connection import Connection, AsyncConnection
 from pyracmon.mixin import CRUDMixin
 from pyracmon.mixin_async import AsyncCRUDMixin
-from pyracmon.model import Model, Table, Column
+from pyracmon.model import Table, Column
 from pyracmon.graph.typing import issubgeneric
 from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin, AsyncMultiInsertMixin, AsyncTruncateMixin
 from pyracmon.util import Qualifier
@@ -18,7 +18,7 @@ from .util import default_test_config, Matcher
 if TYPE_CHECKING:
     class TestingModel(MultiInsertMixin, CRUDMixin):
         pass
-    class AsyncTestingModel(AsyncMultiInsertMixin, AsyncTruncateMixin, AsyncCRUDMixin):
+    class AsyncTestingModel(AsyncMultiInsertMixin, AsyncCRUDMixin):
         pass
 else:
     class TestingModel():

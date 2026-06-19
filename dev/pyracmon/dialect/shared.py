@@ -6,12 +6,10 @@ from typing import Any, TypeVar
 from itertools import batched, chain
 from ..dbapi import cursor, acursor
 from ..connection import Connection, AsyncConnection
-from ..clause import values
-from ..model import model_values, check_columns
 from ..mixin import CRUDMixinBase
 from ..mixin_async import AsyncCRUDMixinBase
 from .._mixin import _insert, _render_many
-from ..util import key_to_index, Qualifier
+from ..util import Qualifier
 
 
 M = TypeVar('M', bound='MultiInsertMixin')
@@ -60,43 +58,6 @@ class MultiInsertMixin(CRUDMixinBase):
             offset += num
 
         return len(rows)
-
-        #dict_rows = [model_values(cls, r) for r in rows]
-
-        #for v in dict_rows:
-        #    check_columns(cls, v)
-
-        #cols = list(dict_rows[0].keys())
-        #ordered_qs = key_to_index(qualifier, cols)
-
-        #offset = 0
-        #remainders = dict_rows
-
-        #sql_full = f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), rows_per_insert, ordered_qs)}"
-
-        #def insert(targets, index):
-        #    num = len(targets)
-        #    vals = sum([list(t.values()) for t in targets], [])
-
-        #    sql = sql_full if num == rows_per_insert else \
-        #        f"INSERT INTO {cls.name} ({', '.join(cols)}) VALUES {values(len(cols), num, ordered_qs)}"
-
-        #    db.stmt().execute(sql, *vals)
-
-        #    for c, v in cls.last_sequences(db, num):
-        #        for i, r in enumerate(rows[index:index+num]):
-        #            if isinstance(r, cls):
-        #                setattr(r, c.name, v - (num - i - 1))
-
-        #while len(remainders) >= rows_per_insert:
-        #    insert(remainders[0:rows_per_insert], offset)
-        #    remainders = remainders[rows_per_insert:]
-        #    offset += rows_per_insert
-
-        #if len(remainders) > 0:
-        #    insert(remainders, offset)
-
-        #return len(rows)
 
 
 class AsyncMultiInsertMixin(AsyncCRUDMixinBase):

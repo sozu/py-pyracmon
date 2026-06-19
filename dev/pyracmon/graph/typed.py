@@ -7,7 +7,7 @@
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, dataclass_transform, get_type_hints, get_args, get_origin, overload
 from pyracmon.config import default_config
-from pyracmon.graph.graph import Graph, Node, ContainerView
+from pyracmon.graph.graph import Graph, Node, GraphView, ContainerView
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.typing import is_optional, issubgeneric
@@ -146,7 +146,7 @@ class TEdge[ENTITY]:
 
 
 @dataclass_transform()
-class TGraph:
+class TGraph(GraphView):
     """
     The base class for graph views that provide type-safe access to a graph's structure.
     """
@@ -159,9 +159,25 @@ class TGraph:
         cls._properties_: dict[str, type] = props
         cls._relations_: list[tuple[str, str]] = rels
 
+    @classmethod
+    def template(cls, spec: GraphSpec | None = None) -> GraphTemplate:
+        """
+        Returns a graph template for this graph view class.
+
+        Args:
+            spec: A graph specification that defines how to serialize model objects. If not given, the default graph specification is used.
+        Returns:
+            A graph template for this graph view class.
+        """
+        return _to_template(spec or default_config().graph_spec, cls._properties_, cls._relations_)
+
     def __call__(self) -> Graph:
         """Returns the graph instance."""
         return self.__graph
+
+    def __iter__(self):
+        """Iterates over the containers in the graph."""
+        return map(lambda c: (c.name, c.view), filter(lambda c: c.prop.parent is None, self.__graph.containers.values()))
 
     def _get_children(self, name: str) -> ContainerView:
         return self.__graph.containers[name].view
@@ -202,21 +218,7 @@ def new_typed_graph[GRAPH: TGraph](cls: type[GRAPH], spec: GraphSpec | None = No
     Returns:
         The created `TypedGraph` instance.
     """
-    # Convert declared fields into pairs of name and simple type which are available for graph template properties.
-    def conv(t: Any) -> Any:
-        if ot := is_optional(t):
-            return ot
-        else:
-            return t
-    props = {n: conv(t) for n, t in cls._properties_.items()}
-    tmpl = (spec or default_config().graph_spec).new_template(**props)
-
-    for pn, cn in cls._relations_:
-        parent = tmpl._properties[pn]
-        child = tmpl._properties[cn]
-        _ = parent << child
-
-    return TypedGraph(cls, tmpl)
+    return TypedGraph(cls, _to_template(spec or default_config().graph_spec, cls._properties_, cls._relations_))
 
 
 def _dump(value: Any):
@@ -310,6 +312,24 @@ def _parse_fields[TMPL: TGraph | TNode](cls: type[TMPL]) -> dict[str, Callable[[
                 fields[name] = valuer(cls, name, field_type, opt is not None)
 
     return fields
+
+
+def _to_template(spec: GraphSpec, props: dict[str, type], rels: list[tuple[str, str]]) -> GraphTemplate:
+    # Convert declared fields into pairs of name and simple type which are available for graph template properties.
+    def conv(t: Any) -> Any:
+        if ot := is_optional(t):
+            return ot
+        else:
+            return t
+    props = {n: conv(t) for n, t in props.items()}
+    tmpl = spec.new_template(**props)
+
+    for pn, cn in rels:
+        parent = tmpl._properties[pn]
+        child = tmpl._properties[cn]
+        _ = parent << child
+
+    return tmpl
 
 
 class edger[TMPL: TGraph | TNode]:

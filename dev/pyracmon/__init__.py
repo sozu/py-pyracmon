@@ -9,6 +9,7 @@ from typing import Any, TypeVar, TYPE_CHECKING
 from pyracmon.config import default_config
 from pyracmon.connection import connect, aconnect, Connection, AsyncConnection
 from pyracmon.context import ConnectionContext, AsyncConnectionContext
+from pyracmon.dbapi import cursor, acursor
 from pyracmon.graph.serialize import NodeSerializer
 from pyracmon.mixin import CRUDMixin
 from pyracmon.mixin_async import AsyncCRUDMixin
@@ -16,7 +17,7 @@ from pyracmon.select import read_row
 from pyracmon.model import define_model, Table, Column
 from pyracmon.model_graph import GraphEntityMixin
 from pyracmon.query import Q, Expression, Conditional, escape_like, where
-from pyracmon.query_graph import append_rows
+from pyracmon.query_graph import append_rows, append_rows_async
 from pyracmon.clause import order_by, ranged_by, holders, values
 from pyracmon.stub import output_stub
 from pyracmon.graph import new_graph, S
@@ -26,7 +27,7 @@ from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.schema import document_type, Typeable, GraphSchema
 from pyracmon.graph.serialize import NodeContext
 from pyracmon.graph.typing import walk_schema
-from pyracmon.graph.typed import TNode, TGraph, TypedGraph, new_typed_graph, dump_typed_graph
+from pyracmon.graph.typed import TNode, TGraph, TEdge, TypedGraph, new_typed_graph, dump_typed_graph
 from pyracmon.testing import TestingMixin, AsyncTestingMixin
 
 
@@ -45,6 +46,8 @@ __all__ = [
     "AsyncConnection",
     "ConnectionContext",
     "AsyncConnectionContext",
+    "cursor",
+    "acursor",
     "CRUDMixin",
     "AsyncCRUDMixin",
     "read_row",
@@ -56,6 +59,7 @@ __all__ = [
     "Conditional",
     "where",
     "append_rows",
+    "append_rows_async",
     "escape_like",
     "order_by",
     "ranged_by",
@@ -82,6 +86,7 @@ __all__ = [
     "graph_schema",
     "TNode",
     "TGraph",
+    "TEdge",
     "TypedGraph",
     "new_typed_graph",
     "dump_typed_graph",
