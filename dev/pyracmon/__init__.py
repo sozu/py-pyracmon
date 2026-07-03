@@ -200,7 +200,7 @@ def graph_template(*bases: GraphTemplate, **definitions: type) -> GraphTemplate:
     Returns:
         Graph template.
     """
-    return default_config().graph_spec.new_template(*bases, **definitions)
+    return default_config().graph_spec.new_template(False, *bases, **definitions)
 
 
 def graph_dict(graph: GraphView, **settings: NodeSerializer) -> dict[str, Any]:

@@ -336,6 +336,18 @@ class TestAlter:
         assert r == {"b": 1, "c": 2, "g2": "def"}
 
 
+class TestNest:
+    def test_nest(self):
+        s = NodeSerializer().nest(a=S.name("a"), b=S.nest(a=S.name("b.a"), b=S.name("b.b")))
+        a = s._nested_serializers.get("a")
+        assert a and a._namer == "a"
+        b = s._nested_serializers["b"]
+        ba = b and b._nested_serializers.get("a")
+        assert ba and ba._namer == "b.a"
+        bb = b and b._nested_serializers.get("b")
+        assert bb and bb._namer == "b.b"
+
+
 class TestContext:
     def _template(self):
         t = GraphTemplate([

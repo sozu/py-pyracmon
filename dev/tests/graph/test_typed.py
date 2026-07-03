@@ -1,5 +1,6 @@
 import pytest
 from dataclasses import dataclass
+from pyracmon.graph.graph import nest
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.typed import *
 
@@ -404,3 +405,98 @@ def test_mixed():
         "a2": ["a", "b", "c", "c", "d", "e", "f"],
         "a3": 100,
     }
+
+
+def test_methods_available():
+    class n1(TNode[ent1]):
+        c11: int
+
+        @property
+        def prop(self) -> str:
+            return f"prop-{self.c11}"
+
+        @classmethod
+        def class_method(cls: type, v: int) -> str:
+            return f"class_method-{v}"
+
+        def method(self, v: int) -> str:
+            return f"method-{v+self.c11}"
+
+    class g(TGraph):
+        a1: n1
+
+    assert n1._fields_ == {
+        "c11": valuer(n1, "c11", int, False),
+    }
+    assert n1.class_method(10) == "class_method-10"
+
+    v = new_typed_graph(g).append(a1=ent1(1), c11=10).view
+    assert v.a1.c11 == 10
+    assert v.a1.prop == "prop-10"
+    assert v.a1.method(5) == "method-15"
+
+
+def test_nested_graph():
+    class n4(TNode[ent1]):
+        a: int
+    class n3(TNode[ent3]):
+        a: float
+    class n2(TNode[ent2]):
+        a3: TEdge[n3]
+        a4: TEdge[n4]
+    class n1(TNode[ent1]):
+        a: TEdge[int]
+    class g(TGraph, nested=True):
+        g1: n1
+        g2: TEdge[n2]
+
+    assert g._fields_ == {
+        "g1": noder(g, "g1", n1, False),
+        "g2": edger(g, "g2", n2, True),
+    }
+    assert g._properties_ == {
+        "g1": ent1, "g2": ent2,
+        "g1.a": int,
+        "g2.a3": ent3, "g2.a4": ent1,
+        "g2.a3.a": float,
+        "g2.a4.a": int,
+    }
+    assert g._relations_ == [("g1", "g1.a"), ("g2", "g2.a3"), ("g2", "g2.a4"), ("g2.a3", "g2.a3.a"), ("g2.a4", "g2.a4.a")]
+
+    spec = GraphSpec().add_identifier(ent1, lambda e: e.v1).add_identifier(ent2, lambda e: e.v2)
+
+    v = new_typed_graph(g, spec).append(
+        g1=nest(ent1(10), a=1),
+        g2=nest(ent2("2"), a3=nest(ent3(3.0), a=4.0), a4=nest(ent1(5), a=6)),
+    ).append(
+        g1=nest(ent1(10), a=2),
+        g2=nest(ent2("2"), a3=nest(ent3(3.1), a=4.1), a4=nest(ent1(10), a=12)),
+    ).append(
+        g1=nest(ent1(10), a=3),
+        g2=nest(ent2("3"), a3=nest(ent3(3.2), a=4.2), a4=nest(ent1(15), a=18)),
+    ).append(
+        g1=nest(ent1(11), a=3),
+        g2=nest(ent2("3"), a3=nest(ent3(3.3), a=4.3), a4=nest(ent1(15), a=21)),
+    ).append(
+        g1=nest(ent1(12), a=3),
+        g2=nest(ent2("4"), a3=nest(ent3(3.2), a=4.4), a4=nest(ent1(15), a=24)),
+    ).view
+
+    assert v.g1() == ent1(10)
+    assert list(v.g1.a) == [1, 2, 3]
+    assert [n() for n in v.g2] == [ent2("2"), ent2("3"), ent2("4")]
+
+    assert [n() for n in v.g2[0].a3] == [ent3(3.0), ent3(3.1)]
+    assert [n.a for n in v.g2[0].a3] == [4.0, 4.1]
+    assert [n() for n in v.g2[0].a4] == [ent1(5), ent1(10)]
+    assert [n.a for n in v.g2[0].a4] == [6, 12]
+
+    assert [n() for n in v.g2[1].a3] == [ent3(3.2), ent3(3.3)]
+    assert [n.a for n in v.g2[1].a3] == [4.2, 4.3]
+    assert [n() for n in v.g2[1].a4] == [ent1(15)]
+    assert [n.a for n in v.g2[1].a4] == [18]
+
+    assert [n() for n in v.g2[2].a3] == [ent3(3.2)]
+    assert [n.a for n in v.g2[2].a3] == [4.4]
+    assert [n() for n in v.g2[2].a4] == [ent1(15)]
+    assert [n.a for n in v.g2[2].a4] == [24]

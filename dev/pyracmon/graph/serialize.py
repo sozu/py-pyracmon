@@ -23,13 +23,14 @@ class NodeSerializing(Protocol):
     def fold(self, aggregator: Callable[[list[Node]], Any]) -> 'NodeSerializer': ...
     def select(self, aggregator: Callable[[list[Node]], list[Node]]) -> 'NodeSerializer': ...
     def each(self, func: Serializer) -> 'NodeSerializer': ...
-    def sub(self, **settings) -> 'NodeSerializer': ...
+    def sub(self, **settings: 'NodeSerializer') -> 'NodeSerializer': ...
     def alter(
         self,
         generator: Serializer | None = None,
         excludes: Iterable[str] | None = None,
         includes: Iterable[str] | None = None,
     ) -> 'NodeSerializer': ...
+    def nest(self, **serializers: 'NodeSerializer') -> 'NodeSerializer': ...
 
 
 class NodeSerializer(NodeSerializing):
@@ -106,6 +107,7 @@ class NodeSerializer(NodeSerializing):
         self._namer = namer
         self._aggregator = aggregator
         self._serializers = list(serializers)
+        self._nested_serializers: dict[str, NodeSerializer] = {}
         self._be_merged = False
         self._doc = ""
         self._doc_options = {}
@@ -333,7 +335,7 @@ class NodeSerializer(NodeSerializing):
         self._serializers.append(func)
         return self
 
-    def sub(self, **settings) -> 'NodeSerializer':
+    def sub(self, **settings: 'NodeSerializer') -> 'NodeSerializer':
         """
         Set serialization settings for sub graph.
 
@@ -404,6 +406,18 @@ class NodeSerializer(NodeSerializing):
             return {k:v for k, v in vv.items() if (not includes or k in includes) and k not in excludes} # type: ignore
 
         self._serializers.append(convert)
+        return self
+
+    def nest(self, **serializers: 'NodeSerializer') -> 'NodeSerializer':
+        """
+        Set serialization settings for nested graph.
+
+        Args:
+            serializers: Serialization settings used to serialize nested graph.
+        Returns:
+            This instance.
+        """
+        self._nested_serializers.update(serializers)
         return self
 
 
@@ -590,7 +604,7 @@ class SerializationContext:
         """
         result = {}
         for c in graph().roots:
-            self.serialize_to(c.name, c, result)
+            self.serialize_to(c.prop.key, c, result)
         return result
 
     def serialize_to(self, name: str, container: NodeContainer | Node.Children, parent: dict[str, Any]) -> None:
@@ -655,8 +669,8 @@ class SerializationContext:
 
             # Child nodes are serialized only when the parent node is serialized into a dict.
             if isinstance(value, dict):
-                for n, ch in node.children.items():
-                    self.serialize_to(n, ch, value)
+                for _, ch in node.children.items():
+                    self.serialize_to(ch.prop.key, ch, value)
 
             return value
 

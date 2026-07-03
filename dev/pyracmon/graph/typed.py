@@ -1,9 +1,3 @@
-# This module provides type-safe access to a graph.
-# Currently, it is an experimental implementation that has some constraints:
-# - All fields of `TNode` subclasses must have unique names within a `TGraph`.
-#
-# This feature is planned to be merged into the core graph module in a future version.
-# Until then, any object exposed by this module is subject to change and may be renamed or relocated.
 from collections.abc import Callable, Iterable, Iterator
 from typing import Any, dataclass_transform, get_type_hints, get_args, get_origin, overload
 from pyracmon.config import default_config
@@ -84,7 +78,7 @@ class TNode[ENTITY]:
         return self.__node.entity
 
     def _get_children(self, name: str) -> ContainerView:
-        return self.__node.children[name].view
+        return {c.prop.key: c for c in self.__node.children.values()}[name].view
 
     def __getattr__(self, name: str):
         """Returns a view of the child node with its declared type."""
@@ -149,13 +143,17 @@ class TEdge[ENTITY]:
 class TGraph(GraphView):
     """
     The base class for graph views that provide type-safe access to a graph's structure.
+
+    If subclass is declared with `nested=True`, the keys of descendant nodes are prefixed with the names of their parent nodes, separated by dots.
+    This feature allows for the declaration of nested graph views, where child nodes can have attributes of the same names as other nodes in the graph.
     """
     def __init__(self, graph: Graph):
         self.__graph = graph
 
-    def __init_subclass__(cls) -> None:
+    def __init_subclass__(cls, nested: bool = False) -> None:
         cls._fields_: dict[str, Callable[[TGraph], Any]] = _parse_fields(cls)
-        props, rels = _to_properties(cls)
+        props, rels = _to_properties(cls, [], nested=nested)
+        cls._nested = nested
         cls._properties_: dict[str, type] = props
         cls._relations_: list[tuple[str, str]] = rels
 
@@ -169,7 +167,7 @@ class TGraph(GraphView):
         Returns:
             A graph template for this graph view class.
         """
-        return _to_template(spec or default_config().graph_spec, cls._properties_, cls._relations_)
+        return _to_template(cls._nested, spec or default_config().graph_spec, cls._properties_, cls._relations_)
 
     def __call__(self) -> Graph:
         """Returns the graph instance."""
@@ -218,7 +216,7 @@ def new_typed_graph[GRAPH: TGraph](cls: type[GRAPH], spec: GraphSpec | None = No
     Returns:
         The created `TypedGraph` instance.
     """
-    return TypedGraph(cls, _to_template(spec or default_config().graph_spec, cls._properties_, cls._relations_))
+    return TypedGraph(cls, _to_template(cls._nested, spec or default_config().graph_spec, cls._properties_, cls._relations_))
 
 
 def _dump(value: Any):
@@ -239,7 +237,7 @@ def dump_typed_graph(graph: TGraph | TNode) -> dict[str, Any]:
     return values
 
 
-def _to_properties(cls: type[TGraph | TNode]) -> tuple[dict[str, type], list[tuple[str, str]]]:
+def _to_properties(cls: type[TGraph | TNode], path: list[str], nested: bool = False) -> tuple[dict[str, type], list[tuple[str, str]]]:
     """
     Parse the fields declared in a `TGraph` / `TNode` into properties and relations.
 
@@ -261,19 +259,23 @@ def _to_properties(cls: type[TGraph | TNode]) -> tuple[dict[str, type], list[tup
         if opt := is_optional(prop_type):
             prop_type = opt
 
+        new_path = path + [name]
+        name = ".".join(new_path) if nested else name
+
         if issubgeneric(prop_type, TNode):
             # prop_type: TNode[entity_type] -> entity_type
             node_type: type[TNode] = prop_type
 
             put(name, node_type._entity_type_)
 
-            nps, nrs = _to_properties(node_type)
+            nps, nrs = _to_properties(node_type, new_path, nested)
 
             for n, t in nps.items():
                 put(n, t)
 
             # Add relation between this property and child properties of the TNode.
-            rels.extend([(name, n) for n in nps.keys() if n in node_type._fields_])
+            field_names = {".".join(new_path + [f]) if nested else f for f in node_type._fields_.keys()}
+            rels.extend([(name, n) for n in nps.keys() if n in field_names])
 
             # Add properties and relations of the child node recursively.
             rels.extend(nrs)
@@ -314,7 +316,7 @@ def _parse_fields[TMPL: TGraph | TNode](cls: type[TMPL]) -> dict[str, Callable[[
     return fields
 
 
-def _to_template(spec: GraphSpec, props: dict[str, type], rels: list[tuple[str, str]]) -> GraphTemplate:
+def _to_template(nested: bool, spec: GraphSpec, props: dict[str, type], rels: list[tuple[str, str]]) -> GraphTemplate:
     # Convert declared fields into pairs of name and simple type which are available for graph template properties.
     def conv(t: Any) -> Any:
         if ot := is_optional(t):
@@ -322,7 +324,7 @@ def _to_template(spec: GraphSpec, props: dict[str, type], rels: list[tuple[str, 
         else:
             return t
     props = {n: conv(t) for n, t in props.items()}
-    tmpl = spec.new_template(**props)
+    tmpl = spec.new_template(nested, **props)
 
     for pn, cn in rels:
         parent = tmpl._properties[pn]

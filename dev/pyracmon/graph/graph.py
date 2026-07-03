@@ -182,17 +182,24 @@ class Graph:
         return self._view
 
     def _append(self, to_replace: bool, entities: dict[str, Any]) -> Self:
-        props = [p for p in self.template if p.name in entities]
+        flattened = {}
+        for k, v in entities.items():
+            if isinstance(v, _Nest):
+                flattened.update(v.flatten(k))
+            else:
+                flattened[k] = v
+
+        props = [p for p in self.template if p.name in flattened]
 
         filtered = set()
         for p in props:
-            if (p.parent is None) or (p.parent.name not in entities) or (p.parent.name in filtered):
-                if p.entity_filter is None or p.entity_filter(entities[p.name]):
+            if (p.parent is None) or (p.parent.name not in flattened) or (p.parent.name in filtered):
+                if p.entity_filter is None or p.entity_filter(flattened[p.name]):
                     filtered.add(p.name)
 
         ancestors = {}
         for k in [p.name for p in props if p.name in filtered]:
-            self.containers[k].append(entities[k], ancestors, to_replace)
+            self.containers[k].append(flattened[k], ancestors, to_replace)
 
         return self
 
@@ -651,3 +658,45 @@ class _GraphNode(Node):
 
     def has_child(self, child):
         return False
+
+
+class _Nest:
+    """
+    This class represents a value and nested values under it, which are similar to a node in a graph.
+
+    Don't use this class directly. Use the `nest` function to provide the nested values to append them to a graph.
+    """
+    def __init__(self, value: Any, children: dict[str, Any]):
+        self.value = value
+        self.children = children
+
+    def flatten(self, key: str) -> dict[str, Any]:
+        """
+        Flattens values and put them into a dictionary.
+
+        Args:
+            key: The key for the value of this instance.
+        Returns:
+            A flattened dictionary representation of this instance.
+        """
+        flattened = {key: self.value}
+        for k, v in self.children.items():
+            ck = f"{key}.{k}"
+            if isinstance(v, _Nest):
+                flattened.update(v.flatten(ck))
+            else:
+                flattened[ck] = v
+        return flattened
+
+
+def nest(value: Any, **children: Any) -> _Nest:
+    """
+    Creates a nested value.
+
+    Args:
+        value: The value to store.
+        children: The nested values, keyed by their property names.
+    Returns:
+        A `_Nest` instance that holds the value and its nested values.
+    """
+    return _Nest(value, children)

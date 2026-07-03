@@ -1,7 +1,7 @@
 import pytest
 from dataclasses import dataclass
 from typing import Annotated, TypedDict, TypeVar
-from pyracmon.graph.spec import GraphSpec
+from pyracmon.graph.spec import GraphSpec, _flattern_serializers
 from pyracmon.graph.graph import new_graph
 from pyracmon.graph.serialize import S
 from pyracmon.graph.schema import *
@@ -297,6 +297,52 @@ class TestGraphSchema:
                     "c1": int, "c2": str,
                     "__d1__": int,
                 }
+            ],
+        }
+
+    def test_nested_graph(self):
+        class TDA(TypedDict):
+            a1: int
+            a2: Annotated[str, "A2"]
+        class TDC(TypedDict):
+            c1: Annotated[int, "C1"]
+            c2: str
+        class TDD(TypedDict):
+            d1: int
+
+        spec = GraphSpec()
+
+        t = spec.new_template(True, **{
+            "a": TDA,
+            "a.b": str,
+            "a.c": TDC,
+            "a.c.d": TDD,
+        })
+        t["a"] << [t["a.b"], t["a.c.d"] >> t["a.c"]]
+
+        settings = dict(
+            a = S.doc("A").nest(
+                b = S.doc("B").head(),
+                c = S.doc("C").name("__c__").nest(
+                    d = S.doc("D").merge(lambda n:f"__{n}__"),
+                ),
+            ),
+        )
+
+        schema = GraphSchema(spec, t, **_flattern_serializers(settings))
+
+        assert walk_schema(schema.schema) == {
+            "a": [
+                {
+                    "a1": int, "a2": str,
+                    "b": str | None,
+                    "__c__": [
+                        {
+                            "c1": int, "c2": str,
+                            "__d1__": int,
+                        }
+                    ],
+                },
             ],
         }
 

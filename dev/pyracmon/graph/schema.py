@@ -130,9 +130,9 @@ class GraphSchema:
                 elif ns.be_singular:
                     rt = signature(ns.aggregator).return_annotation
                     rt = replace_optional_typevar(rt, cs)
-                    annotations[ns.namer(c.name)] = rt
+                    annotations[ns.namer(c.key)] = rt
                 else:
-                    annotations[ns.namer(c.name)] = document_type(list[t], d)
+                    annotations[ns.namer(c.key)] = document_type(list[t], d)
 
             td_type: type | None = cast(type, return_type) if is_typeddict(return_type) else None
 
@@ -159,10 +159,10 @@ class GraphSchema:
             elif ns.be_singular:
                 rt = signature(ns.aggregator).return_annotation
                 rt = replace_optional_typevar(rt, dt)
-                annotations[ns.namer(p.name)] = rt
+                annotations[ns.namer(p.key)] = rt
             else:
                 t, d = decompose_document(dt)
-                annotations[ns.namer(p.name)] = document_type(list[t], d)
+                annotations[ns.namer(p.key)] = document_type(list[t], d)
 
         roots = filter(lambda p: p.parent is None and p.name in self.serializers, self.template._properties.values())
 

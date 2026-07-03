@@ -885,3 +885,86 @@ class TestFirstNode:
         assert list(g.view.a.b) == []
         assert bool(g.view.a.b.d) is False
         assert list(g.view.a.b.d) == []
+
+
+class TestNestedGraph:
+    def _template(self):
+        policy = HierarchicalPolicy(lambda x:x)
+
+        t = GraphTemplate([
+            ("a", int, policy, lambda x: x>=0),
+            ("a.b", int, policy, lambda x: x>=10),
+            ("a.b.a", int, policy, lambda x: x>=100),
+            ("a.b.b", int, policy, None),
+            ("a.c", int, policy, None),
+            ("a.c.a", int, policy, None),
+        ])
+        a = t._properties["a"]
+        ab = t._properties["a.b"]
+        aba = t._properties["a.b.a"]
+        abb = t._properties["a.b.b"]
+        ac = t._properties["a.c"]
+        aca = t._properties["a.c.a"]
+        a << [[aba, abb] >> ab, aca >> ac]
+        return t
+
+    def test_append(self):
+        t = self._template()
+        graph = Graph(t)
+
+        graph.append(a=nest(0, b=nest(10, a=100, b=1), c=nest(2, a=3)))
+        graph.append(a=nest(0, b=nest(20, a=200, b=2), c=nest(2, a=30)))
+        graph.append(a=nest(0, b=nest(20, a=300, b=3), c=nest(3, a=40)))
+        graph.append(a=nest(-1, b=nest(11, a=101, b=2), c=nest(3, a=4))) # a < 0
+        graph.append(a=nest(2, b=nest(9, a=102, b=3), c=nest(4, a=5))) # a.b < 10
+        graph.append(a=nest(3, b=nest(13, a=99, b=4), c=nest(5, a=6))) # a.b.a < 100
+        graph.append(a=nest(4, b=nest(14, a=104, b=5)))
+        graph.append(a=nest(5, b=nest(15), c=nest(7)))
+
+        assert graph.asdict() == {
+            "a": [
+                {
+                    "": 0,
+                    "a.b": [
+                        {"": 10, "a.b.a": [{"": 100}], "a.b.b": [{"": 1}]},
+                        {"": 20, "a.b.a": [{"": 200}, {"": 300}], "a.b.b": [{"": 2}, {"": 3}]}
+                    ],
+                    "a.c": [
+                        {"": 2, "a.c.a": [{"": 3}, {"": 30}]},
+                        {"": 3, "a.c.a": [{"": 40}]}
+                    ],
+                },
+                {
+                    "": 2,
+                    "a.b": [],
+                    "a.c": [
+                        {"": 4, "a.c.a": [{"": 5}]}
+                    ],
+                },
+                {
+                    "": 3,
+                    "a.b": [
+                        {"": 13, "a.b.a": [], "a.b.b": [{"": 4}]}
+                    ],
+                    "a.c": [
+                        {"": 5, "a.c.a": [{"": 6}]}
+                    ],
+                },
+                {
+                    "": 4,
+                    "a.b": [
+                        {"": 14, "a.b.a": [{"": 104}], "a.b.b": [{"": 5}]}
+                    ],
+                    "a.c": [],
+                },
+                {
+                    "": 5,
+                    "a.b": [
+                        {"": 15, "a.b.a": [], "a.b.b": []}
+                    ],
+                    "a.c": [
+                        {"": 7, "a.c.a": []}
+                    ],
+                }
+            ]
+        }

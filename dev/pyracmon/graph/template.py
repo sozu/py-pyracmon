@@ -41,7 +41,9 @@ class GraphTemplate:
             kind: 'type[T] | GraphTemplate',
             policy: IdentifyPolicy,
             entity_filter: Callable[[T], bool] | None,
+            *,
             origin: Self | None = None,
+            nested: bool = False,
         ):
             #: The graph template this property belongs to.
             self.template = template
@@ -54,6 +56,7 @@ class GraphTemplate:
             #: The entity filter function, if any.
             self.entity_filter = entity_filter
             self._origin = origin
+            self._nested = nested
 
         def _assert_canbe_parent(self, another: 'GraphTemplate.Property'):
             if another.parent is not None:
@@ -69,6 +72,17 @@ class GraphTemplate:
                 if p.parent == another:
                     raise ValueError(f"Recursive relationship is not allowed.")
                 p = p.parent
+
+        @property
+        def key(self) -> str:
+            """
+            Returns the key of this property used when the graph is serialized into a dictionary.
+
+            TODO
+            The joining method is implemented in graph.Nest class.
+            There should be an explicit association between joining and splitting methods somewhere.
+            """
+            return self.name.split('.')[-1] if self._nested else self.name
 
         @property
         def parents(self) -> 'Iterable[GraphTemplate.Property]':
@@ -160,15 +174,17 @@ class GraphTemplate:
             self.__lshift__(children)
             return self
 
-    def __init__(self, definitions: 'list[tuple[str, *PropDef]]'):
+    def __init__(self, definitions: 'list[tuple[str, *PropDef]]', nested: bool = False):
         """
         Initializes the template with the given properties. Don't use this constructor directly.
 
         Args:
             definitions: The definitions of the template's properties.
+            nested: Whether properties of this template have nested names.
         """
         self._properties: dict[str, GraphTemplate.Property] = {}
         self._relations: list[tuple[GraphTemplate.Property, GraphTemplate.Property]] = []
+        self._nested = nested
 
         for d in definitions:
             name, kind, ident, ef = d
@@ -176,14 +192,17 @@ class GraphTemplate:
             ident = ident or neverPolicy()
 
             if isinstance(kind, GraphTemplate):
-                prop = GraphTemplate.Property(self, name, kind, ident, None)
+                prop = GraphTemplate.Property(self, name, kind, ident, None, nested=kind._nested)
                 _set_template_property(self, prop)
             elif isinstance(kind, GraphTemplate.Property):
                 kind._move_template(self, name)
             else:
-                _set_template_property(self, GraphTemplate.Property(self, name, kind, ident, ef))
+                _set_template_property(self, GraphTemplate.Property(self, name, kind, ident, ef, nested=self._nested))
 
     def __getattr__(self, key) -> 'GraphTemplate.Property':
+        return self._properties[key]
+
+    def __getitem__(self, key) -> 'GraphTemplate.Property':
         return self._properties[key]
 
     def __iter__(self) -> 'Iterator[GraphTemplate.Property]':
@@ -204,8 +223,11 @@ class GraphTemplate:
         Returns:
             This instance.
         """
+        if self._nested != another._nested:
+            raise ValueError(f"Graphs with different nested settings cannot be merged.")
+
         for p in another._properties.values():
-            prop = GraphTemplate.Property(self, p.name, p.kind, p.policy, p.entity_filter, origin=p)
+            prop = GraphTemplate.Property(self, p.name, p.kind, p.policy, p.entity_filter, origin=p, nested=p._nested)
             _set_template_property(self, prop)
 
         for n, p in another._relations:
@@ -222,7 +244,7 @@ class GraphTemplate:
         Returns:
             The merged template.
         """
-        template = GraphTemplate([])
+        template = GraphTemplate([], nested=self._nested)
         template += self
         template += another
 
@@ -230,6 +252,8 @@ class GraphTemplate:
 
 
 def _set_template_property(template: GraphTemplate, prop: GraphTemplate.Property):
+    if prop._nested != template._nested:
+        raise ValueError(f"Nested property setting of templates must be the same to add them.")
     if prop.name in template._properties:
         raise ValueError(f"Property name '{prop.name}' conflicts.'")
     template._properties[prop.name] = prop

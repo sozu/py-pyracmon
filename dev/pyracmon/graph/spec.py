@@ -161,7 +161,7 @@ class GraphSpec:
         else:
             raise ValueError(f"Invalid value was found in keyword arguments of new_template().")
 
-    def new_template(self, *bases: GraphTemplate, **properties: TemplateProperty | GraphTemplate) -> GraphTemplate:
+    def new_template(self, _nested_: bool = False, /, *bases: GraphTemplate, **properties: TemplateProperty | GraphTemplate) -> GraphTemplate:
         """
         Creates a graph template from definitions of its template properties.
 
@@ -191,9 +191,9 @@ class GraphSpec:
         Returns:
             The created graph template.
         """
-        base = sum(bases, GraphTemplate([]))
+        base = sum(bases, GraphTemplate([], nested=_nested_))
 
-        return base + GraphTemplate([(n, *self._get_property_definition(d)) for n, d in properties.items()])
+        return base + GraphTemplate([(n, *self._get_property_definition(d)) for n, d in properties.items()], nested=_nested_)
 
     def to_dict(self, graph: GraphView, _params_: dict[str, dict[str, Any]] = {}, **settings: NodeSerializer) -> dict[str, Any]:
         """
@@ -217,7 +217,7 @@ class GraphSpec:
         Returns:
             The serialization result.
         """
-        return SerializationContext(settings, self.find_serializers, _params_).execute(graph)
+        return SerializationContext(_flattern_serializers(settings), self.find_serializers, _params_).execute(graph)
 
     def to_schema(self, template: GraphTemplate, **settings: NodeSerializer) -> GraphSchema:
         """
@@ -229,4 +229,15 @@ class GraphSpec:
         Returns:
             The schema of the serialization result.
         """
-        return GraphSchema(self, template, **settings)
+        return GraphSchema(self, template, **_flattern_serializers(settings))
+
+
+def _flattern_serializers(serializers: dict[str, NodeSerializer], path: list[str] = []) -> dict[str, NodeSerializer]:
+    result: dict[str, NodeSerializer] = {}
+
+    for k, s in serializers.items():
+        next_path = path + [k]
+        result[".".join(next_path)] = s
+        result.update(_flattern_serializers(s._nested_serializers, next_path))
+
+    return result

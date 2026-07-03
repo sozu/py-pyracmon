@@ -1,4 +1,4 @@
-from pyracmon.graph.graph import Graph
+from pyracmon.graph.graph import Graph, nest
 from pyracmon.graph.serialize import S
 from pyracmon.graph.spec import GraphSpec
 
@@ -164,7 +164,7 @@ class TestNewTemplate:
         t1 = spec.new_template(a = int, b = float)
         t2 = spec.new_template(c = int, d = float)
 
-        t = spec.new_template(t1, t2, e = int, f = float)
+        t = spec.new_template(False, t1, t2, e = int, f = float)
 
         assert list(t) == [t.a, t.b, t.c, t.d, t.e, t.f]
         assert (t.a.name, t.a.kind, t.a.entity_filter) == ("a", int, efi)
@@ -343,4 +343,82 @@ class TestToDict:
                     },
                 },
             ],
+        }
+
+    def test_nested_graph(self):
+        spec = GraphSpec()
+
+        spec.add_identifier(self.A, lambda x:x.v)
+        spec.add_serializer(self.A, lambda c:dict(v=c.value.v, w=c.value.w))
+
+        t = spec.new_template(True, **{
+            "a": self.A,
+            "a.a": self.A,
+            "a.b": int,
+            "a.a.a": str,
+            "a.a.b": int,
+            "b": int,
+        })
+        _ = t["a"] << [[t["a.a.a"], t["a.a.b"]] >> t["a.a"], t["a.b"]]
+
+        graph = Graph(t)
+
+        graph.append(a=nest(self.A(0, 0), a=nest(self.A(0, 10), a="A", b=20), b=30), b=3)
+        graph.append(a=nest(self.A(0, 1), a=nest(self.A(0, 10), a="B", b=21), b=31), b=4)
+        graph.append(a=nest(self.A(0, 2), a=nest(self.A(1, 11), a="C", b=22), b=32), b=5)
+        graph.append(a=nest(self.A(1, 0), a=nest(self.A(0, 10), a="A", b=23), b=33), b=6)
+        graph.append(a=nest(self.A(2, 0), a=nest(self.A(0, 12), a="D", b=24), b=34), b=7)
+
+        assert spec.to_dict(
+            graph.view,
+            a = S.of().nest(
+                a = S.of().nest(
+                    a = S.of(),
+                    b = S.of(),
+                ),
+                b = S.of(),
+            ),
+            b = S.of(),
+        ) == {
+            "a": [
+                {
+                    "v": 0, "w": 0,
+                    "a": [
+                        {
+                            "v": 0, "w": 10,
+                            "a": ["A", "B"],
+                            "b": [20, 21],
+                        },
+                        {
+                            "v": 1, "w": 11,
+                            "a": ["C"],
+                            "b": [22],
+                        },
+                    ],
+                    "b": [30, 31, 32],
+                },
+                {
+                    "v": 1, "w": 0,
+                    "a": [
+                        {
+                            "v": 0, "w": 10,
+                            "a": ["A"],
+                            "b": [23],
+                        },
+                    ],
+                    "b": [33],
+                },
+                {
+                    "v": 2, "w": 0,
+                    "a": [
+                        {
+                            "v": 0, "w": 12,
+                            "a": ["D"],
+                            "b": [24],
+                        },
+                    ],
+                    "b": [34],
+                },
+            ],
+            "b": [3, 4, 5, 6, 7],
         }
