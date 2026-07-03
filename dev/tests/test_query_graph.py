@@ -1,8 +1,9 @@
-import pytest
 from collections.abc import Sequence
 from typing import Any
 from pyracmon.model import Model, define_model
 from pyracmon.graph import GraphTemplate, new_graph
+from pyracmon.graph.graph import nest
+from pyracmon.graph.typed import TNode, TGraph, TEdge, new_typed_graph, dump_typed_graph
 from pyracmon.select import SelectMixin
 from pyracmon.query_graph import append_rows
 from .db_api import PseudoCursor as Cursor
@@ -108,3 +109,32 @@ class TestAppendRows:
         ).view
 
         assert [v() for v in graph.b] == [model2(c1=14, c2=15, c3=16)]
+
+    def test_nested_graph(self):
+        class C(TNode[int]):
+            d: TEdge[int]
+        class A(TNode[model1]):
+            b: TEdge[model2] # type: ignore
+            c: TEdge[C]
+        class G(TGraph, nested=True):
+            a: TEdge[A]
+
+        exp = model1.select("m1") + model2.select("m2") + "c"
+
+        graph = append_rows(
+            PseudoCursor([
+                [1, 2, 3, 11, 12, 13, 7],
+                [4, 5, 6, 14, 15, 16, 17],
+            ]),
+            exp,
+            new_typed_graph(G),
+            a=nest(exp.m1, b=exp.m2, c=exp.c),
+        ).view
+
+        assert [v() for v in graph.a] == [model1(c1=1, c2=2, c3=3), model1(c1=4, c2=5, c3=6)]
+        assert [v for v in graph.a[0].b] == [model2(c1=11, c2=12, c3=13)]
+        assert [v for v in graph.a[1].b] == [model2(c1=14, c2=15, c3=16)]
+        assert [v() for v in graph.a[0].c] == [7]
+        assert [v() for v in graph.a[1].c] == [17]
+        assert [v for v in graph.a[0].c[0].d] == []
+        assert [v for v in graph.a[1].c[0].d] == []

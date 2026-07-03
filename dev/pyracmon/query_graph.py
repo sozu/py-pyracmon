@@ -1,11 +1,31 @@
 from collections.abc import Callable, Iterable
-from typing import Any
+from typing import Any, overload
 from pyracmon.dbapi import Cursor, AsyncCursor
 from pyracmon.select import Selection, Consumable, RowValues, read_row
-from pyracmon.graph import Graph
+from pyracmon.graph.graph import Graph, _Nest
+from pyracmon.graph.typed import TypedGraph, TGraph
 
 
-def append_rows(cursor: Cursor, exp: Iterable[Consumable | Any], graph: Graph, /, **assign: Selection | Callable[[RowValues], Any] | Any) -> Graph:
+@overload
+def append_rows[GRAPH: TGraph](
+    cursor: Cursor,
+    exp: Iterable[Consumable | Any],
+    graph: TypedGraph[GRAPH],
+    /,
+    **assign: Selection | Callable[[RowValues], Any] | Any) -> TypedGraph[GRAPH]: ...
+@overload
+def append_rows(
+    cursor: Cursor,
+    exp: Iterable[Consumable | Any],
+    graph: Graph,
+    /,
+    **assign: Selection | Callable[[RowValues], Any] | Any) -> Graph: ...
+def append_rows(
+    cursor: Cursor,
+    exp: Iterable[Consumable | Any],
+    graph: Graph,
+    /,
+    **assign: Selection | Callable[[RowValues], Any] | Any) -> Graph:
     """
     Adds all rows from the cursor into the graph.
 
@@ -27,6 +47,8 @@ def append_rows(cursor: Cursor, exp: Iterable[Consumable | Any], graph: Graph, /
     Returns:
         The same graph instance that was passed in.
     """
+    assign = _Nest.flatten_dict(assign)
+
     for row in cursor.fetchall():
         r = read_row(row, *exp)
         graph.append(**{k:_get_value(r, assign[k]) for k in assign.keys()})
@@ -34,7 +56,26 @@ def append_rows(cursor: Cursor, exp: Iterable[Consumable | Any], graph: Graph, /
     return graph
 
 
-async def append_rows_async(cursor: AsyncCursor, exp: Iterable[Consumable | Any], graph: Graph, /, **assign: Selection | Callable[[RowValues], Any] | Any) -> Graph:
+@overload
+async def append_rows_async[GRAPH: TGraph](
+    cursor: AsyncCursor,
+    exp: Iterable[Consumable | Any],
+    graph: TypedGraph[GRAPH],
+    /,
+    **assign: Selection | Callable[[RowValues], Any] | Any) -> TypedGraph[GRAPH]: ...
+@overload
+async def append_rows_async(
+    cursor: AsyncCursor,
+    exp: Iterable[Consumable | Any],
+    graph: Graph,
+    /,
+    **assign: Selection | Callable[[RowValues], Any] | Any) -> Graph: ...
+async def append_rows_async(
+    cursor: AsyncCursor,
+    exp: Iterable[Consumable | Any],
+    graph: Graph,
+    /,
+    **assign: Selection | Callable[[RowValues], Any] | Any) -> Graph:
     """
     Asyncio version of `append_rows`.
 
@@ -46,6 +87,8 @@ async def append_rows_async(cursor: AsyncCursor, exp: Iterable[Consumable | Any]
     Returns:
         The same graph instance that was passed in.
     """
+    assign = _Nest.flatten_dict(assign)
+
     for row in await cursor.fetchall():
         r = read_row(row, *exp)
         graph.append(**{k:_get_value(r, assign[k]) for k in assign.keys()})

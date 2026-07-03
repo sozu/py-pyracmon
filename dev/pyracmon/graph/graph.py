@@ -182,12 +182,7 @@ class Graph:
         return self._view
 
     def _append(self, to_replace: bool, entities: dict[str, Any]) -> Self:
-        flattened = {}
-        for k, v in entities.items():
-            if isinstance(v, _Nest):
-                flattened.update(v.flatten(k))
-            else:
-                flattened[k] = v
+        flattened = _Nest.flatten_dict(entities)
 
         props = [p for p in self.template if p.name in flattened]
 
@@ -669,6 +664,24 @@ class _Nest:
     def __init__(self, value: Any, children: dict[str, Any]):
         self.value = value
         self.children = children
+
+    @classmethod
+    def flatten_dict(cls, values: dict[str, Any]) -> dict[str, Any]:
+        """
+        Flattens a dictionary of values and nested values.
+
+        Args:
+            values: A dictionary of values and nested values.
+        Returns:
+            A flattened dictionary representation of the values.
+        """
+        flattened = {}
+        for k, v in values.items():
+            if isinstance(v, _Nest):
+                flattened.update(v.flatten(k))
+            else:
+                flattened[k] = v
+        return flattened
 
     def flatten(self, key: str) -> dict[str, Any]:
         """

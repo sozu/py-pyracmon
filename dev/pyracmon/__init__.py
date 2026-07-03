@@ -21,7 +21,7 @@ from pyracmon.query_graph import append_rows, append_rows_async
 from pyracmon.clause import order_by, ranged_by, holders, values
 from pyracmon.stub import output_stub
 from pyracmon.graph import new_graph, S
-from pyracmon.graph.graph import Graph, GraphView, NodeContainer, ContainerView, Node, NodeView
+from pyracmon.graph.graph import Graph, GraphView, NodeContainer, ContainerView, Node, NodeView, nest
 from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.schema import document_type, Typeable, GraphSchema
@@ -73,6 +73,7 @@ __all__ = [
     "ContainerView",
     "Node",
     "NodeView",
+    "nest",
     "document_type",
     "Typeable",
     "walk_schema",
