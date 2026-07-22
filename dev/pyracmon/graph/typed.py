@@ -1,5 +1,5 @@
 from collections.abc import Callable, Iterable, Iterator
-from typing import Any, dataclass_transform, get_type_hints, get_args, get_origin, overload
+from typing import Any, dataclass_transform, get_type_hints, get_args, get_origin, overload, TYPE_CHECKING
 from pyracmon.config import default_config
 from pyracmon.graph.graph import Graph, Node, GraphView, ContainerView
 from pyracmon.graph.spec import GraphSpec
@@ -80,12 +80,13 @@ class TNode[ENTITY]:
     def _get_children(self, name: str) -> ContainerView:
         return {c.prop.key: c for c in self.__node.children.values()}[name].view
 
-    def __getattr__(self, name: str):
-        """Returns a view of the child node with its declared type."""
-        if conv := type(self)._fields_.get(name):
-            return conv(self)
-        else:
-            raise AttributeError(f"{type(self).__name__} has no attribute {name!r}.")
+    if not TYPE_CHECKING:
+        def __getattr__(self, name: str):
+            """Returns a view of the child node with its declared type."""
+            if conv := type(self)._fields_.get(name):
+                return conv(self)
+            else:
+                raise AttributeError(f"{type(self).__name__} has no attribute {name!r}.")
 
 
 class TEdge[ENTITY]:
@@ -138,6 +139,17 @@ class TEdge[ENTITY]:
             node = self.__container().nodes[index]
             return self.__to_entity(node)
 
+    def find(self, pred: Callable[[ENTITY], bool]) -> ENTITY | None:
+        """
+        Finds the first child node that satisfies the given predicate.
+
+        Args:
+            pred: A predicate function that takes a value of type `ENTITY` and returns a boolean.
+        Returns:
+            The value of type `ENTITY` for the first child node that satisfies the predicate, or `None` if no such node exists.
+        """
+        return next(filter(pred, self), None)
+
 
 @dataclass_transform()
 class TGraph(GraphView):
@@ -181,7 +193,13 @@ class TGraph(GraphView):
         return self.__graph.containers[name].view
 
     def __getattr__(self, name: str):
-        """Returns a view of the named property with its declared type."""
+        """
+        Returns a view of the named property with its declared type.
+
+        NOTE:
+            Because this class inherits from `GraphView`,
+            this method must be implemented but it ends up allowing arbitrary attribute access in type checking.
+        """
         if conv := type(self)._fields_.get(name):
             return conv(self)
         else:

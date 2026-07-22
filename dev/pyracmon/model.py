@@ -1,5 +1,5 @@
-from collections.abc import Iterator
-from typing import Any, Callable, Protocol, get_origin, get_args, cast, TYPE_CHECKING, dataclass_transform
+from collections.abc import Iterator, Callable
+from typing import Any, Callable, Protocol, Self, get_origin, get_args, cast, TYPE_CHECKING, dataclass_transform
 from .util import PKS
 
 
@@ -77,6 +77,22 @@ if TYPE_CHECKING:
         #: A list of `Column` objects.
         columns: ModelColumns
 
+        def __matmul__[M](self: type[M], cond: Any) -> Callable[[M | None], bool]:
+            """
+            Returns a function that checks whether a model instance matches the given condition.
+
+            When `cond` is a dictionary,
+            the returned function checks whether the model instance has attributes with the same names and values as those in the dictionary.
+            When `cond` is a tuple or any other type,
+            the returned function checks whether the model instance has primary key values that match those in `cond`.
+
+            Args:
+                cond: A dictionary of attribute names and values, or a tuple of primary key values, or a single primary key value.
+            Returns:
+                A function that takes a model instance and returns `True` if it matches the condition.
+            """
+            ...
+
     class IModel(Protocol, metaclass=Meta):
         def __init__(self, **kwargs) -> None: ...  # for typing
         def __getitem__(self, key: str) -> Any: ...
@@ -129,7 +145,19 @@ if TYPE_CHECKING:
             ...
 else:
     class Meta:
-        pass
+        def __matmul__(self, cond: Any) -> Callable[[Any | None], bool]:
+            def check(value: Any | None) -> bool:
+                if value is None:
+                    return False
+                elif isinstance(cond, dict):
+                    return all(getattr(value, n, ...) == v for n, v in cond.items())
+                else:
+                    pks = extract_pks(self, value)
+                    if isinstance(cond, tuple):
+                        return len(pks) == len(cond) and all(v == c for v, c in zip(pks.values(), cond))
+                    else:
+                        return len(pks) == 1 and next(iter(pks.values())) == cond
+            return check
 
     class IModel(Protocol):
         pass
@@ -145,7 +173,6 @@ class ForeignKey:
     """
     A foreign key constraint describing a relationship between two columns.
     """
-
     def __init__(self, table: 'Table | str', column: 'str | Column') -> None:
         #: The referenced table model, or the table name if the table is not modeled.
         self.table = table
@@ -157,10 +184,9 @@ class Relations:
     """
     The foreign key constraints on a column.
     """
-
-    def __init__(self) -> None:
+    def __init__(self, constraints: list[ForeignKey] | None = None) -> None:
         #: The foreign key constraints on the column.
-        self.constraints: list[ForeignKey] = []
+        self.constraints: list[ForeignKey] = constraints or []
 
     def add(self, fk: ForeignKey):
         """
@@ -178,7 +204,6 @@ class Column:
 
     The data types of `type_info` and `incremental` depend on the DBMS and its driver. See the `dialect` package for details.
     """
-
     def __init__(
         self,
         name: str,
@@ -212,7 +237,6 @@ class Table:
     """
     A model of a table.
     """
-
     def __init__(self, name: str, columns: list[Column], comment: str = ""):
         #: The table name.
         self.name = name

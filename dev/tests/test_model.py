@@ -135,6 +135,29 @@ class TestEqual:
         assert m(c1=1, c3=3) != m(c1=1, c2=None, c3=3)  # type: ignore
 
 
+class TestMatMul:
+    def test_pk(self):
+        m = define_model(table1, model_type=T1)
+        assert (m@1)(None) is False
+        assert (m@1)(m(c1=1, c2=2, c3=3)) is True
+        assert (m@1)(m(c1=2, c2=2, c3=3)) is False
+
+    def test_multiple_pks(self):
+        m = define_model(table2, model_type=T2)
+        assert (m@(1, 2))(None) is False
+        assert (m@(1, 2))(m(c1=1, c2=2, c3=3)) is True
+        assert (m@(1, 2))(m(c1=2, c2=2, c3=3)) is False
+        assert (m@(2, 3))(m(c1=2, c2=2, c3=3)) is False
+
+    def test_with_dict(self):
+        m = define_model(table1, model_type=T1)
+        assert (m@dict(c1=1))(None) is False
+        assert (m@dict(c1=1))(m(c1=1, c2=2, c3=3)) is True
+        assert (m@dict(c1=1))(m(c1=2, c2=2, c3=3)) is False
+        assert (m@dict(c1=1, c2=2))(m(c1=1, c2=2, c3=3)) is True
+        assert (m@dict(c1=1, c2=3))(m(c1=1, c2=2, c3=3)) is False
+
+
 class TestParsePks:
     def test_dict(self):
         m = define_model(table1, model_type=T1)

@@ -107,13 +107,13 @@ def test_flat_value():
 
 
 def test_flat_node():
-    class n1(TNode[int]):
+    class n1(TNode[ent1]):
         a1: int
-    class n2(TNode[int]):
+    class n2(TNode[ent1]):
         a2: int
-    class n3(TNode[int]):
+    class n3(TNode[ent2]):
         a3: int
-    class n4(TNode[int]):
+    class n4(TNode[ent3]):
         a4: int
     class g(TGraph):
         a: n1
@@ -136,6 +136,8 @@ def test_flat_node():
     assert v.a.a1 == 11
     assert v.b is None
     assert [n() for n in v.c] == [ent2("a"), ent2("b"), ent2("c")]
+    c2 = v.c.find(lambda n: n.a3 == 32)
+    assert c2 and c2() is v.c[1]()
     assert [n.a3 for n in v.c] == [31, 32, 33]
     assert [(n and n()) for n in v.d] == [None, ent3(22.0), None]
     assert [(n and n.a4) for n in v.d] == [None, 42, None]
