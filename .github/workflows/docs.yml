@@ -31,7 +31,7 @@ jobs:
         # Explicit paths include submodules omitted from package __all__.
         run: |
           shopt -s globstar
-          python -m pdoc -o docs-html src/pyracmon/**/*.py '!pyracmon._mixin'
+          python -m pdoc -t docs/templates -o docs-html src/pyracmon/**/*.py '!pyracmon._mixin'
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4

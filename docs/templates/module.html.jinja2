@@ -1,0 +1,21 @@
+{# Keep the module-index link available on every API page. #}
+{% set root_module_name = false %}
+{% extends "default/module.html.jinja2" %}
+
+{% block nav_submodules %}
+    {# Package __all__ describes re-exports, not the documentation hierarchy. #}
+    {% set children = [] %}
+    {% for name in all_modules %}
+        {% if name.rpartition('.')[0] == module.modulename %}
+            {% set _ = children.append(name) %}
+        {% endif %}
+    {% endfor %}
+    {% if children %}
+        <h2>Submodules</h2>
+        <ul>
+            {% for name in children | sort %}
+                <li><a href="{{ '../' * module.modulename.count('.') }}{{ name.replace('.', '/') }}.html">{{ name }}</a></li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+{% endblock %}
