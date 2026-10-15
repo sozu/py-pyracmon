@@ -1,25 +1,16 @@
-import pytest
 from collections.abc import Sequence
 from typing import Any
-from pyracmon.model import Model, Table, Column, define_model, COLUMN
+from pyracmon.model import Model, define_model
 from pyracmon.graph import GraphTemplate, new_graph
-from pyracmon.select import Selection, SelectMixin
+from pyracmon.graph.graph import nest
+from pyracmon.graph.typed import TNode, TGraph, TEdge, new_typed_graph, dump_typed_graph
+from pyracmon.select import SelectMixin
 from pyracmon.query_graph import append_rows
 from .db_api import PseudoCursor as Cursor
+from .fixtures import *
 
 
-table1 = Table("t1", [
-    Column("c1", int, None, True, None, "seq", False),
-    Column("c2", int, None, False, None, None, False),
-    Column("c3", int, None, False, None, None, True),
-])
 class T1(Model, SelectMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
-
-table2 = Table("t2", [
-    Column("c1", int, None, True, None, "seq", False),
-    Column("c2", int, None, True, None, None, True),
-    Column("c3", int, None, False, None, None, False),
-])
 class T2(Model, SelectMixin): c1: int = COLUMN; c2: int = COLUMN; c3: int = COLUMN
 
 
@@ -90,3 +81,60 @@ class TestAppendRows:
         assert [v() for v in graph.b] == [model2(c1=11, c2=12, c3=13), model2(c1=14, c2=15, c3=16)]
         assert [v() for v in graph.c] == [7, 17]
         assert [v() for v in graph.d] == []
+
+    def test_raw_value(self):
+        exp = model1.select("m1") + "c"
+
+        graph = append_rows(
+            PseudoCursor([
+                [1, 2, 3, 4],
+            ]),
+            exp,
+            new_graph(self.template()),
+            a=exp.m1, c=100,
+        ).view
+
+        assert [v() for v in graph.c] == [100]
+
+    def test_callable(self):
+        exp = model1.select("m1") + model2.select("m2")
+
+        graph = append_rows(
+            PseudoCursor([
+                [1, 2, 3, 4, 5, 6],
+            ]),
+            exp,
+            new_graph(self.template()),
+            a=exp.m1, b=lambda r: model2(c1=r.m2.c1 + 10, c2=r.m2.c2 + 10, c3=r.m2.c3 + 10),
+        ).view
+
+        assert [v() for v in graph.b] == [model2(c1=14, c2=15, c3=16)]
+
+    def test_nested_graph(self):
+        class C(TNode[int]):
+            d: TEdge[int]
+        class A(TNode[model1]):
+            b: TEdge[model2] # type: ignore
+            c: TEdge[C]
+        class G(TGraph, nested=True):
+            a: TEdge[A]
+
+        exp = model1.select("m1") + model2.select("m2") + "c"
+
+        graph = append_rows(
+            PseudoCursor([
+                [1, 2, 3, 11, 12, 13, 7],
+                [4, 5, 6, 14, 15, 16, 17],
+            ]),
+            exp,
+            new_typed_graph(G),
+            a=nest(exp.m1, b=exp.m2, c=exp.c),
+        ).view
+
+        assert [v() for v in graph.a] == [model1(c1=1, c2=2, c3=3), model1(c1=4, c2=5, c3=6)]
+        assert [v for v in graph.a[0].b] == [model2(c1=11, c2=12, c3=13)]
+        assert [v for v in graph.a[1].b] == [model2(c1=14, c2=15, c3=16)]
+        assert [v() for v in graph.a[0].c] == [7]
+        assert [v() for v in graph.a[1].c] == [17]
+        assert [v for v in graph.a[0].c[0].d] == []
+        assert [v for v in graph.a[1].c[0].d] == []

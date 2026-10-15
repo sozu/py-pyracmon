@@ -1,5 +1,4 @@
-import pytest
-import logging
+import os
 import psycopg2
 from datetime import date, datetime, time, timedelta
 from typing import Any
@@ -16,8 +15,8 @@ def _connect():
         dbname = "pyracmon_test",
         user = "postgres",
         password = "postgres",
-        host = "postgres",
-        port = 5432,
+        host = os.environ.get("PYRACMON_POSTGRES_HOST", "localhost"),
+        port = int(os.environ.get("PYRACMON_POSTGRES_PORT", "35432")),
     )
 
 
@@ -62,12 +61,12 @@ class TestReadSchema:
             dict(name="time_", type=time, udt="time", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="enum_", type=Any, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="record_", type=Any, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="array_", type=list[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="deeparray_", type=list[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="json_", type=Any, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="jsonb_", type=Any, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
         _assert_schema(table_map["v1"], "v1", "comment of v1", [
             dict(name="c11", type=int, pk=False, fk=None, incremental=None, nullable=True, comment="comment of c11 in v1"),
@@ -92,12 +91,12 @@ class TestReadSchema:
             dict(name="time_", type=time, udt="time", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="enum_", type=object, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="enum_", type=Any, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="record_", type=Any, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="array_", type=list[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="deeparray_", type=list[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="json_", type=Any, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="jsonb_", type=Any, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
 
     def test_excludes(self):
@@ -147,11 +146,11 @@ class TestReadSchema:
             dict(name="delta_", type=timedelta, udt="interval", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="uuid_", type=UUID, udt="uuid", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="enum_", type=C, udt="t_enum", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="record_", type=object, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="record_", type=Any, udt="t_record", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="array_", type=list[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
             dict(name="deeparray_", type=list[int], udt="int4", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="json_", type=dict, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
-            dict(name="jsonb_", type=dict, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="json_", type=Any, udt="json", pk=False, fk=None, incremental=None, nullable=True, comment=""),
+            dict(name="jsonb_", type=Any, udt="jsonb", pk=False, fk=None, incremental=None, nullable=True, comment=""),
         ])
 
 
@@ -187,7 +186,7 @@ class TestLastSequences:
         db = _connect()
 
         tables = read_schema(db, includes=["t1"])
-        m = define_model(tables[0], mixins=[PostgreSQLMixin, CRUDMixin])
+        m = define_model(tables[0], mixins=[PostgreSQLMixin, CRUDMixin], model_type=CRUDMixin)
 
         c = db.cursor()
         c.execute("TRUNCATE t1 RESTART IDENTITY CASCADE")

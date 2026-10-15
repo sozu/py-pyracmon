@@ -1,8 +1,9 @@
+import os
 import pytest
 import psycopg2
 from datetime import date, datetime, time, timedelta
 from enum import Enum, auto
-from uuid import uuid1, uuid3
+from uuid import uuid3
 from tests import models as m
 from pyracmon import *
 from pyracmon.dialect import postgresql
@@ -16,8 +17,8 @@ def _connect():
         dbname = "pyracmon_test",
         user = "postgres",
         password = "postgres",
-        host = "postgres",
-        port = 5432,
+        host = os.environ.get("PYRACMON_POSTGRES_HOST", "localhost"),
+        port = int(os.environ.get("PYRACMON_POSTGRES_PORT", "35432")),
     )
 
 
@@ -142,7 +143,7 @@ class TestFixture:
             today = date.today()
             now = datetime.now().astimezone()
 
-            m.types.column.enum_.ptype = E
+            m.types.columns.enum_.ptype = E
 
             assert m.types.fixture(None, cfg=cfg)[0].match(
                 bool_ = True,
@@ -169,7 +170,7 @@ class TestFixture:
         db = _connect()
         declare_models(postgresql, db, 'tests.models', mixins=[TestingMixin])
 
-        m.types.column.enum_.ptype = E
+        m.types.columns.enum_.ptype = E
 
         assert m.types.fixture(None)[0].match(
             bool_ = None,

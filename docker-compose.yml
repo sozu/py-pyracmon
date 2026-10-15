@@ -1,18 +1,8 @@
-version: '3'
 services:
-  pyracmon:
-    build:
-      context: ./Dockerfiles
-      dockerfile: python3.13
-    image: pyracmon:develop
-    tty: true
-    volumes:
-      - .:/home/pyracmon
-    container_name: pyracmon
   postgres:
     image: postgres:10
     ports:
-      - 35432:5432
+      - ${PYRACMON_POSTGRES_PORT:-35432}:5432
     environment:
       POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data/postgres
@@ -20,16 +10,26 @@ services:
       - pyracmon_postgres:/var/lib/postgresql/data/postgres
       - ./postgresql/initdb.d:/docker-entrypoint-initdb.d
     container_name: pyracmon_postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pyracmon_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
   mysql:
     image: mysql:8
     ports:
-      - 33306:3306
+      - ${PYRACMON_MYSQL_PORT:-33306}:3306
     environment:
       MYSQL_ROOT_PASSWORD: root
     volumes:
       - pyracmon_mysql:/var/lib/mysql
       - ./mysql/initdb.d:/docker-entrypoint-initdb.d
       - ./mysql/conf.d:/etc/mysql/conf.d
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql -h 127.0.0.1 -u root -e 'SELECT 1'"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 volumes:
   pyracmon_postgres:
   pyracmon_mysql:

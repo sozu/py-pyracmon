@@ -1,16 +1,16 @@
-import sys
+import os
 from typing import NamedTuple, TYPE_CHECKING
 import psycopg2
 import pymysql
 import pytest
-from itertools import combinations_with_replacement
 from pyracmon import declare_models
 from pyracmon.connection import Connection, connect
-from pyracmon.model import Model, COLUMN
+from pyracmon.model import Model
 from pyracmon.testing import truncate
 from pyracmon.dialect.shared import TruncateMixin
 from pyracmon.dialect import postgresql, mysql
 from pyracmon.mixin import *
+from .fixtures import COLUMN
 
 
 if TYPE_CHECKING:
@@ -29,8 +29,8 @@ def _connect_postgresql():
         dbname = "pyracmon_test",
         user = "postgres",
         password = "postgres",
-        host = "postgres",
-        port = 5432,
+        host = os.environ.get("PYRACMON_POSTGRES_HOST", "localhost"),
+        port = int(os.environ.get("PYRACMON_POSTGRES_PORT", "35432")),
     )
 
 
@@ -40,17 +40,15 @@ def _connect_mysql():
         db = "pyracmon_test",
         user = "root",
         password = "root",
-        host = "mysql",
-        port = 3306,
+        host = os.environ.get("PYRACMON_MYSQL_HOST", "localhost"),
+        port = int(os.environ.get("PYRACMON_MYSQL_PORT", "33306")),
     )
 
 
-last_dialect: Optional[str] = None
+last_dialect: str | None = None
 
 
 @pytest.fixture(params=["postgresql", "mysql"])
-#@pytest.fixture(params=["postgresql"])
-#@pytest.fixture(params=["mysql"])
 def db(request):
     global last_dialect
     if request.param == "postgresql":

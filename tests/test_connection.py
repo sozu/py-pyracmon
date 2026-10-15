@@ -1,8 +1,5 @@
-import pytest
-from functools import reduce
-from pyracmon.connection import *
 from pyracmon.context import ConnectionContext
-from tests.db_api import *
+from .db_api import *
 
 
 class TestContext:

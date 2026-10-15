@@ -1,466 +1,383 @@
-# Python O/R mapping extension for DB-API 2.0
+# Pyracmon
 
-## Overview
+Pyracmon is a Python O/R mapping library that builds models from an existing database schema. It combines model-based CRUD operations, helpers for writing SQL, and graphs for assembling query results into application-specific structures.
 
-This library provides functionalities to refine codes executing DB operations. The main peculiar concepts are *model declaration* and *relational graph*.
+Use it when your database schema and SQL are central to your application, and you want to work with records as Python objects and organize related records for further processing or API responses.
 
-*Model* is the class representing a table and its instance corresponds to a record. This library provides a way to declare model classes by reverse-engineering from actual tables. Once you connect DB, model classes becomes importable from a module you specified. Those classes have various methods executing simple operations on a table.
+## Contents
 
-*Graph* is composed of *node*s and *edge*s, where each node contains a model object or any kind of value. An edge between nodes represents their relation, such as foreign key constraint between records. *Graph*s are designed to store results of queries with straight-forward codes, which makes you free from suffering from the reconstruction of data structure. Additionally, *graph view* provides intuitive interfaces to traverse it and *graph serialization* feature enables conversion from a *graph* into a `dict` with keeping its structure and applying flexible representation to each node.
+- [Features and design](#features-and-design)
+- [Requirements and installation](#requirements-and-installation)
+- [Quick start](#quick-start)
+- [Working with SQL](#working-with-sql)
+- [Organizing results with graphs](#organizing-results-with-graphs)
+- [Type information and model generation](#type-information-and-model-generation)
+- [Asynchronous operations](#asynchronous-operations)
+- [Additional features and documentation](#additional-features-and-documentation)
+- [License](#license)
 
-On the other hand, this library does NOT support following features which are common in libraries called O/R mapper.
+## Features and design
 
-- Query generation resolving relations (foreign keys) automatically.
-- Object based query operation such as lazy loading or dirty state handling.
-- Code first migrations, that is, database migrations based on entity declarations.
+The database schema is the source of model metadata. Pyracmon reads tables and views through a database dialect and declares model classes in a Python module. Column names, Python types, primary keys, and other metadata come from the database rather than a separate set of handwritten model declarations.
 
-## Features
+Model classes provide methods for common operations such as inserting records, fetching by primary key, updating matching records, and deleting records. For joins, aggregation, and other custom queries, you write SQL and use helpers to select columns, bind values, and convert result rows into model objects.
 
-**DB-API 2.0**
+Graphs organize records and computed values independently of how they were fetched. You declare the relationships required by your application, then append data from one or more queries. Typed graph views expose that structure through annotated Python classes, and serialization settings control the resulting dictionaries.
 
-This library works as a wrapper of any kind of DB driver compliant with DB-API 2.0 such as *psycopg* or *PyMySQL*. DB operations are passed to the driver so that any functionality it provides is also available. 
+Pyracmon does not manage schema migrations or automatically issue queries when you access related records. You control the SQL, the queries you execute, and transaction boundaries. Graph relationships are explicitly declared; foreign keys do not automatically define the complete output structure.
 
-**Automatic declaration of model types**
+## Requirements and installation
 
-Similarly to many other O/R mappers, this library represents a table with a class called *model type*. The characteristic is that the declarations of *model types* are done by a function crawling tables in DB at runtime, not by manual coding.
+Pyracmon 1.1.0 requires Python 3.12 or later. Database drivers are installed separately from Pyracmon.
 
-**Query helpers**
+| Database | Synchronous driver | Asynchronous driver |
+|---|---|---|
+| PostgreSQL | `psycopg2` | `psycopg` with `AsyncConnection.connect` |
+| MySQL | `PyMySQL` | Not currently supported |
 
-While this library mainly focuses on the use of SQL, not DSL, it exports functions to generate a part of query and each *model type* has methods to execute some routine DB operations on its representing table. They will decrease boilerplate codes to construct query string and parameters. Meanwhile, complicated queries which contain table join, sub-query and so on are not suppoted intentionaly, because it is revealed that trials to manage to them by DSL will end up to bring larger difficulties.
+Pyracmon is designed around DB-API 2.0: in principle, a driver that conforms to DB-API 2.0 is all that is required for driver compatibility. The table above lists the driver combinations illustrated here. Some APIs, such as asynchronous operations, have additional interface requirements beyond DB-API 2.0.
 
-**Record graph**
+To use the version described here, clone the repository and install it from the repository root into your Python environment. Choose the driver for your database; the examples below use PostgreSQL.
 
-`Graph` is a type representing tree structure where each node has at most one parent node, where relations between *model*s are represented with edges. By using the graph to store structured records, every *model type* does not require extra attributes which often spoil the type structure. In addition, *graph serialization* feature provides flexible representations of the graph for later use. Therefore, the *graph* contributes decoupling DB operations and data representations in your codes.
+```sh
+python -m pip install . psycopg2-binary
 
-**Static typing support**
-
-This library provides the functionality to get the schema of serialized graph statically. For example in RESTful applications, the schema can be used for documentation of HTTP response. Because the schema accepts flexible change on data structure (ex. adding computed values, removing keys from a dictionary) in serialization phase, it no longer necessary to declare a type only to represent response structure. Note that the state of this functionality is still unstable becasue static typing support of python is changing frequently.
-
-**Testing support**
-
-Experimental.
-
-Testing DB operations is an important but frastrating task. `pyracmon.testing` provides interfaces to reduce the difficulty. One of them is the generation of fixture by minimal declaration of column values. Feeding values only on columns in interest generates rows by complementing other columns with automatically generated values. Others are in experimental stage and will be changed or removed in future version.
-
-## Prerequisite
-
-Pyracmon requires python 3.9 or higher.
-
-The static typing is the main feature sensitive to python version.
-It is mainly written in the style ordinary in python 3.9 but some parts depend on newer objects imported by `typing_extensions` .
-
-Currently supported DBMS are PostgreSQL (>= 10.0) and MySQL (>= 8.0).
-
-DB driver compliant with DB-API 2.0 is required. 
-[psycopg2](https://pypi.org/project/psycopg2/) (for PostgreSQL) and [PyMySQL](https://pypi.org/project/PyMySQL/) (for MySQL) are used in development respectively.
-
-## Installation
-
-```
-$ pip install pyracmon==1.0.0
+# Also install this driver to run the asynchronous examples.
+python -m pip install 'psycopg[binary]'
 ```
 
-## Grance of functionalities
+## Quick start
 
-Full API documentation is available on <https://sozu.github.io/pyracmon-doc/>.
+This example assumes an existing PostgreSQL database named `pyracmon_example`. Create it using your database administration tools and ensure that your user can read schema metadata and perform CRUD operations on the example tables. Apply the following SQL once if the `blog` table does not already exist.
 
-### Assumption
+The connection examples use `localhost:35432` with user and password `postgres`. Adjust the host, port, database name, and credentials directly in the code to match your database. Update the connection URLs in the CLI examples to use the same settings.
 
-Suppose, you have a database having tables as follows (written in PostgreSQL syntax).
-
-```
+```sql
 CREATE TABLE blog (
     id serial PRIMARY KEY,
     title text NOT NULL
 );
+```
 
+Create an empty `models.py` next to the following `quickstart.py`. `declare_models()` reads the schema and adds model classes to that module at runtime. The helper restricts discovery to the tables used in this guide.
+
+```python
+# quickstart.py
+
+import psycopg2
+import models
+from pyracmon import connect, declare_models
+from pyracmon.dialect import postgresql
+
+
+def connect_db():
+    db = connect(
+        psycopg2,
+        host="localhost",
+        port=35432,
+        dbname="pyracmon_example",
+        user="postgres",
+        password="postgres",
+    )
+    try:
+        declare_models(postgresql, db, models, includes=["blog", "post"])
+    except Exception:
+        db.close()
+        raise
+    return db
+
+
+def main():
+    db = connect_db()
+    try:
+        created = models.blog.insert(db, {"title": "First blog"})
+        found = models.blog.fetch(db, created.id)
+        print(found.title)  # First blog
+
+        models.blog.update(db, created.id, {"title": "Updated blog"})
+        models.blog.delete(db, created.id)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    main()
+```
+
+Run `python quickstart.py` in the environment where Pyracmon and the driver are installed. The script inserts a row, reads it, updates it, and deletes it before committing, so the demonstration leaves no additional blog row behind.
+
+The connection wraps the underlying driver connection and forwards connection arguments to that driver. Manage transactions and connection lifetime explicitly: commit successful changes, roll back on failure, and close the connection when it is no longer needed. Later synchronous examples reuse `connect_db()` and should be run from the same directory.
+
+## Working with SQL
+
+For joins and custom queries, select model columns with aliases and combine them into an expression. `read_row()` uses the same expression to split each result row into its corresponding model objects. This section requires the following `post` table in addition to `blog`; both are included in the repository's example schema.
+
+```sql
 CREATE TABLE post (
     id serial PRIMARY KEY,
     blog_id integer NOT NULL REFERENCES blog (id) ON DELETE CASCADE,
     title text NOT NULL,
     content text NOT NULL
 );
-
-CREATE TABLE image (
-    post_id integer NOT NULL REFERENCES post (id) ON DELETE CASCADE,
-    url text NOT NULL
-);
-
-CREATE TABLE blog_category (
-    id serial PRIMARY KEY,
-    blog_id integer NOT NULL REFERENCES blog (id) ON DELETE CASCADE,
-    name text NOT NULL
-);
-
-CREATE TABLE post_comment (
-    id serial PRIMARY KEY,
-    post_id integer NOT NULL REFERENCES post (id) ON DELETE CASCADE,
-    likes integer NOT NULL,
-    content text NOT NULL
-);
 ```
 
-### Create connection
+The following query fetches posts for a set of blog IDs. It prints one blog title and post title per matching row; if the database has no matching records, it prints nothing.
 
-All operations start with creating connection object. This library works as a wrapper of other DB-API 2.0 compliant DB drivers, thereby arguments given to `connect()` are passed through to `connect()` API of the driver. In addition to the arguments, you have to pass driver module to `connect()` at the first argument.
-
-```
-import psycopg2
-from pyracmon import connect
-
-db = connect(psycopg2, dbname="example", user="postgres", password="postgres")
-```
-
-`db` is a wrapped `Connection` object which also conforms to DB-API 2.0's `Connection`.
-
-### Declarations of model types
-
-*Model types* get importable just by giving a `Connection` object to `declare_models()`. All tables and views are collected and declared as *Model types* named by their table or view names. The function takes at least 3 arguments listed below.
-
-- A module imported from `pyracmon.dialect` package specifying the type of DBMS. `postgresql` and `mysql` are available currently.
-- `Connection` object.
-- An arbitrary module where *model types* are declared.
-
-```
+```python
 import models
-from pyracmon import declare_models
-from pyracmon.dialect import postgresql
+from quickstart import connect_db
+from pyracmon import Q, cursor, read_row, where
 
-declare_models(postgresql, db, models)
+
+db = connect_db()
+try:
+    blog_ids = [1, 2]
+    exp = models.blog.select("b") + models.post.select("p")
+    condition, params = where(Q.in_("b", id=blog_ids))
+    sql = f"""
+        SELECT {exp}
+        FROM blog AS b
+        INNER JOIN post AS p ON p.blog_id = b.id
+        {condition}
+        ORDER BY b.id, p.id
+        LIMIT $_
+    """
+    with cursor(db.stmt().execute(sql, *params, 20)) as c:
+        for row in c.fetchall():
+            record = read_row(row, *exp)
+            print(record.b.title, record.p.title)
+finally:
+    db.rollback()
+    db.close()
 ```
 
-After that, *model types* can be imported from the specified module.
+`exp` and `condition` can be interpolated directly into the SQL: `exp` expands to the selected columns with their aliases, and `condition` expands to the `WHERE` clause. This lets you write the query in its SQL form without a separate sequence of query-building method calls.
 
-```
-from models import blog, post, image, blog_category, post_comment
-```
+`$_` marks a bound value. During `db.stmt().execute()`, markers are converted to the driver's parameter style. Pass values as execution arguments rather than interpolating them into SQL. In this example, the blog IDs and limit remain bound parameters, separate from the column expression and condition embedded in the SQL.
 
-### Model methods
+For simpler queries, model methods such as `fetch_where()`, `count()`, `update_where()`, and `delete_where()` accept conditions built with `Q`. See the [API reference](https://sozu.github.io/py-pyracmon/) for condition operators, ordering, pagination, bulk operations, and database-specific behavior.
 
-Each *model type* provides class methods executing typical CRUD operations on its corresponding table.
+## Organizing results with graphs
 
-```
-from pyracmon import Q
+A join returns one row for each combination of related records. A graph can organize those rows into blogs with lists of posts, combining repeated occurrences of the same model according to its identity. It can also accept data from several queries and values computed in Python.
 
-# Insert a record (you can omit the column where the value is assigned in database side).
-# sql: INSERT INTO blog (title) VALUES (%s)
-# parameters: "Blog title"
-blog.insert(db, dict(title = "Blog title"))
+### Declare and populate a typed graph
 
-# Update a record by primary key.
-# sql: UPDATE blog SET title = %s WHERE id = %s
-# parameters: "New title", 1
-blog.update(db, 1, dict(title = "New title"))
+`TNode[ModelType]` describes a node containing a model and any declared children, while `TGraph` describes the roots. Fields can hold a single value or a collection, as shown below. `TEdge` provides a list-like view of graph values rather than a built-in Python list.
 
-# Delete a record by primary key.
-# sql: DELETE FROM blog WHERE id = %s
-# parameters: title", 1
-blog.delete(db, 1)
+| Field type | Example | Value accessed through the typed view |
+|---|---|---|
+| A query-result value type | `total: int` | A single value, such as a `COUNT(*)` result |
+| A `TNode` subclass | `latest_post: PostNode` | A single node with access to its entity and children |
+| `TEdge` of a query-result value type | `title_lengths: TEdge[int]` | A collection of values, such as integer query results |
+| `TEdge` of a `TNode` subclass | `blogs: TEdge[BlogNode]` | A collection of nodes with their entities and children |
 
-# Update records by condition.
-# sql: UPDATE blog SET title = %s, content = %s WHERE blog_id = %s
-# parameters: "New title", "New content", 2
-post.update_where(db, dict(title = "New title", content = "New content"), Q.eq(blog_id = 2))
+Use a type such as `int` when the driver already returns the corresponding Python value; the annotation does not request a SQL cast or convert arbitrary values. A field without `TEdge` exposes the first value or node. Add `| None` when a single value or node may be absent, as with `latest_post` below.
 
-# Delete records by condition
-# sql: DELETE FROM blog WHERE blog_id = %s
-# parameters: 2
-post.delete_where(db, Q.eq(blog_id = 2))
-```
+The following example reads all graph data from SQL results using `append_rows()`: a blog count, the most recent post by ID, and blogs with their posts and post-title lengths. Each assignment maps a result selection or a function of the result row to a declared graph field. The queries use the `blog` and `post` tables introduced above.
 
-Data fetching operations return *model object(s)* which expose column values via their attributes whose name indicates the column.
+```python
+import models
+from quickstart import connect_db
+from pyracmon import TEdge, TGraph, TNode, append_rows, cursor, new_typed_graph
 
-```
-# Fetch a record by primary key.
-# sql: SELECT id, blog_id, title, content FROM post WHERE id = %s
-# parameters: 1
-p = post.fetch(db, 1)
-print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.content}")
 
-# Fetch records by condition.
-# sql: SELECT id, blog_id, title, content FROM post WHERE blog_id = %s ORDER BY title ASC limit %s OFFSET %s
-# parameters: 2, 10, 20
-for p in post.fetch_where(db, Q.eq(blog_id = 2), orders = dict(title = True), limit = 10, offset = 20):
-    print(f"id = {p.id}, blog_id = {p.blog_id}, title = {p.title}, content = {p.content}")
+db = connect_db()
+try:
+    class PostNode(TNode[models.post]):
+        pass
 
-# Counting records. Returned value n is a number of records.
-# sql: SELECT COUNT(*) FROM post WHERE blog_id = %s
-# parameters: 2
-n = post.count(db, Q.eq(blog_id = 2))
-```
+    class BlogNode(TNode[models.blog]):
+        posts: TEdge[models.post]
 
-Other than usages in above examples, arguments for those methods have some variations, for example in `insert()`, *model object* is also available instead of dictionary. See API documentation for complete information.
+    class BlogGraph(TGraph):
+        total: int
+        latest_post: PostNode | None
+        title_lengths: TEdge[int]
+        blogs: TEdge[BlogNode]
 
-### SQL operations
+    graph = new_typed_graph(BlogGraph)
 
-Instead of `Cursor` defined in DB-API 2.0, this library provides `Statement` for query execution. A functionality of `Statement` is the abstraction layer for placeholder markers. While DB-API 2.0 allows various styles, `Statement` accepts SQL where placeholders are marked by `$` prepended variables. By courtesy of `string.Template` module in python, those variables are converted to correct markers which DB driver can recognize.
+    with cursor(db.stmt().execute("SELECT COUNT(*) FROM blog")) as c:
+        append_rows(c, ["total"], graph, total=lambda row: row.total)
 
-Although there are several rules for the conversion, using `$_` for every placeholder and passing parameters in order makes sense in most cases.
+    latest = models.post.select("p")
+    with cursor(db.stmt().execute(
+        f"SELECT {latest} FROM post AS p ORDER BY p.id DESC LIMIT 1"
+    )) as c:
+        append_rows(c, latest, graph, latest_post=latest.p)
 
-```
-from pyracmon import Q, where, read_row
-
-# Fetch blogs and their posts by blog IDs.
-blog_ids = ...
-limit, offset = ...
-
-# 1. Columns with aliases to select from each table.
-# b.id, b.title, p.title, p.content
-exp = blog.select("b") + post.select("p", ["title", "content"])
-
-# 2. WHERE clause and parameters.
-# WHERE b.id IN (?, ?, ...)
-conds = Q.in_("b", id = blog_ids)
-w, params = where(conds)
-
-# 3. SQL execution
-c = db.stmt().execute(f"""
-    SELECT
-        {exp}
-    FROM
-        blog AS b
-        INNER JOIN post AS p ON b.id = p.blog_id
-    {w}
-    LIMIT $_ OFFSET $_
-    """, *params, limit, offset)
-
-# 4. Model objects obtained from each row.
-for row in c.fetchall():
-    r = read_row(row, *exp)
-    blog = r.b
-    post = r.p
-```
-
-Above code shows the basic flow of execution of SELECT query.
-
-1. Creates `Expressions` object which contains columns and aliases of their tables to select.
-    - As well as *models*, raw expressions like `COUNT(*)` are also available.
-2. Creates `Conditional` object, and then obtatins conditional clause starting with `WHERE` and parameters used in it.
-    - There are many functions to create `Conditional` object like `Q.in_()`.
-3. Executs SQL on `Statement` object. Parameters should be passed as positional arguments.
-4. Obtains *model objects* from each row. `read_row()` parses a row and returns an object which exposes *model objects* via its attributes named by the alias given to `select()`.
-
-See API documentation for further information.
-
-### Graph declaration and construction
-
-Previous section shows the way to get *models* by joining query. `Graph` is convenient object to return them with their relational structure.
-
-Suppose you want a structured list of blogs like below.
-
-```
-{
-    "blogs": [
-        {
-            "id": 1,
-            "title": "Blog title",
-            "posts": [
-                {
-                    "id": 1,
-                    "title": "Post title",
-                    "images": [
-                        {
-                            "url": "https://github.com/example/image/1",
-                            "thumbnail": "https://github.com/example/image/1/thumbnail",
-                        },
-                        ...
-                    ],
-                    "comments": [
-                        {
-                            "id": 1,
-                            "content": "The content of post comment",
-                        },
-                        ...
-                    ],
-                    "most_liked_comment": {
-                        "id": 3,
-                        "content": "The content of post"
-                    },
-                    "total_comments": 100
-                }
-            ],
-            "total_posts": 100,
-            "categories": [
-                {
-                    "id": 1,
-                    "name": "Category name"
-                },
-                ...
-            ]
-        }
-    ],
-    "total": 100
-}
-```
-
-Each blog entry contains various kinds of values which possibly should be obtained by multiple queries. First of all, you should declare `GraphTemplate` representing graph structure.
-
-```
-from pyracmon import graph_template
-
-t = graph_template(
-    blogs = blog,
-    recent_posts = post,
-    total_posts = int,
-    categories = blog_category,
-    images = image,
-    recent_comments = post_comment,
-    most_liked_comment = post_comment,
-    total_comments = int,
-    total = int,
-)
-t.blogs << [t.categories, t.total_posts, t.recent_posts]
-t.recent_posts << [t.images, t.recent_comments, t.most_liked_comment, t.total_comments]
-```
-
-In each keyword argument, key denotes the name of nodes and value denotes the type of node value; `blogs` specifies the container of nodes each of which contains `blog` *model object*. Relationships between nodes are declared by shift operators; category, total number of posts and recent post are children of each blog.
-
-Next example shows the query execution and `Graph` creation which contains the result of the query (actual queries are not written to save spaces).
-
-```
-def fetch_blogs():
-    # Create graph object.
-    graph = new_graph(t)
-
-    # Execute query to fetch blogs with their categories and total number of posts
-    # In this query, blog and category are joined and the total number of posts are counted for each blog.
-    exp = blog.select("b") + blog_category.select("c")
-
-    c.execute("...")
-    for row in c.fetchall():
-        r = read_row(row, *exp, "posts")
-        graph.append(
-            blogs = r.b,
-            categories = r.c,
-            total_posts = r.posts,
+    exp = models.blog.select("b") + models.post.select("p") + "title_length"
+    sql = f"""
+        SELECT {exp(title_length='LENGTH(p.title)')}
+        FROM blog AS b
+        INNER JOIN post AS p ON p.blog_id = b.id
+        ORDER BY b.id, p.id
+    """
+    with cursor(db.stmt().execute(sql)) as c:
+        append_rows(
+            c, exp, graph,
+            blogs=exp.b,
+            posts=exp.p,
+            title_lengths=lambda row: row.title_length,
         )
 
-    # Execute query to fetch recent posts and their images from selected blogs above.
-    # In this query, blog, post and image are joined and total number of comments are counted for each post.
-    blog_ids = [b().id for b in graph.view.blogs]
-    exp = post.select("p") + image.select("i")
-
-    c.execute("...", blog_ids)
-    for row in c.fetchall():
-        r = read_row(row, *exp, "comments")
-        graph.append(
-            blogs = blog(id = r.p.blog_id),
-            recent_posts = r.p,
-            images = r.i,
-            total_comments = r.comments,
-        )
-
-    # Execute query to fetch most liked comment for recent posts respectively.
-    # In this query, post and post_comments are joined.
-    post_ids = [p().id for p in graph.view.recent_posts]
-    pc_ = post_comment.select("pc")
-    c.execute("...")
-    for row in c.fetchall():
-        r = read_row(row, pc_, "liked", "recent")
-        graph.append(
-            recent_posts = post(id = r.pc.post_id),
-            most_liked_comment = r.pc if r.liked else None,
-            recent_comments = r.pc if r.recent else None,
-        )
-
-    # Count total number of blogs.
-    graph.append(
-        total = blog.count(db),
-    )
-
-    # Return view of the graph.
-    return graph.view
+    print(graph.view.total)
+    if graph.view.latest_post is not None:
+        print(graph.view.latest_post().title)
+    print(list(graph.view.title_lengths))
+    for node in graph.view.blogs:
+        print(node().title)
+        for post in node.posts:
+            print(post.title)
+finally:
+    db.rollback()
+    db.close()
 ```
 
-Note that the flattened invocations of `append()` creates hierarchical relationships in a `Graph`. `append()` works as follows:
+A string added to `exp`, such as `"title_length"`, names an additional query element. Calling `exp(title_length='LENGTH(p.title)')` supplies that element and renders the complete selection, including the model columns, so it can be embedded in SQL as a single expression. The same name identifies the resulting value as `row.title_length` when reading rows.
 
-1. Values are sorted from parents to children.
-2. For each value, if *identical* node is found, it is added to the node path of this invocation. Otherwise, new node is created and added to the node path.
-3. Add edges between every adjacent nodes in the path.
+The graph contains the count even when no blogs exist; `latest_post` is `None` when there are no posts, and collections are empty when their queries return no rows. The joined query groups repeated blog models by primary key, so each blog with posts appears once with its posts beneath it. `title_lengths` contains one integer per joined row, including repeated lengths. Appending query results changes only the graph and does not write records to the database.
 
-A value is determined to be *identical* to a node when the node contains the *identical* value and its parent is the same as previous node in the node path. By default, the *identification* scheme is defined only on *model types*, that is, any pair of values of other types is never considered to be *identical*. Only the pair of *model objects* which have the same type and the same primary key value is *identical*.
+### Serialize a graph
 
-As a result of these mechanisms, foreign key relationships in DB are recovered in the graph.
+Use `graph_schema()` with `S` settings to convert the populated graph into nested dictionaries and lists. Continuing with the preceding example, `S.head()` selects a single value for the count and latest post, while `S.of()` retains collections. The resulting dictionary can be passed to your application's response or serialization layer.
 
-This function returns `view` attribute of the graph, which is unmodifiable view exposing intuitive interfaces to access nodes and their values.
-
-### Graph serialization
-
-The another feature of `Graph` is the serialization mechanism which converts `Graph` object into hierarchical `dict`. By default, serialization works as follows:
-
-1. Starting from specified root node container, descending containers are handled from parents to children.
-2. Each container is converted into a list of its nodes.
-3. For each node, the preset function is applied to its value and the result is the actual value stored in the list.
-    - *model object* is converted into a `dict` where the column name is mapped to the column value.
-    - Values of other types are used as they are unless the function is set explicitly.
-4. When converted value is a `dict`, serializes child nodes similarly and put them into it.
-
-Some behaviors can be changed at serialization stage via class methods of `S` as show in next example.
-
-```
-from pyracmon import S, graph_dict
-from typing import TypedDict
-
-class Thumbnail(TypedDict):
-    thumbnail: str
-
-def with_thumbnail(cxt) -> Thumbnail:
-    return dict(thumbnail=f"{cxt.value.url}/thumbnail")
-
-result = graph_dict(
-    fetch_blogs(),
-    blogs = S.of(),
-    recent_posts = S.name("posts"),
-    total_posts = S.head(),
-    categories = S.of(),
-    images = S.alter(with_thumbnail),
-    recent_comments = S.name("comments"),
-    most_liked_comment = S.head(),
-    total_comments = S.head(),
-    total = S.head(),
-)
-```
-
-- `of()` does not affect default behavior.
-- `name()` changes the key which by default is the name of node container.
-- `head()` uses a value of the first node in the container instead of a list of values.
-- When the function is given by `each()`, it is applied to each node to generate the value in resulting `dict`.
-
-`S` provides some more class methods to control the serialization mechanism. See API documentation for further information.
-
-### Static typing
-
-The schema of graph serialization can be obtained via `graph_schema()`. Its signature is similar to `graph_dict()` except for that the first argument is `GraphTemplate` instead of `GraphView`, which means the schema is generated statically.
-
-```
+```python
 from pyracmon import S, graph_schema
 
 schema = graph_schema(
-    t,
-    blogs = S.of(),
-    recent_posts = S.name("posts"),
-    total_posts = S.head(),
-    categories = S.of(),
-    images = S.alter(with_thumbnail),
-    recent_comments = S.name("comments"),
-    most_liked_comment = S.head(),
-    total_comments = S.head(),
-    total = S.head(),
+    BlogGraph.template(),
+    total=S.head(),
+    latest_post=S.head(),
+    title_lengths=S.of(),
+    blogs=S.of(),
+    posts=S.of(),
 )
+result = schema.serialize(graph.view)
+print(result)
 ```
 
-Returned value is an instance of `GraphSchema` which exposes `schema` attribute. It is an instance of `TypedDict` which is similar implementation of `typing.TypedDict` introduced in python3.8. `TypedDict` represents a key-value data with types of values specified by type annotations. `walk_schema` returns the structure in the form of `dict`.
+`S` supports output names, single-value selection, value transformations, and documentation metadata. Dictionary serialization does not itself encode values such as dates or decimals as JSON; choose the final encoding in your application. `dump_typed_graph()` serves a different purpose: it exposes declared fields as Python values, retaining model objects and representing a `TNode` as an entity-and-children tuple rather than flattening it into a response dictionary.
 
+You can also declare graphs with `graph_template()` and create them with `new_graph()`. Typed graph declarations provide an annotated view of the underlying graph mechanism. See the [API reference](https://sozu.github.io/py-pyracmon/) for identity policies, graph templates, and serialization options, and [the complete graph example](examples/graph_example.py) for a result assembled from multiple queries.
+
+## Type information and model generation
+
+Pyracmon has several distinct mechanisms for working with types: model stubs for editors and type checkers, generated Python model code, typed graph views, and runtime descriptions of serialized output. Generating a runtime schema does not by itself make every dynamically created model or output dictionary statically known to a type checker.
+
+### Model stubs
+
+The stub command reads the database schema and writes a `.pyi` file next to an existing importable model module. Run it from the directory containing the empty `models.py` introduced above. The stub describes the model API to development tools; runtime model declaration is still needed.
+
+```sh
+python -m pyracmon.stub \
+  psycopg2 \
+  postgresql://postgres:postgres@localhost:35432/pyracmon_example \
+  postgresql \
+  models
 ```
->>> from pyracmon.graph.schema import walk_schema
->>> 
->>> walk_schema(schema, True)
+
+For asynchronous model stubs, use `psycopg` and add `--async AsyncConnection.connect`. Alternatively, `declare_models(..., write_stub=True)` or its asynchronous counterpart can write stubs during model declaration. Regenerate stubs when the database schema changes.
+
+### Generated model code
+
+The model generator writes Python model definitions to standard output. Redirect that output to a module if you want to keep schema-derived definitions in source files and import them without declaring the same models from the database at application startup. Regenerate and review the file after schema changes; the live database is still required for queries.
+
+```sh
+python -m pyracmon.generate \
+  psycopg2 \
+  postgresql://postgres:postgres@localhost:35432/pyracmon_example \
+  postgresql > generated_models.py
 ```
 
-The second argument denotes whether the result contains a documentation of each item which is given by `S.doc()`. Note that each column of *model types* uses its comment as the document. DBMS such as PostgreSQL provides a way to set a comment on each column and it will be used in the documentation automatically. This feature shows the *DB first* principle.
+### Output schemas
 
-You can use the schema as you like, for example, `swagger` is a good solution to describe it. The conversion into a commonly defined format is not the role of this library.
+The `GraphSchema` created in the graph example exposes a runtime output type through `schema.schema`. `walk_schema()` turns that type into a dictionary describing its structure. Pass `True` as the second argument to include available documentation metadata, such as column comments supplied by the database dialect.
 
-### Testing
+```python
+from pyracmon import walk_schema
 
-TBD.
+print(walk_schema(schema.schema))
+print(walk_schema(schema.schema, True))
+```
+
+Use this information to build documentation or integrate with your own schema tooling. Conversion to a particular API specification format is outside Pyracmon's built-in output.
+
+## Asynchronous operations
+
+For PostgreSQL, the asynchronous API uses psycopg's asynchronous connection. Await model declaration, CRUD operations, SQL execution, and transaction methods. The following standalone script assumes the `blog` table from the quick start and an empty `models_async.py` next to it.
+
+```python
+import asyncio
+
+import psycopg
+import models_async
+from pyracmon import aconnect, acursor, declare_models_async
+from pyracmon.dialect import postgresql
+
+
+async def main():
+    db = await aconnect(
+        psycopg.AsyncConnection.connect,
+        api=psycopg,
+        host="localhost",
+        port=35432,
+        dbname="pyracmon_example",
+        user="postgres",
+        password="postgres",
+    )
+    try:
+        await declare_models_async(
+            postgresql, db, models_async, includes=["blog"]
+        )
+        created = await models_async.blog.insert(db, {"title": "Async blog"})
+        found = await models_async.blog.fetch(db, created.id)
+        print(found.title)  # Async blog
+
+        async with acursor(db.stmt().execute("SELECT $_", 42)) as c:
+            row = await c.fetchone()
+            print(row[0])  # 42
+
+        await models_async.blog.delete(db, created.id)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+Graph declarations and in-memory graph operations remain synchronous. Use `await append_rows_async(...)` when reading an asynchronous cursor into a graph, then serialize the graph in the same way as a synchronously populated graph. The [asynchronous example](examples/graph_example_async.py) combines asynchronous queries with a typed graph.
+
+## Additional features and documentation
+
+### Testing support
+
+Declaring models with `testing=True` adds testing methods through `TestingMixin` or `AsyncTestingMixin`. Fixture generation fills supported column values while allowing explicit overrides, so a test can focus on the values relevant to its scenario. Utilities also provide table truncation and value matching; consult the API reference for foreign-key handling, configuration, and method-specific limitations.
+
+### Configuration and extension
+
+`default_config()` provides configuration for query logging, parameter logging, type mapping, graph behavior, and fixture generation. Connections can also use custom execution contexts. Pass additional mixin classes to model declaration to add application-specific methods to the generated models.
+
+### Further reading
+
+The [API reference](https://sozu.github.io/py-pyracmon/) covers complete signatures, options, and behavior. The repository examples show larger workflows; start with the synchronous graph example or its asynchronous counterpart after preparing the example database.
+
+| Resource | Purpose |
+|---|---|
+| [API reference](https://sozu.github.io/py-pyracmon/) | Detailed API documentation |
+| [Synchronous graph example](examples/graph_example.py) | Multiple queries, typed graphs, and serialization |
+| [Asynchronous graph example](examples/graph_example_async.py) | Asynchronous queries and typed graphs |
+
+## License
+
+Pyracmon is distributed under the MIT License. See [LICENSE](LICENSE) for the full license text.

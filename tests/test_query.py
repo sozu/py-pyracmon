@@ -1,5 +1,5 @@
 import pytest
-from pyracmon.query import *
+from pyracmon.query import Q, Conditional, escape_like, where
 
 
 class TestConditional:

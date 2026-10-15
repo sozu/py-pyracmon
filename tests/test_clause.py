@@ -1,6 +1,6 @@
 import pytest
 from pyracmon.model import Column
-from pyracmon.query import Expression
+from pyracmon.query import Conditional
 from pyracmon.clause import *
 
 
@@ -61,7 +61,7 @@ class TestHolders:
         assert holders(3, {1: lambda h: f"__{h}__"}) == "${_}, __${_}__, ${_}"
 
     def test_expression(self):
-        assert holders(["a", Expression("now()", []), Expression("$_ + 1", [3])]) == "${a}, now(), $_ + 1"
+        assert holders(["a", Conditional("now()", []), Conditional("$_ + 1", [3])]) == "${a}, now(), $_ + 1"
 
 
 class TestValues:
@@ -75,5 +75,5 @@ class TestValues:
         assert values(3, 2, {1: lambda h: f"__{h}__"}) == "(${_}, __${_}__, ${_}), (${_}, __${_}__, ${_})"
 
     def test_expression(self):
-        assert values([lambda i:i, lambda i:Expression("now()", []), lambda i:Expression(f"$_ + {i}", [i])], 2) \
+        assert values([lambda i:i, lambda i:Conditional("now()", []), lambda i:Conditional(f"$_ + {i}", [i])], 2) \
             == "(${_0}, now(), $_ + 0), (${_1}, now(), $_ + 1)"

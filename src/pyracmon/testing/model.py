@@ -1,0 +1,400 @@
+from collections.abc import Mapping
+from datetime import date, datetime, time, timedelta
+from decimal import Decimal
+from enum import Enum
+from uuid import UUID, uuid1, uuid3
+from typing import TypeVar, Any, overload, TYPE_CHECKING
+from pyracmon.config import PyracmonConfiguration
+from pyracmon.connection import Connection, AsyncConnection
+from pyracmon.mixin import CRUDMixin
+from pyracmon.mixin_async import AsyncCRUDMixin
+from pyracmon.model import Table, Column
+from pyracmon.graph.typing import issubgeneric
+from pyracmon.dialect.shared import MultiInsertMixin, TruncateMixin, AsyncMultiInsertMixin, AsyncTruncateMixin
+from pyracmon.util import Qualifier
+from .util import default_test_config, Matcher
+
+
+if TYPE_CHECKING:
+    class TestingModel(MultiInsertMixin, CRUDMixin):
+        pass
+    class AsyncTestingModel(AsyncMultiInsertMixin, AsyncCRUDMixin):
+        pass
+else:
+    class TestingModel():
+        pass
+    class AsyncTestingModel():
+        pass
+
+
+M = TypeVar('M', bound=TestingModel)
+AM = TypeVar('AM', bound=AsyncTestingModel)
+
+
+class TestingState:
+    indexes = {}
+
+    @classmethod
+    def reset(cls, model=None):
+        cls.indexes.clear()
+
+    @classmethod
+    def inc(cls, model, count):
+        v = cls.indexes.setdefault(model, 1)
+        cls.indexes[model] = v + count
+        return v
+
+    @classmethod
+    def set_index(cls, model, index):
+        cls.indexes[model] = index
+
+
+class TestingMixinBase:
+    @classmethod
+    def by[M](cls: type[M], index: int) -> type[M]:
+        """
+        Set current fixture index.
+
+        Args:
+            index: Fixture index.
+        Returns:
+            This type.
+        """
+        TestingState.set_index(cls, index)
+        return cls # type: ignore
+
+    def match(self, **expected: Matcher | Any) -> bool:
+        """
+        Tests columns values matches to expected values.
+
+        .. warning::
+            This method will be replaced in different implementation.
+
+        Args:
+            expected: Expected values.
+        Returns
+            Matches or not.
+        """
+        for k, v in expected.items():
+            actual = getattr(self, k)
+
+            if isinstance(v, Matcher):
+                if not v.match(actual):
+                    return False
+            else:
+                if v != actual:
+                    return False
+        return True
+
+
+class TestingMixin(TestingMixinBase, TestingModel):
+    """
+    Mixin class for model types providing methods designed for testing.
+    """
+    @overload
+    @classmethod
+    def fixture(
+        cls: type[M],
+        db: Connection | None,
+        variable: None = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls: type[M],
+        db: Connection | None,
+        variable: int,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls: type[M],
+        db: Connection | None,
+        variable: M,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> M: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls: type[M],
+        db: Connection | None,
+        variable: dict[str, Any],
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> M: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls: type[M],
+        db: Connection | None,
+        variable: list[M],
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
+    @overload
+    @classmethod
+    def fixture(
+        cls: type[M],
+        db: Connection | None,
+        variable: list[dict[str, Any]],
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[M]: ...
+    @classmethod
+    def fixture(
+        cls: type[M],
+        db: Connection | None,
+        variable: int | dict[str, Any] | M | list[dict[str, Any]] | list[M] | None = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> M | list[M]:
+        """
+        Inserts record(s) with auto-generated column values.
+
+        Args:
+            db: DB connection. If a value evaluated to be `False` in boolean context, generated model is not inserted and just returned.
+            variable: When `int`, inserts records as many as the number. All of their column values are generated.
+                When `dict`, model object or a list of them, inserts record(s) represented by them. Unspecified column values are generated.
+            index: Use this to specify index used to generate column values explicitly. If set, indexing state is not updated.
+            cfg: Configuration used to control the generation of fixuture values.
+                This argument is prepared only for internal use and can be changed or removed in future version.
+            qualifier: Functions qualifying placeholder markers.
+        Returns:
+            Inserted model(s).
+        """
+        models = _fixture(cls, variable, index, cfg)
+        if db:
+            if isinstance(models, list):
+                cls.inserts(db, models, qualifier)
+            else:
+                cls.insert(db, models, qualifier)
+        return models
+
+
+class AsyncTestingMixin(TestingMixinBase, AsyncTestingModel):
+    """
+    Mixin class for model types providing methods designed for testing.
+    """
+    @overload
+    @classmethod
+    async def fixture(
+        cls: type[AM],
+        db: AsyncConnection | None,
+        variable: None = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[AM]: ...
+    @overload
+    @classmethod
+    async def fixture(
+        cls: type[AM],
+        db: AsyncConnection | None,
+        variable: int,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[AM]: ...
+    @overload
+    @classmethod
+    async def fixture(
+        cls: type[AM],
+        db: AsyncConnection | None,
+        variable: AM,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> AM: ...
+    @overload
+    @classmethod
+    async def fixture(
+        cls: type[AM],
+        db: AsyncConnection | None,
+        variable: dict[str, Any],
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> AM: ...
+    @overload
+    @classmethod
+    async def fixture(
+        cls: type[AM],
+        db: AsyncConnection | None,
+        variable: list[AM],
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[AM]: ...
+    @overload
+    @classmethod
+    async def fixture(
+        cls: type[AM],
+        db: AsyncConnection | None,
+        variable: list[dict[str, Any]],
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> list[AM]: ...
+    @classmethod
+    async def fixture(
+        cls: type[AM],
+        db: AsyncConnection | None,
+        variable: int | dict[str, Any] | AM | list[dict[str, Any]] | list[AM] | None = None,
+        index: int | None = None,
+        cfg: PyracmonConfiguration | None = None,
+        qualifier: Mapping[str, Qualifier] = {},
+    ) -> AM | list[AM]:
+        """
+        Inserts record(s) with auto-generated column values.
+
+        Args:
+            db: DB connection. If a value evaluated to be `False` in boolean context, generated model is not inserted and just returned.
+            variable: When `int`, inserts records as many as the number. All of their column values are generated.
+                When `dict`, model object or a list of them, inserts record(s) represented by them. Unspecified column values are generated.
+            index: Use this to specify index used to generate column values explicitly. If set, indexing state is not updated.
+            cfg: Configuration used to control the generation of fixuture values.
+                This argument is prepared only for internal use and can be changed or removed in future version.
+            qualifier: Functions qualifying placeholder markers.
+        Returns:
+            Inserted model(s).
+        """
+        models = _fixture(cls, variable, index, cfg)
+        if db:
+            if isinstance(models, list):
+                await cls.inserts(db, models, qualifier)
+            else:
+                await cls.insert(db, models, qualifier)
+        return models
+
+
+def truncate(db: Connection, *models: type[TruncateMixin]):
+    """
+    Truncate tables in order.
+
+    Args:
+        db: DB connection.
+        tables: Models of tables to truncate.
+    """
+    if len(models) == 0:
+        raise ValueError(f"No tables are specified. Did you forget to pass DB connection at the first argument?")
+
+    for m in models:
+        m.truncate(db)
+
+
+async def truncate_async(db: AsyncConnection, *models: type[AsyncTruncateMixin]):
+    """
+    Truncate tables in order.
+
+    Args:
+        db: DB connection.
+        tables: Models of tables to truncate.
+    """
+    if len(models) == 0:
+        raise ValueError(f"No tables are specified. Did you forget to pass DB connection at the first argument?")
+
+    for m in models:
+        await m.truncate(db)
+
+
+def _fixture[M: TestingModel | AsyncTestingModel](
+    cls: type[M],
+    variable: int | dict[str, Any] | M | list[dict[str, Any]] | list[M] | None,
+    index: int | None,
+    cfg: PyracmonConfiguration | None,
+) -> list[M] | M:
+    if variable is None or isinstance(variable, int):
+        num = variable or 1
+        index = TestingState.inc(cls, num) if index is None else index
+        models = [_generate_model(cls, index+i, None, cfg) for i in range(num)]
+        return models
+    elif isinstance(variable, (cls, dict)):
+        num = 1
+        index = TestingState.inc(cls, num) if index is None else index
+        model = _generate_model(cls, index, variable, cfg)
+        return model
+    elif isinstance(variable, list):
+        num = len(variable)
+        index = TestingState.inc(cls, num) if index is None else index
+        models = [_generate_model(cls, index+i, v, cfg) for i, v in enumerate(variable)]
+        return models
+    else:
+        raise ValueError(f"Second argument of fixture() must be an int, dict, model or list of dict or model but {type(variable)} is passed.")
+
+
+def _generate_model[M: TestingModel | AsyncTestingModel](
+    model: type[M],
+    index: int,
+    model_or_dict: M | dict | None,
+    cfg: PyracmonConfiguration | None,
+) -> M:
+    values: dict[str, Any] = {}
+
+    if isinstance(model_or_dict, TestingMixin):
+        values = {c.name:v for c, v in model_or_dict}
+    elif isinstance(model_or_dict, dict):
+        values = dict(**model_or_dict)
+
+    config: PyracmonConfiguration = cfg or default_test_config()
+
+    values.update(**{c.name:_generate_value(model.table, c, index, config) for c in model.columns if c.name not in values and not c.pk})
+
+    return model(**values)
+
+
+fixed_uuid=uuid1(0, 0)
+
+
+def _generate_value(table: Table, column: Column, index: int, cfg: PyracmonConfiguration) -> Any:
+    mapping = cfg.fixture_mapping
+    if mapping:
+        value = mapping(table, column, index)
+        if value is not None:
+            return value
+
+    tz_aware = cfg.fixture_tz_aware
+
+    if column.nullable and cfg.fixture_ignore_nullable:
+        return None
+    elif column.fk and cfg.fixture_ignore_fk:
+        return None
+    elif column.ptype is bool:
+        return True
+    elif column.ptype is float:
+        return float(f"{index}.{index+1}")
+    elif column.ptype is int:
+        return index
+    elif column.ptype is Decimal:
+        return Decimal(index)
+    elif column.ptype is str:
+        return f"{column.name}-{index}"
+    elif column.ptype is bytes:
+        return f"{column.name}-{index}".encode()
+    elif column.ptype is date:
+        return date.today()
+    elif column.ptype is datetime:
+        return datetime.now().astimezone() if tz_aware else datetime.now()
+    elif column.ptype is time:
+        return datetime.now().astimezone().time() if tz_aware else datetime.now().time()
+    elif column.ptype is timedelta:
+        return timedelta(days=index+1)
+    elif column.ptype is UUID:
+        return str(uuid3(fixed_uuid, f"{table.name}-{column.name}-{index}"))
+    elif issubgeneric(column.ptype, list):
+        return []
+    elif isinstance(column.ptype, type) and issubclass(column.ptype, Enum):
+        return next(iter(column.ptype), None)
+    else:
+        return None

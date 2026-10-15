@@ -1,3 +1,4 @@
+import os
 import pymysql
 import pytest
 from pyracmon.connection import connect
@@ -12,8 +13,8 @@ def _connect():
         db = "pyracmon_test",
         user = "root",
         password = "root",
-        host = "mysql",
-        port = 3306,
+        host = os.environ.get("PYRACMON_MYSQL_HOST", "localhost"),
+        port = int(os.environ.get("PYRACMON_MYSQL_PORT", "33306")),
     )
 
 

@@ -1,11 +1,13 @@
-import pytest
+# pyright: reportUnusedExpression=false
+from collections.abc import Mapping, Iterable
+from typing import Any
 from pyracmon.graph.graph import Node
 from pyracmon.graph.template import GraphTemplate
-from pyracmon.graph.identify import *
+from pyracmon.graph.identify import HierarchicalPolicy
 
 
 class TestHierarchical:
-    def _prepare(self, policy):
+    def _prepare(self, policy: HierarchicalPolicy):
         template = GraphTemplate([
             ("p1", int, policy, None),
             ("p2", int, policy, None),
@@ -17,10 +19,10 @@ class TestHierarchical:
 
         # 1       2       3
         # 1   2   1   2   1   2
-        # 1 2 1 2 1 2 1 2 1 2 1 2
-        ns1 = [Node(p1, v, policy.identifier(v), i) for i, v in enumerate([1, 2, 3])]
-        ns2 = [Node(p2, v, policy.identifier(v), i) for i, v in enumerate([1, 2] * 3)]
-        ns3 = [Node(p3, v, policy.identifier(v), i) for i, v in enumerate([1, 2] * 6)]
+        # 1 2 3 4 5 6 1 2 3 4 5 6
+        ns1 = [Node(p1, v, policy.get_identifier(v), i) for i, v in enumerate([1, 2, 3])]
+        ns2 = [Node(p2, v, policy.get_identifier(v), i) for i, v in enumerate([1, 2] * 3)]
+        ns3 = [Node(p3, v, policy.get_identifier(v), i) for i, v in enumerate([1, 2, 3, 4, 5, 6] * 2)]
 
         for i in range(len(ns2)):
             ns1[int(i/2)].add_child(ns2[i])
@@ -29,8 +31,8 @@ class TestHierarchical:
 
         return p1, p2, p3, ns1, ns2, ns3
 
-    def _get_node(self, entity, policy, nodes):
-        return [] if policy is None else [n for n in nodes if policy.identifier(n.entity) == entity]
+    def _get_node(self, entity: Any, policy: HierarchicalPolicy, nodes: Iterable[Node]) -> list[Node]:
+        return [] if policy is None else [n for n in nodes if policy.get_identifier(n.entity) == entity]
 
     def test_root_new(self):
         policy = HierarchicalPolicy(lambda x:x)
@@ -97,7 +99,7 @@ class TestHierarchical:
 
         p1, p2, p3, ns1, ns2, ns3 = self._prepare(policy)
 
-        parents, identicals = policy.identify(p3, self._get_node(4, policy, ns3), {p2.name: [ns2[1], ns2[3]]})
+        parents, identicals = policy.identify(p3, self._get_node(7, policy, ns3), {p2.name: [ns2[1], ns2[3]]})
 
         assert parents == [ns2[1], ns2[3]]
         assert identicals == []
@@ -107,18 +109,18 @@ class TestHierarchical:
 
         p1, p2, p3, ns1, ns2, ns3 = self._prepare(policy)
 
-        parents, identicals = policy.identify(p3, self._get_node(2, policy, ns3), {p2.name: [ns2[1], ns2[3]]})
+        parents, identicals = policy.identify(p3, self._get_node(4, policy, ns3), {p2.name: [ns2[1], ns2[4]]})
 
         assert parents == []
-        assert identicals == [ns3[3], ns3[7]]
+        assert identicals == [ns3[3], ns3[9]]
 
     def test_child_identical_partial(self):
         policy = HierarchicalPolicy(lambda x:x)
 
         p1, p2, p3, ns1, ns2, ns3 = self._prepare(policy)
 
-        parents, identicals = policy.identify(p3, self._get_node(2, policy, ns3), {p2.name: [ns2[1], ns2[3]]})
+        parents, identicals = policy.identify(p3, self._get_node(4, policy, ns3), {p2.name: [ns2[1], ns2[3]]})
 
-        assert parents == []
-        assert identicals == [ns3[3], ns3[7]]
+        assert parents == [ns2[3]]
+        assert identicals == [ns3[3]]
          

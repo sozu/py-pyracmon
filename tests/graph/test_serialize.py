@@ -1,14 +1,15 @@
-from pyracmon.graph.spec import GraphSpec
+# pyright: reportUnusedExpression=false
 import pytest
 from dataclasses import dataclass
-from typing import Generic, TypeVar, get_type_hints
+from typing import Any, Generic, TypedDict, TypeVar, get_type_hints, get_args, get_origin, is_typeddict
 from inspect import signature, Signature
 from pyracmon.graph.template import GraphTemplate
 from pyracmon.graph.graph import Graph, Node
+from pyracmon.graph.spec import GraphSpec
 from pyracmon.graph.identify import HierarchicalPolicy
-from pyracmon.graph.serialize import *
 from pyracmon.graph.schema import Typeable, issubgeneric
-from pyracmon.graph.typing import TypedDict
+from pyracmon.graph.typing import walk_schema
+from pyracmon.graph.serialize import NodeSerializer, S, NodeContextFactory, SerializationContext, NodeContext
 
 
 template = GraphTemplate([("x", object, None, None)])
@@ -66,7 +67,10 @@ class TestAggregator:
         r = a([node(1), node(2), node(3)])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == list[T] # type: ignore
+        # list[T]
+        rt = signature(a).return_annotation
+        assert get_origin(rt) == list
+        assert isinstance(get_args(rt)[0], TypeVar)
         assert [n.entity for n in r] == [1, 2, 3] # type: ignore
 
     def test_fold(self):
@@ -90,7 +94,7 @@ class TestAggregator:
         r = a([node(1), node(2), node(3)])
 
         assert ns.be_singular
-        assert signature(a).return_annotation == T
+        assert isinstance(signature(a).return_annotation, TypeVar)
         assert r == 3
 
     def test_select(self):
@@ -114,7 +118,10 @@ class TestAggregator:
         r = a([node(1), node(2), node(3)])
 
         assert not ns.be_singular
-        assert signature(a).return_annotation == list[T] # type: ignore
+        # list[T]
+        rt = signature(a).return_annotation
+        assert get_origin(rt) == list
+        assert isinstance(get_args(rt)[0], TypeVar)
         assert [n.entity for n in r] == [1, 2] # type: ignore
 
     def test_invalid_fold(self):
@@ -213,9 +220,9 @@ class TestEach:
             return cxt.value
         def f1(cxt) -> int:
             return cxt.value
-        def f2(cxt) -> G[T]:
+        def f2[T](cxt) -> G[T]: # type: ignore
             return cxt.value
-        def f3(cxt) -> G[T]:
+        def f3[T](cxt) -> G[T]: # type: ignore
             return cxt.value
 
         s = NodeSerializer().each(f0).each(f1).each(f2).each(f3).serializer
@@ -271,6 +278,18 @@ class TestSub:
                 },
             ]
         }
+        typ = signature(s).return_annotation
+        assert issubgeneric(typ, Typeable)
+        schema = Typeable.resolve(typ, sub, GraphSpec())
+        assert is_typeddict(schema)
+        assert walk_schema(schema) == {
+            "a": [
+                {
+                    "b": [{"d": [int]}],
+                    "c": [int],
+                },
+            ]
+        }
 
 
 class TestAlter:
@@ -317,6 +336,18 @@ class TestAlter:
         assert r == {"b": 1, "c": 2, "g2": "def"}
 
 
+class TestNest:
+    def test_nest(self):
+        s = NodeSerializer().nest(a=S.name("a"), b=S.nest(a=S.name("b.a"), b=S.name("b.b")))
+        a = s._nested_serializers.get("a")
+        assert a and a._namer == "a"
+        b = s._nested_serializers["b"]
+        ba = b and b._nested_serializers.get("a")
+        assert ba and ba._namer == "b.a"
+        bb = b and b._nested_serializers.get("b")
+        assert bb and bb._namer == "b.b"
+
+
 class TestContext:
     def _template(self):
         t = GraphTemplate([
@@ -339,8 +370,6 @@ class TestContext:
         graph.append(a=2, b=11, c=21, d=30)
 
         return graph.view
-
-    # TODO test_reuse
 
     def test_no_serializer(self):
         cxt = SerializationContext(dict(), lambda t:[])
@@ -368,8 +397,6 @@ class TestContext:
             d=S.of(),
         ), lambda t: [])
         r = cxt.execute(self._graph())
-
-        print(r)
 
         assert r == {"a": [
             {"A": 0, "b": [{"B": 10, "d": [30, 31]}]},
@@ -484,7 +511,7 @@ class TestContext:
             {"A": 2, "B": 3, "C": 4, "D": 6},
         ]}
 
-    def test_alter_shrink(self):
+    def test_alter_excludes(self):
         cxt = SerializationContext(dict(
             a=S.each(lambda cxt: {"A": cxt.value, "B": cxt.value+1, "C": cxt.value+2}).alter(excludes=["B"]),
         ), lambda t: [])
