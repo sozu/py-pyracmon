@@ -1,15 +1,4 @@
 services:
-  pyracmon:
-    build:
-      context: ./dev
-      args:
-        UID: ${UID:-1000}
-        GID: ${GID:-1000}
-    image: pyracmon:develop
-    tty: true
-    volumes:
-      - ./dev:/home/dev
-    container_name: pyracmon
   postgres:
     image: postgres:10
     ports:
@@ -21,6 +10,11 @@ services:
       - pyracmon_postgres:/var/lib/postgresql/data/postgres
       - ./postgresql/initdb.d:/docker-entrypoint-initdb.d
     container_name: pyracmon_postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d pyracmon_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
   mysql:
     image: mysql:8
     ports:
@@ -31,6 +25,11 @@ services:
       - pyracmon_mysql:/var/lib/mysql
       - ./mysql/initdb.d:/docker-entrypoint-initdb.d
       - ./mysql/conf.d:/etc/mysql/conf.d
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=$$MYSQL_ROOT_PASSWORD mysql -h 127.0.0.1 -u root -e 'SELECT 1'"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
 volumes:
   pyracmon_postgres:
   pyracmon_mysql:
